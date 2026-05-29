@@ -3,7 +3,7 @@
 
 # Buddy
 
-### Your AI-Native Companion for Work & Life 👥
+### Your AI-Native Companion for Work & Life ！ 👥 
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -99,7 +99,7 @@ Buddy is built on a **three-layer architecture** that forms a compounding intell
 | **Agent Runtime & Network** | The execution substrate — distributed agent orchestration, tool and API integration, safety sandboxes, semantic routing across Agent teams. |
 
 
-## Feature Landscape
+## Feature
 
 | Dimension | Capabilities |
 | :--- | :--- |
@@ -136,10 +136,9 @@ Your personal Agent is the one that knows you best — your goals, your habits, 
 
 ## Quick Start
 
-> 🚧 Buddy is under active development. Stay tuned for the first public release.
+> Buddy is under active development. Stay tuned for the first public release.
 
 ```bash
-# Coming soon
 git clone https://github.com/Yuan-ManX/Buddy.git
 cd Buddy
 ```
