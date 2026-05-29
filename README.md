@@ -9,7 +9,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Stars](https://img.shields.io/github/stars/Yuan-ManX/Buddy?style=social)
 
-[Buddy](#what-is-buddy?) · [Innovation](#innovation) · [Architecture](#architecture) · [Quickstart](#quick-start) · [Contributing](#contributing)
+[Buddy](#what-is-buddy?) · [Innovation](#innovation) · [Quickstart](#quick-start) · [Architecture](#architecture) · [Contributing](#contributing)
 
 #### [English](./README.md) | [中文文档](./README_CN.md)
 
@@ -68,6 +68,15 @@ Agents in Buddy do not wait to be called. They have agency. They notice when a d
 
 This proactivity is not an add-on feature — it is a structural consequence of the relational architecture. When an Agent understands your context deeply enough, anticipating what you need is not magic. It is simply what any good companion does.
 
+
+## Quick Start
+
+> Buddy is under active development. Stay tuned for the first public release.
+
+```bash
+git clone https://github.com/Yuan-ManX/Buddy.git
+cd Buddy
+```
 
 
 ## Architecture
@@ -131,17 +140,6 @@ Communities on Buddy are powered by shared Agent intelligence. A learning commun
 ### For Yourself
 
 Your personal Agent is the one that knows you best — your goals, your habits, your struggles, your growth. It serves as a thinking partner for big decisions, a reflective journal for processing experiences, a coach for building better habits, and a companion for the quiet moments when you just need someone who understands. It is the Agent version of the person who's always had your back.
-
-
-
-## Quick Start
-
-> Buddy is under active development. Stay tuned for the first public release.
-
-```bash
-git clone https://github.com/Yuan-ManX/Buddy.git
-cd Buddy
-```
 
 
 ## Contributing
