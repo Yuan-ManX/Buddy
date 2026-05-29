@@ -125,19 +125,19 @@ Buddy is built on a **three-layer architecture** that forms a compounding intell
 
 ## Use Cases
 
-### For Work
+#### For Work
 
 Your team and your Agent team operate as one unit. Strategy discussions happen with real-time research from your knowledge Agent. Document drafts are co-authored by your writing Agent while your analytics Agent pulls the latest numbers. Sprint retrospectives involve Agents who were actually present for the entire cycle. Not "AI-assisted work" — just **work**, with more capable teammates.
 
-### For Life
+#### For Life
 
 Your Agents are present in your personal circles too. They help plan weekend trips with friends, remember everyone's dietary preferences, and suggest activities that fit the group's vibe. They check in when you've had a rough day. They celebrate your wins, no matter how small. They are your companions — not for productivity, but for presence.
 
-### For Communities
+#### For Communities
 
 Communities on Buddy are powered by shared Agent intelligence. A learning community has Agents that summarize key readings, facilitate discussions, and connect members with complementary interests. A creator community has Agents that provide feedback on drafts, track member contributions, and surface collaboration opportunities. The community's collective intelligence grows with every interaction.
 
-### For Yourself
+#### For Yourself
 
 Your personal Agent is the one that knows you best — your goals, your habits, your struggles, your growth. It serves as a thinking partner for big decisions, a reflective journal for processing experiences, a coach for building better habits, and a companion for the quiet moments when you just need someone who understands. It is the Agent version of the person who's always had your back.
 
