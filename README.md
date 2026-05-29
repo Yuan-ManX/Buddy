@@ -9,7 +9,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Stars](https://img.shields.io/github/stars/Yuan-ManX/Buddy?style=social)
 
-[Buddy](#what-is-buddy?) · [Innovation](#the-core-innovation) · [Architecture](#architecture) · [Quickstart](#quick-start) · [Contributing](#contributing)
+[Buddy](#what-is-buddy?) · [Innovation](#innovation) · [Architecture](#architecture) · [Quickstart](#quick-start) · [Contributing](#contributing)
 
 #### [English](./README.md) | [中文文档](./README_CN.md)
 
@@ -36,7 +36,7 @@ At a deeper level, Buddy is also a composite — a space where **B** oundaries b
 Most AI platforms treat agents as tools you invoke and dismiss. Buddy treats them as **dwellers** — they inhabit your spaces, carry your context, and build relationships that deepen over time. They do not wait to be prompted. They show up because they know you.
 
 
-## The Core Innovation
+## Innovation
 
 ###  Agents Are Dwellers, Not Tools
 
