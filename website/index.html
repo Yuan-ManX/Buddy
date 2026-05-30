@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="meta.title">Buddy — Your AI-Native Companion for Work &amp; Life</title>
+  <meta name="description" content="Buddy is an AI-native collaborative space where humans and AI Agents live, work, and grow together — not as user and tool, but as companions.">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-deep: #050a14;
+      --bg: #080d1a;
+      --bg-elevated: #0c1428;
+      --bg-card: rgba(12, 20, 40, 0.7);
+      --bg-card-hover: rgba(15, 25, 50, 0.85);
+      --text: #e8ecf2;
+      --text-secondary: #b0bec5;
+      --text-muted: #64748b;
+
+      --blue-900: #1e3a8a;
+      --blue-700: #1d4ed8;
+      --blue-600: #2563eb;
+      --blue-500: #3b82f6;
+      --blue-400: #60a5fa;
+      --blue-300: #93c5fd;
+
+      --amber-800: #92400e;
+      --amber-700: #b45309;
+      --amber-600: #d97706;
+      --amber-500: #f59e0b;
+      --amber-400: #fbbf24;
+      --amber-300: #fcd34d;
+      --amber-200: #fde68a;
+
+      --cyan-500: #06b6d4;
+      --cyan-400: #22d3ee;
+      --cyan-300: #67e8f9;
+
+      --gradient-primary: linear-gradient(135deg, #2563eb, #0891b2, #f59e0b);
+      --gradient-blue: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #3b82f6 100%);
+      --gradient-amber: linear-gradient(135deg, #b45309 0%, #d97706 50%, #f59e0b 100%);
+      --gradient-hero: linear-gradient(135deg, #3b82f6 0%, #2563eb 30%, #0891b2 60%, #f59e0b 100%);
+      --gradient-card-blue: linear-gradient(180deg, rgba(37, 99, 235, 0.12) 0%, rgba(37, 99, 235, 0.02) 100%);
+      --gradient-card-amber: linear-gradient(180deg, rgba(245, 158, 11, 0.12) 0%, rgba(245, 158, 11, 0.02) 100%);
+
+      --border: rgba(255, 255, 255, 0.06);
+      --border-blue: rgba(59, 130, 246, 0.2);
+      --border-amber: rgba(245, 158, 11, 0.2);
+      --radius: 16px;
+      --radius-lg: 24px;
+      --radius-sm: 10px;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'SF Pro Display', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-deep); }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+    #particles {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ─── Spiderweb Background Grid ─── */
+    .bg-grid {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 0;
+      background-image:
+        radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.05) 0%, transparent 50%),
+        linear-gradient(rgba(37, 99, 235, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(37, 99, 235, 0.04) 1px, transparent 1px);
+      background-size: 100% 100%, 50px 50px, 50px 50px;
+      mask-image: radial-gradient(ellipse 65% 65% at 50% 50%, black 25%, transparent 75%);
+      -webkit-mask-image: radial-gradient(ellipse 65% 65% at 50% 50%, black 25%, transparent 75%);
+    }
+
+    /* ─── Navigation ─── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: 18px 48px;
+      display: flex; align-items: center; justify-content: space-between;
+      transition: all 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    nav.scrolled {
+      background: rgba(8, 13, 26, 0.88);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 48px;
+    }
+    .nav-logo {
+      font-size: 1.7rem; font-weight: 850; letter-spacing: -0.5px;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      position: relative;
+    }
+    .nav-links { display: flex; gap: 36px; align-items: center; }
+    .nav-links a {
+      color: var(--text-muted); text-decoration: none; font-size: 0.875rem;
+      font-weight: 500; transition: color 0.3s; position: relative;
+    }
+    .nav-links a::after {
+      content: ''; position: absolute; bottom: -4px; left: 0; right: 0;
+      height: 1.5px; background: var(--gradient-primary);
+      transform: scaleX(0); transition: transform 0.3s ease;
+      border-radius: 1px;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a:hover::after { transform: scaleX(1); }
+    .nav-cta {
+      background: var(--gradient-blue); color: #fff; border: none;
+      padding: 10px 24px; border-radius: 100px; font-size: 0.875rem;
+      font-weight: 600; cursor: pointer; transition: all 0.35s;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+      box-shadow: 0 2px 16px rgba(37, 99, 235, 0.3);
+    }
+    .nav-cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(37, 99, 235, 0.45), 0 2px 8px rgba(245, 158, 11, 0.15);
+    }
+
+    /* ─── Hero ─── */
+    .hero {
+      position: relative; z-index: 1;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 160px 40px 140px;
+    }
+    .hero p {
+      font-size: clamp(1.05rem, 2vw, 1.3rem); color: var(--text-secondary);
+      max-width: 660px; margin: 0 auto 44px; line-height: 1.7;
+      animation: fadeUp 0.9s ease-out 0.2s both;
+    }
+    .hero h1 {
+      font-size: clamp(3.2rem, 7.5vw, 5.8rem); font-weight: 900;
+      line-height: 1.06; letter-spacing: -2.5px; margin-bottom: 28px;
+      animation: fadeUp 0.9s ease-out 0.1s both;
+    }
+    .hero h1 .gradient {
+      background: var(--gradient-hero); -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .hero-actions {
+      display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+      animation: fadeUp 0.9s ease-out 0.3s both;
+    }
+    .btn-primary {
+      background: var(--gradient-blue); color: #fff; border: none;
+      padding: 16px 38px; border-radius: 100px; font-size: 1.05rem;
+      font-weight: 700; cursor: pointer; transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
+      box-shadow: 0 4px 24px rgba(37, 99, 235, 0.35);
+    }
+    .btn-primary:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 12px 44px rgba(37, 99, 235, 0.5), 0 4px 16px rgba(245, 158, 11, 0.2);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.04); color: var(--text);
+      border: 1px solid var(--border); padding: 16px 38px;
+      border-radius: 100px; font-size: 1.05rem;
+      font-weight: 600; cursor: pointer; transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      text-decoration: none; backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.08); transform: translateY(-3px) scale(1.02);
+      border-color: rgba(96, 165, 250, 0.3);
+    }
+    .btn-amber {
+      background: var(--gradient-amber); color: #050a14; border: none;
+      padding: 16px 38px; border-radius: 100px; font-size: 1.05rem;
+      font-weight: 700; cursor: pointer; transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
+      box-shadow: 0 4px 24px rgba(245, 158, 11, 0.3);
+    }
+    .btn-amber:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 12px 44px rgba(245, 158, 11, 0.45);
+    }
+
+    /* ─── Floating Orbs ─── */
+    .orb {
+      position: absolute; border-radius: 50%; pointer-events: none;
+      filter: blur(90px); z-index: 0;
+    }
+    .orb-1 {
+      width: 550px; height: 550px; background: radial-gradient(circle, rgba(37,99,235,0.25), transparent);
+      top: -120px; right: -180px;
+      animation: floatOrb 14s ease-in-out infinite;
+    }
+    .orb-2 {
+      width: 450px; height: 450px; background: radial-gradient(circle, rgba(245,158,11,0.2), transparent);
+      bottom: -100px; left: -140px;
+      animation: floatOrb 17s ease-in-out infinite reverse;
+    }
+    .orb-3 {
+      width: 350px; height: 350px; background: radial-gradient(circle, rgba(6,182,212,0.15), transparent);
+      top: 45%; left: 55%; transform: translate(-50%, -50%);
+      animation: floatOrb 20s ease-in-out infinite 4s;
+    }
+    .orb-4 {
+      width: 200px; height: 200px; background: radial-gradient(circle, rgba(59,130,246,0.2), transparent);
+      bottom: 30%; right: 20%;
+      animation: floatOrb 11s ease-in-out infinite 2s;
+    }
+
+    /* ─── Section Common ─── */
+    section { position: relative; z-index: 1; padding: 140px 40px; }
+    .section-label {
+      text-transform: uppercase; letter-spacing: 4px; font-size: 0.75rem;
+      font-weight: 700; margin-bottom: 20px;
+      background: var(--gradient-primary); -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent; background-clip: text;
+      display: inline-block;
+    }
+    .section-title {
+      font-size: clamp(2.2rem, 4.5vw, 3.6rem); font-weight: 900;
+      letter-spacing: -1.5px; line-height: 1.1; margin-bottom: 26px;
+    }
+    .section-sub {
+      color: var(--text-muted); font-size: 1.15rem; max-width: 600px;
+      margin-bottom: 72px; line-height: 1.7;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    /* section dividers */
+    .section-divider {
+      width: 100%; height: 1px; border: none;
+      background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.15), rgba(245, 158, 11, 0.15), transparent);
+      margin: 0 auto;
+    }
+
+    /* ─── Innovation Cards ─── */
+    .innovation-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 20px;
+    }
+    .innovation-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 48px 40px; position: relative;
+      overflow: hidden; transition: all 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: default;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    }
+    .innovation-card:hover {
+      transform: translateY(-8px);
+      border-color: var(--border-blue);
+      background: var(--bg-card-hover);
+      box-shadow: 0 32px 72px rgba(0, 0, 0, 0.5),
+                  0 0 0 1px rgba(37, 99, 235, 0.08),
+                  0 0 80px -20px rgba(37, 99, 235, 0.12);
+    }
+    .innovation-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0;
+      height: 2px; background: var(--gradient-primary);
+      transform: scaleX(0); transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+      border-radius: 2px;
+    }
+    .innovation-card:hover::before { transform: scaleX(1); }
+    .innovation-card::after {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 50% 0%, rgba(37,99,235,0.06), transparent 70%);
+      opacity: 0; transition: opacity 0.5s ease;
+    }
+    .innovation-card:hover::after { opacity: 1; }
+    .innovation-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; margin-bottom: 22px;
+      position: relative; z-index: 1;
+    }
+    .innovation-icon.blue { background: rgba(37,99,235,0.12); color: var(--blue-400); }
+    .innovation-icon.amber { background: rgba(245,158,11,0.12); color: var(--amber-400); }
+    .innovation-icon.cyan { background: rgba(6,182,212,0.12); color: var(--cyan-400); }
+    .innovation-card h3 {
+      font-size: 1.25rem; font-weight: 800; margin-bottom: 12px;
+      letter-spacing: -0.3px; position: relative; z-index: 1;
+    }
+    .innovation-card p {
+      color: var(--text-muted); font-size: 0.93rem; line-height: 1.7;
+      position: relative; z-index: 1;
+    }
+
+    /* ─── Feature Block ─── */
+    .feature-block {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 100px;
+      align-items: center; margin-bottom: 140px;
+    }
+    .feature-block:last-child { margin-bottom: 0; }
+    .feature-block.reverse { direction: rtl; }
+    .feature-block.reverse .feature-content { direction: ltr; }
+    .feature-content h3 {
+      font-size: 1.9rem; font-weight: 900; margin-bottom: 18px;
+      letter-spacing: -0.8px; line-height: 1.2;
+    }
+    .feature-content p {
+      color: var(--text-muted); font-size: 1.05rem; line-height: 1.75;
+      margin-bottom: 28px;
+    }
+    .feature-visual {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 64px 44px;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 380px; position: relative; overflow: hidden;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    }
+    .feature-visual::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, rgba(37,99,235,0.04), transparent);
+      pointer-events: none;
+    }
+    .feature-visual.amber-glow::before {
+      background: radial-gradient(ellipse at center, rgba(245,158,11,0.05), transparent);
+    }
+
+    /* ─── Architecture Visual ─── */
+    .arch-layers {
+      display: flex; flex-direction: column; gap: 2px;
+      border-radius: var(--radius-lg); overflow: hidden;
+      background: var(--bg-card); border: 1px solid var(--border);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    }
+    .arch-layer {
+      padding: 40px 48px; position: relative; cursor: default;
+      transition: all 0.45s ease;
+    }
+    .arch-layer:hover { background: rgba(37, 99, 235, 0.04); }
+    .arch-layer:nth-child(1) { background: rgba(37, 99, 235, 0.06); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+    .arch-layer:nth-child(2) { background: rgba(8, 145, 178, 0.04); }
+    .arch-layer:nth-child(3) { background: rgba(245, 158, 11, 0.03); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+    .arch-layer-label {
+      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 3px;
+      font-weight: 700; margin-bottom: 8px;
+    }
+    .arch-layer:nth-child(1) .arch-layer-label { color: var(--blue-400); }
+    .arch-layer:nth-child(2) .arch-layer-label { color: var(--cyan-400); }
+    .arch-layer:nth-child(3) .arch-layer-label { color: var(--amber-400); }
+    .arch-layer h4 { font-size: 1.25rem; font-weight: 800; margin-bottom: 8px; }
+    .arch-layer p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.65; }
+    .arch-indicator {
+      position: absolute; right: 44px; top: 50%; transform: translateY(-50%);
+      width: 8px; height: 8px; border-radius: 50%;
+    }
+    .arch-layer:nth-child(1) .arch-indicator { background: var(--blue-400); box-shadow: 0 0 12px rgba(59,130,246,0.5); }
+    .arch-layer:nth-child(2) .arch-indicator { background: var(--cyan-400); box-shadow: 0 0 12px rgba(34,211,238,0.5); }
+    .arch-layer:nth-child(3) .arch-indicator { background: var(--amber-400); box-shadow: 0 0 12px rgba(251,191,36,0.5); }
+
+    /* ─── Feature Grid ─── */
+    .feature-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+    .feature-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 40px 36px;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative; overflow: hidden;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    }
+    .feature-card:hover {
+      transform: translateY(-6px);
+      border-color: var(--border-blue);
+      box-shadow: 0 24px 48px rgba(0,0,0,0.3);
+    }
+    .feature-card .icon {
+      font-size: 1.8rem; margin-bottom: 18px; display: block;
+      width: 44px; height: 44px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(37,99,235,0.08);
+    }
+    .feature-card:nth-child(odd) .icon { background: rgba(37,99,235,0.08); }
+    .feature-card:nth-child(even) .icon { background: rgba(245,158,11,0.08); }
+    .feature-card h3 { font-size: 1.15rem; font-weight: 800; margin-bottom: 10px; }
+    .feature-card p { color: var(--text-muted); font-size: 0.88rem; line-height: 1.7; }
+
+    /* ─── Use Cases ─── */
+    .usecase-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+    }
+    .usecase-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 48px 40px;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative; overflow: hidden;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    }
+    .usecase-card:hover {
+      transform: translateY(-8px);
+      border-color: var(--border-amber);
+      box-shadow: 0 28px 56px rgba(0,0,0,0.35);
+    }
+    .usecase-card .icon {
+      font-size: 2.2rem; margin-bottom: 20px; display: block;
+    }
+    .usecase-card h3 { font-size: 1.2rem; font-weight: 800; margin-bottom: 12px; }
+    .usecase-card p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.75; }
+
+    /* ─── Agent Ring ─── */
+    .agent-ring {
+      display: flex; align-items: center; justify-content: center;
+      flex-wrap: wrap; gap: 16px;
+    }
+    .agent-node {
+      width: 60px; height: 60px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 0.75rem;
+      transition: all 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: default; position: relative;
+    }
+    .agent-node.human {
+      background: var(--gradient-blue);
+      box-shadow: 0 4px 24px rgba(37, 99, 235, 0.45);
+      color: #fff;
+    }
+    .agent-node.buddy {
+      background: var(--gradient-amber);
+      box-shadow: 0 4px 24px rgba(245, 158, 11, 0.45);
+      color: #050a14;
+    }
+    .agent-node:hover { transform: scale(1.18); z-index: 2; }
+    .agent-connector {
+      width: 36px; height: 2px;
+      background: linear-gradient(90deg, rgba(37, 99, 235, 0.35), rgba(245, 158, 11, 0.35));
+    }
+
+    /* ─── Chat Demo ─── */
+    .chat-demo {
+      width: 100%; max-width: 460px; background: rgba(5, 10, 20, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px;
+      overflow: hidden; backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6),
+                  0 0 0 1px rgba(37, 99, 235, 0.06);
+    }
+    .chat-header {
+      padding: 18px 24px; border-bottom: 1px solid rgba(255,255,255,0.06);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .chat-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .chat-dot:nth-child(1) { background: #ff5f57; }
+    .chat-dot:nth-child(2) { background: #febc2e; }
+    .chat-dot:nth-child(3) { background: #28c840; }
+    .chat-title { font-size: 0.78rem; color: var(--text-muted); }
+    .chat-body { padding: 22px; display: flex; flex-direction: column; gap: 18px; }
+    .chat-msg {
+      padding: 13px 17px; border-radius: 15px; font-size: 0.84rem;
+      max-width: 84%; animation: fadeUpMsg 0.5s ease-out both;
+      line-height: 1.55;
+    }
+    .chat-msg.human { background: rgba(37, 99, 235, 0.18); align-self: flex-end; border-bottom-right-radius: 4px; }
+    .chat-msg.buddy { background: rgba(245, 158, 11, 0.1); align-self: flex-start; border-bottom-left-radius: 4px; }
+    .chat-msg .sender { font-size: 0.68rem; font-weight: 700; margin-bottom: 4px; opacity: 0.65; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* ─── N×M Visualization ─── */
+    .nm-viz {
+      text-align: center; position: relative;
+    }
+    .nm-symbol {
+      font-size: 5rem; font-weight: 900; margin-bottom: 14px;
+      background: var(--gradient-primary); -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent; background-clip: text;
+      letter-spacing: -2px;
+    }
+    .nm-sub {
+      color: var(--text-muted); font-size: 0.95rem;
+    }
+    .nm-grid-dots {
+      display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+      margin-bottom: 28px;
+    }
+    .nm-dot {
+      width: 8px; height: 8px; border-radius: 50%; transition: all 0.4s ease;
+    }
+    .nm-dot.human { background: var(--blue-500); }
+    .nm-dot.agent { background: var(--amber-500); }
+    .nm-dot:hover { transform: scale(2); }
+
+    /* ─── CTA Section ─── */
+    .cta-section {
+      text-align: center; padding: 160px 40px;
+    }
+    .cta-glow {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 800px; height: 800px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(37, 99, 235, 0.1) 0%, rgba(245, 158, 11, 0.05) 35%, transparent 70%);
+      pointer-events: none; animation: pulseGlow 4s ease-in-out infinite;
+    }
+
+    /* ─── Footer ─── */
+    footer {
+      border-top: 1px solid var(--border); padding: 44px 48px;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 24px;
+      color: var(--text-muted); font-size: 0.85rem; z-index: 1; position: relative;
+    }
+    footer a { color: var(--text-muted); text-decoration: none; transition: color 0.3s; }
+    footer a:hover { color: var(--text); }
+    .footer-left { opacity: 0.8; }
+    .footer-right { display: flex; gap: 28px; align-items: center; }
+
+    /* ─── Language Toggle ─── */
+    .lang-toggle {
+      display: flex; align-items: center; gap: 3px;
+      background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border);
+      border-radius: 100px; padding: 3px; cursor: pointer;
+      transition: all 0.3s; position: relative;
+    }
+    .lang-toggle:hover { border-color: var(--border-blue); background: rgba(255,255,255,0.06); }
+    .lang-option {
+      padding: 7px 15px; border-radius: 100px;
+      font-size: 0.8rem; font-weight: 600;
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      color: var(--text-muted); position: relative; z-index: 1;
+    }
+    .lang-option.active {
+      background: var(--gradient-blue); color: #fff;
+      box-shadow: 0 2px 12px rgba(37, 99, 235, 0.3);
+    }
+    .lang-option:not(.active):hover { color: var(--text); }
+
+    /* ─── Tag Styles ─── */
+    .tag {
+      padding: 7px 17px; border-radius: 100px;
+      font-size: 0.8rem; font-weight: 600; letter-spacing: 0.2px;
+    }
+    .tag-blue { background: rgba(37, 99, 235, 0.1); color: var(--blue-400); border: 1px solid rgba(37,99,235,0.15); }
+    .tag-cyan { background: rgba(6, 182, 212, 0.1); color: var(--cyan-400); border: 1px solid rgba(6,182,212,0.15); }
+    .tag-amber { background: rgba(245, 158, 11, 0.1); color: var(--amber-400); border: 1px solid rgba(245,158,11,0.15); }
+
+    /* ─── Animations ─── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(36px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeUpMsg {
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes floatOrb {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      25% { transform: translate(50px, -40px) scale(1.06); }
+      50% { transform: translate(-30px, 25px) scale(0.94); }
+      75% { transform: translate(-40px, -25px) scale(1.04); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(1.4); }
+    }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.7; transform: translate(-50%, -50%) scale(1); }
+      50% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+    }
+
+    .reveal {
+      opacity: 0; transform: translateY(44px);
+      transition: all 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 1024px) {
+      .usecase-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 768px) {
+      .feature-block { grid-template-columns: 1fr; gap: 44px; }
+      .feature-block.reverse { direction: ltr; }
+      nav { padding: 14px 22px; }
+      nav.scrolled { padding: 10px 22px; }
+      .nav-links { display: none; }
+      section { padding: 90px 22px; }
+      .innovation-grid { grid-template-columns: 1fr; }
+      .hero { padding: 120px 22px 90px; }
+      .hero h1 { font-size: clamp(2.2rem, 8vw, 3.6rem); }
+      .usecase-grid { grid-template-columns: 1fr; }
+      .feature-grid { grid-template-columns: 1fr; }
+      footer { padding: 32px 22px; flex-direction: column; text-align: center; }
+    }
+    @media (max-width: 480px) {
+      .hero-actions { flex-direction: column; align-items: stretch; }
+      .btn-primary, .btn-secondary { justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg-grid"></div>
+  <canvas id="particles"></canvas>
+
+  <nav id="navbar">
+    <div class="nav-logo">Buddy</div>
+    <div class="nav-links">
+      <a href="#innovation" data-i18n="nav.innovation">Innovation</a>
+      <a href="#architecture" data-i18n="nav.architecture">Architecture</a>
+      <a href="#features" data-i18n="nav.features">Features</a>
+      <a href="#usecases" data-i18n="nav.usecases">Use Cases</a>
+    </div>
+    <a href="#cta" class="nav-cta" data-i18n="nav.cta">Get Early Access →</a>
+  </nav>
+
+  <!-- ═══════════ HERO ═══════════ -->
+  <section class="hero">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="orb orb-4"></div>
+    <div>
+      <h1>
+        <span data-i18n="hero.line1">Not a tool you summon.</span><br>
+        <span class="gradient" data-i18n="hero.line2">A companion you live alongside.</span>
+      </h1>
+      <p data-i18n="hero.desc">
+        Buddy is the first AI-native space where humans and intelligent Agents share everyday life — working, socializing, and growing together as companions, not as user and machine.
+      </p>
+      <div class="hero-actions">
+        <a href="#cta" class="btn-primary">
+          <span data-i18n="hero.cta1">Join the Waitlist</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <a href="https://github.com/Yuan-ManX/Buddy" class="btn-secondary" target="_blank">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12 24 5.37 18.63 0 12 0z"/></svg>
+          <span data-i18n="hero.cta2">View on GitHub</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ INNOVATION ═══════════ -->
+  <section id="innovation">
+    <div class="container">
+      <div class="section-label reveal" data-i18n="innovation.label">Core Innovation</div>
+      <h2 class="section-title reveal">
+        <span data-i18n="innovation.title1">Redefining how humans</span><br>
+        <span data-i18n="innovation.title2">and AI coexist</span>
+      </h2>
+      <p class="section-sub reveal" data-i18n="innovation.sub">
+        Five architectural principles that make Buddy fundamentally different from every AI platform that came before.
+      </p>
+      <div class="innovation-grid">
+        <div class="innovation-card reveal">
+          <div class="innovation-icon blue">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </div>
+          <h3 data-i18n="innovation.card1.title">Agents Are Dwellers, Not Tools</h3>
+          <p data-i18n="innovation.card1.desc">In Buddy, Agents have identity, memory, and presence. They inhabit your spaces as genuine participants — not summoned by commands, but simply there, like any member of your circle.</p>
+        </div>
+        <div class="innovation-card reveal">
+          <div class="innovation-icon cyan">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          </div>
+          <h3 data-i18n="innovation.card2.title">Multi-Agent Social Fabric</h3>
+          <p data-i18n="innovation.card2.desc">Built from the ground up for N humans collaborating with M agents. A living social graph where contributions flow fluidly between people and Agents, dissolving the boundary that never mattered.</p>
+        </div>
+        <div class="innovation-card reveal">
+          <div class="innovation-icon amber">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+          </div>
+          <h3 data-i18n="innovation.card3.title">One Space for Work and Life</h3>
+          <p data-i18n="innovation.card3.desc">No mode switching. The Agent that refines your presentation at 3 PM is the same one that asks about your day at 9 PM — because it has been with you the whole time.</p>
+        </div>
+        <div class="innovation-card reveal">
+          <div class="innovation-icon blue">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          </div>
+          <h3 data-i18n="innovation.card4.title">Relational Memory</h3>
+          <p data-i18n="innovation.card4.desc">Not session-based context, but a living model of who you are. Agents remember how things felt, track your growth over months, and build a story — not a snapshot.</p>
+        </div>
+        <div class="innovation-card reveal">
+          <div class="innovation-icon amber">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+          <h3 data-i18n="innovation.card5.title">Proactive by Nature</h3>
+          <p data-i18n="innovation.card5.desc">Agents don't wait to be called. They notice deadlines approaching, surface context when you need it, and offer perspective when you seem stuck. Presence, not passivity.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="container"><hr class="section-divider"></div>
+
+  <!-- ═══════════ CHAT DEMO ═══════════ -->
+  <section>
+    <div class="container">
+      <div class="feature-block">
+        <div class="feature-content reveal">
+          <div class="section-label" data-i18n="chat.label">Experience</div>
+          <h3 data-i18n="chat.title">Conversations that remember you.</h3>
+          <p data-i18n="chat.desc">
+            Every interaction builds relational memory. Your Agent doesn't start from zero — it remembers last week's decision, the project's history, and how you like to work. This is not context injection. This is the foundation of genuine companionship.
+          </p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <span class="tag tag-blue" data-i18n="chat.tag1">Identity</span>
+            <span class="tag tag-cyan" data-i18n="chat.tag2">Memory</span>
+            <span class="tag tag-amber" data-i18n="chat.tag3">Presence</span>
+            <span class="tag tag-amber" data-i18n="chat.tag4">Continuity</span>
+          </div>
+        </div>
+        <div class="feature-visual reveal">
+          <div class="chat-demo">
+            <div class="chat-header">
+              <span class="chat-dot"></span><span class="chat-dot"></span><span class="chat-dot"></span>
+              <span class="chat-title" data-i18n="chat.demoTitle"># product-launch · with Buddy Agents</span>
+            </div>
+            <div class="chat-body">
+              <div class="chat-msg human">
+                <div class="sender" data-i18n="chat.msg1.sender">You</div>
+                <span data-i18n="chat.msg1.text">Let's finalize the Q2 roadmap. @strategy-buddy, can you pull up our notes from last week?</span>
+              </div>
+              <div class="chat-msg buddy">
+                <div class="sender" data-i18n="chat.msg2.sender">Strategy Buddy</div>
+                <span data-i18n="chat.msg2.text">Got it. From our March 14th session: we prioritized the analytics dashboard and deferred the mobile redesign to Q3. I also recall you wanted to revisit the pricing model before the board meeting.</span>
+              </div>
+              <div class="chat-msg human">
+                <div class="sender" data-i18n="chat.msg3.sender">Sarah (Design Lead)</div>
+                <span data-i18n="chat.msg3.text">Good memory — I've been iterating on the dashboard mockups. @design-buddy can you compile the latest version?</span>
+              </div>
+              <div class="chat-msg buddy">
+                <div class="sender" data-i18n="chat.msg4.sender">Design Buddy</div>
+                <span data-i18n="chat.msg4.text">Compiled v4.2 of the dashboard mockups based on Sarah's feedback from Tuesday. Three variants attached. I noted Sarah preferred the card-based layout with the dark sidebar from variant B.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ AGENT NETWORK ═══════════ -->
+  <section>
+    <div class="container">
+      <div class="feature-block reverse">
+        <div class="feature-content reveal">
+          <div class="section-label" data-i18n="network.label">Network</div>
+          <h3 data-i18n="network.title">Groups of humans and groups of Agents — one social fabric.</h3>
+          <p data-i18n="network.desc">
+            Buddy is built from first principles for multi-agent collaboration. Your strategy Agent and your research Agent work in parallel while the design Agent reacts to feedback in real time. The boundary between human contribution and Agent execution dissolves naturally.
+          </p>
+          <div class="agent-ring" style="justify-content:flex-start;margin-top:20px;">
+            <span class="agent-node human">You</span>
+            <span class="agent-connector"></span>
+            <span class="agent-node buddy">SB</span>
+            <span class="agent-connector"></span>
+            <span class="agent-node human">Sarah</span>
+            <span class="agent-connector"></span>
+            <span class="agent-node buddy">DB</span>
+            <span class="agent-connector"></span>
+            <span class="agent-node buddy">RB</span>
+          </div>
+        </div>
+        <div class="feature-visual amber-glow reveal">
+          <div class="nm-viz">
+            <div class="nm-grid-dots">
+              <span class="nm-dot human"></span><span class="nm-dot human"></span><span class="nm-dot human"></span><span class="nm-dot human"></span>
+              <span class="nm-dot agent"></span><span class="nm-dot agent"></span><span class="nm-dot agent"></span><span class="nm-dot agent"></span><span class="nm-dot agent"></span><span class="nm-dot agent"></span>
+              <span class="nm-dot human"></span><span class="nm-dot human"></span><span class="nm-dot agent"></span><span class="nm-dot agent"></span>
+              <span class="nm-dot agent"></span><span class="nm-dot human"></span><span class="nm-dot agent"></span><span class="nm-dot agent"></span><span class="nm-dot human"></span>
+              <span class="nm-dot agent"></span><span class="nm-dot agent"></span><span class="nm-dot human"></span><span class="nm-dot agent"></span>
+            </div>
+            <div class="nm-symbol">N × M</div>
+            <div class="nm-sub" data-i18n="network.viz">Humans × Agents collaborating simultaneously</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="container"><hr class="section-divider"></div>
+
+  <!-- ═══════════ ARCHITECTURE ═══════════ -->
+  <section id="architecture">
+    <div class="container">
+      <div class="section-label reveal" data-i18n="arch.label">Architecture</div>
+      <h2 class="section-title reveal" data-i18n="arch.title">A compounding intelligence flywheel.</h2>
+      <p class="section-sub reveal" data-i18n="arch.sub">
+        Three layers working in concert: richer social signals produce better models, better models power more capable Agents, more capable Agents attract a richer network.
+      </p>
+      <div class="arch-layers reveal">
+        <div class="arch-layer">
+          <div class="arch-layer-label">Layer 1</div>
+          <div class="arch-indicator"></div>
+          <h4 data-i18n="arch.l1.title">The Companion Space</h4>
+          <p data-i18n="arch.l1.desc">The social surface where humans and Agents interact as peers — workspaces, group conversations, shared memory, real-time coexistence.</p>
+        </div>
+        <div class="arch-layer">
+          <div class="arch-layer-label">Layer 2</div>
+          <div class="arch-indicator"></div>
+          <h4 data-i18n="arch.l2.title">The Relational Intelligence Engine</h4>
+          <p data-i18n="arch.l2.desc">The cognitive core — persistent memory that deepens over time, proactive intent understanding, multi-agent orchestration, personality modeling, cross-context reasoning.</p>
+        </div>
+        <div class="arch-layer">
+          <div class="arch-layer-label">Layer 3</div>
+          <div class="arch-indicator"></div>
+          <h4 data-i18n="arch.l3.title">The Agent Runtime &amp; Network</h4>
+          <p data-i18n="arch.l3.desc">The execution substrate — distributed agent orchestration, tool and API integration, safety sandboxes, semantic routing across Agent teams at scale.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="container"><hr class="section-divider"></div>
+
+  <!-- ═══════════ FEATURES ═══════════ -->
+  <section id="features">
+    <div class="container">
+      <div class="section-label reveal" data-i18n="features.label">Feature Landscape</div>
+      <h2 class="section-title reveal" data-i18n="features.title">Everything you need in one space.</h2>
+      <p class="section-sub reveal" data-i18n="features.sub">
+        Eight capabilities that make Buddy a complete companion experience, not just another chat app with AI bolted on.
+      </p>
+      <div class="feature-grid">
+        <div class="feature-card reveal">
+          <div class="icon">🔀</div>
+          <h3 data-i18n="features.f1.title">Multi-Agent Collaboration</h3>
+          <p data-i18n="features.f1.desc">Parallel task execution, real-time handoffs, collective reasoning across humans and Agents.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="icon">💾</div>
+          <h3 data-i18n="features.f2.title">Relational Memory</h3>
+          <p data-i18n="features.f2.desc">Agents build evolving models of who you are — across sessions, contexts, and time.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="icon">🔮</div>
+          <h3 data-i18n="features.f3.title">Proactive Intelligence</h3>
+          <p data-i18n="features.f3.desc">Agents anticipate needs, check deadlines, and offer insight without waiting to be prompted.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="icon">🌐</div>
+          <h3 data-i18n="features.f4.title">Work &amp; Life Continuum</h3>
+          <p data-i18n="features.f4.desc">Professional and personal worlds in one coherent space — no mode switching required.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="icon">🎭</div>
+          <h3 data-i18n="features.f5.title">Agent Identity &amp; Personality</h3>
+          <p data-i18n="features.f5.desc">Distinct identities with names, profiles, communication styles — companions, not functions.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="icon">🔗</div>
+          <h3 data-i18n="features.f6.title">Cross-Context Understanding</h3>
+          <p data-i18n="features.f6.desc">Work context informs personal understanding — enabling connections isolated tools miss.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="icon">📚</div>
+          <h3 data-i18n="features.f7.title">Shared Knowledge Base</h3>
+          <p data-i18n="features.f7.desc">Conversations and decisions become living team knowledge — information flows without silos.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="icon">🔒</div>
+          <h3 data-i18n="features.f8.title">Privacy &amp; Control</h3>
+          <p data-i18n="features.f8.desc">Granular context control. You decide what each Agent sees and remembers.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="container"><hr class="section-divider"></div>
+
+  <!-- ═══════════ USE CASES ═══════════ -->
+  <section id="usecases">
+    <div class="container">
+      <div class="section-label reveal" data-i18n="usecases.label">Use Cases</div>
+      <h2 class="section-title reveal" data-i18n="usecases.title">Four dimensions of companionship.</h2>
+      <p class="section-sub reveal" data-i18n="usecases.sub">
+        Buddy unifies what other platforms keep apart — work, life, community, and self.
+      </p>
+      <div class="usecase-grid">
+        <div class="usecase-card reveal">
+          <span class="icon">💼</span>
+          <h3 data-i18n="usecases.u1.title">For Work</h3>
+          <p data-i18n="usecases.u1.desc">Your team and your Agent team operate as one. Strategy with real-time research, documents co-authored with your writing Agent, sprint retros with Agents who were actually there. Not "AI-assisted" — just work, with more capable teammates.</p>
+        </div>
+        <div class="usecase-card reveal">
+          <span class="icon">🎉</span>
+          <h3 data-i18n="usecases.u2.title">For Life</h3>
+          <p data-i18n="usecases.u2.desc">Weekend trip planning with friends. Everyone's preferences remembered. Activities that fit the group's vibe. A check-in when you've had a rough day. Companionship, not productivity.</p>
+        </div>
+        <div class="usecase-card reveal">
+          <span class="icon">🌍</span>
+          <h3 data-i18n="usecases.u3.title">For Communities</h3>
+          <p data-i18n="usecases.u3.desc">Learning communities with Agents that summarize readings and connect members. Creator communities with feedback on drafts and collaboration matching. Collective intelligence that grows with every interaction.</p>
+        </div>
+        <div class="usecase-card reveal">
+          <span class="icon">🧘</span>
+          <h3 data-i18n="usecases.u4.title">For Yourself</h3>
+          <p data-i18n="usecases.u4.desc">Your personal Agent knows you best — goals, habits, struggles, growth. A thinking partner for big decisions. A reflective journal for processing. The Agent version of the person who's always had your back.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ CTA ═══════════ -->
+  <section class="cta-section" id="cta">
+    <div class="cta-glow"></div>
+    <div class="container reveal">
+      <h2 class="section-title" style="margin:0 auto 22px;" data-i18n="cta.title">
+        Ready to meet your Buddy?
+      </h2>
+      <p style="color:var(--text-muted);font-size:1.15rem;max-width:520px;margin:0 auto 44px;line-height:1.7;" data-i18n="cta.desc">
+        The first AI-native space where you don't use Agents — you live alongside them. Join the waitlist to be among the first.
+      </p>
+      <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
+        <a href="https://github.com/Yuan-ManX/Buddy" target="_blank" class="btn-amber" style="font-size:1.1rem;padding:18px 44px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12 24 5.37 18.63 0 12 0z"/></svg>
+          <span data-i18n="cta.btn">Star on GitHub</span>
+        </a>
+        <a href="#cta" class="btn-secondary" style="font-size:1.1rem;padding:18px 44px;">
+          <span data-i18n="cta.btn2">Join the Waitlist</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ FOOTER ═══════════ -->
+  <footer>
+    <div class="footer-left" data-i18n="footer.copyright">© 2026 Buddy</div>
+    <div class="footer-right">
+      <a href="https://github.com/Yuan-ManX/Buddy" target="_blank">GitHub</a>
+      <a href="https://github.com/Yuan-ManX/Buddy/blob/main/README_CN.md" target="_blank" data-i18n="footer.docs">中文文档</a>
+      <div class="lang-toggle" id="langToggle" title="Switch Language / 切换语言">
+        <span class="lang-option active" data-lang="en">EN</span>
+        <span class="lang-option" data-lang="zh">中文</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    /* ═══════════════════════════════════════════
+       i18n TRANSLATIONS
+       ═══════════════════════════════════════════ */
+    const translations = {
+      en: {
+        'meta.title': 'Buddy — Your AI-Native Companion for Work & Life',
+        'hero.line1': 'Not a tool you summon.',
+        'hero.line2': 'A companion you live alongside.',
+        'hero.desc': 'Buddy is the first AI-native space where humans and intelligent Agents share everyday life — working, socializing, and growing together as companions, not as user and machine.',
+        'hero.cta1': 'Join the Waitlist',
+        'hero.cta2': 'View on GitHub',
+        'nav.innovation': 'Innovation',
+        'nav.architecture': 'Architecture',
+        'nav.features': 'Features',
+        'nav.usecases': 'Use Cases',
+        'nav.cta': 'Get Early Access →',
+        'innovation.label': 'Core Innovation',
+        'innovation.title1': 'Redefining how humans',
+        'innovation.title2': 'and AI coexist',
+        'innovation.sub': 'Five architectural principles that make Buddy fundamentally different from every AI platform that came before.',
+        'innovation.card1.title': 'Agents Are Dwellers, Not Tools',
+        'innovation.card1.desc': 'In Buddy, Agents have identity, memory, and presence. They inhabit your spaces as genuine participants — not summoned by commands, but simply there, like any member of your circle.',
+        'innovation.card2.title': 'Multi-Agent Social Fabric',
+        'innovation.card2.desc': 'Built from the ground up for N humans collaborating with M agents. A living social graph where contributions flow fluidly between people and Agents, dissolving the boundary that never mattered.',
+        'innovation.card3.title': 'One Space for Work and Life',
+        'innovation.card3.desc': 'No mode switching. The Agent that refines your presentation at 3 PM is the same one that asks about your day at 9 PM — because it has been with you the whole time.',
+        'innovation.card4.title': 'Relational Memory',
+        'innovation.card4.desc': 'Not session-based context, but a living model of who you are. Agents remember how things felt, track your growth over months, and build a story — not a snapshot.',
+        'innovation.card5.title': 'Proactive by Nature',
+        'innovation.card5.desc': "Agents don't wait to be called. They notice deadlines approaching, surface context when you need it, and offer perspective when you seem stuck. Presence, not passivity.",
+        'chat.label': 'Experience',
+        'chat.title': 'Conversations that remember you.',
+        'chat.desc': "Every interaction builds relational memory. Your Agent doesn't start from zero — it remembers last week's decision, the project's history, and how you like to work. This is not context injection. This is the foundation of genuine companionship.",
+        'chat.tag1': 'Identity',
+        'chat.tag2': 'Memory',
+        'chat.tag3': 'Presence',
+        'chat.tag4': 'Continuity',
+        'chat.demoTitle': '# product-launch · with Buddy Agents',
+        'chat.msg1.sender': 'You',
+        'chat.msg1.text': "Let's finalize the Q2 roadmap. @strategy-buddy, can you pull up our notes from last week?",
+        'chat.msg2.sender': 'Strategy Buddy',
+        'chat.msg2.text': 'Got it. From our March 14th session: we prioritized the analytics dashboard and deferred the mobile redesign to Q3. I also recall you wanted to revisit the pricing model before the board meeting.',
+        'chat.msg3.sender': 'Sarah (Design Lead)',
+        'chat.msg3.text': "Good memory — I've been iterating on the dashboard mockups. @design-buddy can you compile the latest version?",
+        'chat.msg4.sender': 'Design Buddy',
+        'chat.msg4.text': "Compiled v4.2 of the dashboard mockups based on Sarah's feedback from Tuesday. Three variants attached. I noted Sarah preferred the card-based layout with the dark sidebar from variant B.",
+        'network.label': 'Network',
+        'network.title': 'Groups of humans and groups of Agents — one social fabric.',
+        'network.desc': 'Buddy is built from first principles for multi-agent collaboration. Your strategy Agent and your research Agent work in parallel while the design Agent reacts to feedback in real time. The boundary between human contribution and Agent execution dissolves naturally.',
+        'network.viz': 'Humans × Agents collaborating simultaneously',
+        'arch.label': 'Architecture',
+        'arch.title': 'A compounding intelligence flywheel.',
+        'arch.sub': 'Three layers working in concert: richer social signals produce better models, better models power more capable Agents, more capable Agents attract a richer network.',
+        'arch.l1.title': 'The Companion Space',
+        'arch.l1.desc': 'The social surface where humans and Agents interact as peers — workspaces, group conversations, shared memory, real-time coexistence.',
+        'arch.l2.title': 'The Relational Intelligence Engine',
+        'arch.l2.desc': 'The cognitive core — persistent memory that deepens over time, proactive intent understanding, multi-agent orchestration, personality modeling, cross-context reasoning.',
+        'arch.l3.title': 'The Agent Runtime & Network',
+        'arch.l3.desc': 'The execution substrate — distributed agent orchestration, tool and API integration, safety sandboxes, semantic routing across Agent teams at scale.',
+        'features.label': 'Feature Landscape',
+        'features.title': 'Everything you need in one space.',
+        'features.sub': 'Eight capabilities that make Buddy a complete companion experience, not just another chat app with AI bolted on.',
+        'features.f1.title': 'Multi-Agent Collaboration',
+        'features.f1.desc': 'Parallel task execution, real-time handoffs, collective reasoning across humans and Agents.',
+        'features.f2.title': 'Relational Memory',
+        'features.f2.desc': 'Agents build evolving models of who you are — across sessions, contexts, and time.',
+        'features.f3.title': 'Proactive Intelligence',
+        'features.f3.desc': 'Agents anticipate needs, check deadlines, and offer insight without waiting to be prompted.',
+        'features.f4.title': 'Work & Life Continuum',
+        'features.f4.desc': 'Professional and personal worlds in one coherent space — no mode switching required.',
+        'features.f5.title': 'Agent Identity & Personality',
+        'features.f5.desc': 'Distinct identities with names, profiles, communication styles — companions, not functions.',
+        'features.f6.title': 'Cross-Context Understanding',
+        'features.f6.desc': 'Work context informs personal understanding — enabling connections isolated tools miss.',
+        'features.f7.title': 'Shared Knowledge Base',
+        'features.f7.desc': 'Conversations and decisions become living team knowledge — information flows without silos.',
+        'features.f8.title': 'Privacy & Control',
+        'features.f8.desc': 'Granular context control. You decide what each Agent sees and remembers.',
+        'usecases.label': 'Use Cases',
+        'usecases.title': 'Four dimensions of companionship.',
+        'usecases.sub': 'Buddy unifies what other platforms keep apart — work, life, community, and self.',
+        'usecases.u1.title': 'For Work',
+        'usecases.u1.desc': 'Your team and your Agent team operate as one. Strategy with real-time research, documents co-authored with your writing Agent, sprint retros with Agents who were actually there. Not "AI-assisted" — just work, with more capable teammates.',
+        'usecases.u2.title': 'For Life',
+        'usecases.u2.desc': "Weekend trip planning with friends. Everyone's preferences remembered. Activities that fit the group's vibe. A check-in when you've had a rough day. Companionship, not productivity.",
+        'usecases.u3.title': 'For Communities',
+        'usecases.u3.desc': 'Learning communities with Agents that summarize readings and connect members. Creator communities with feedback on drafts and collaboration matching. Collective intelligence that grows with every interaction.',
+        'usecases.u4.title': 'For Yourself',
+        'usecases.u4.desc': "Your personal Agent knows you best — goals, habits, struggles, growth. A thinking partner for big decisions. A reflective journal for processing. The Agent version of the person who's always had your back.",
+        'cta.title': 'Ready to meet your Buddy?',
+        'cta.desc': "The first AI-native space where you don't use Agents — you live alongside them. Join the waitlist to be among the first.",
+        'cta.btn': 'Star on GitHub',
+        'cta.btn2': 'Join the Waitlist',
+        'footer.copyright': '© 2026 Buddy',
+        'footer.docs': '中文文档'
+      },
+      zh: {
+        'meta.title': 'Buddy — 你的 AI 原生工作与生活搭子',
+        'hero.line1': '不是供你召唤的工具。',
+        'hero.line2': '而是与你并肩生活的搭子。',
+        'hero.desc': 'Buddy 是首个 AI 原生空间，人类与智能 Agent 在此共享日常生活——作为搭子一同工作、社交、成长，而不是用户与机器的关系。',
+        'hero.cta1': '加入等候名单',
+        'hero.cta2': '在 GitHub 查看',
+        'nav.innovation': '核心创新',
+        'nav.architecture': '架构',
+        'nav.features': '功能',
+        'nav.usecases': '使用场景',
+        'nav.cta': '抢先体验 →',
+        'innovation.label': '核心创新',
+        'innovation.title1': '重新定义人类与 AI',
+        'innovation.title2': '共存的方式',
+        'innovation.sub': '五项架构原则，使 Buddy 从根本上不同于此前所有的 AI 平台。',
+        'innovation.card1.title': 'Agent 是栖居者，不是工具',
+        'innovation.card1.desc': '在 Buddy 中，Agent 拥有身份、记忆和存在感。它们以真正参与者的身份栖居在你的空间中——不是通过命令召唤，而是自然地存在着，就像你圈子中的任何成员。',
+        'innovation.card2.title': '多 Agent 社交网络',
+        'innovation.card2.desc': '从底层为 N 个人类与 M 个 Agent 的协同而设计。一张活生生的社交图谱，贡献在人与 Agent 之间自由流动，消融那从未重要的边界。',
+        'innovation.card3.title': '工作与生活，同一空间',
+        'innovation.card3.desc': '无需模式切换。下午三点帮你打磨提案的 Agent，就是晚上九点关心你今天过得怎么样的同一个 Agent——因为它始终与你在一起。',
+        'innovation.card4.title': '关系记忆，而非对话历史',
+        'innovation.card4.desc': '不是会话级别的上下文，而是关于你是谁的生命模型。Agent 记得事情发生时的感受，追踪你数月间的成长，构建一个故事——而非一张快照。',
+        'innovation.card5.title': '主动天性',
+        'innovation.card5.desc': 'Agent 不等人召唤。它们注意到截止日期临近，在你需要时浮现上下文，在你陷入瓶颈时提供视角。陪伴，而非被动。',
+        'chat.label': '体验',
+        'chat.title': '记得你的对话。',
+        'chat.desc': '每一次交互都在构建关系记忆。你的 Agent 不是从零开始的——它记得上周的决定、项目的历史、你喜欢的工作方式。这不是上下文注入，而是真正搭子关系的基础。',
+        'chat.tag1': '身份',
+        'chat.tag2': '记忆',
+        'chat.tag3': '存在感',
+        'chat.tag4': '连续性',
+        'chat.demoTitle': '# 产品发布 · 与 Buddy Agent 协作',
+        'chat.msg1.sender': '你',
+        'chat.msg1.text': '我们来敲定 Q2 路线图。@策略搭子，能调出我们上周的会议记录吗？',
+        'chat.msg2.sender': '策略 Buddy',
+        'chat.msg2.text': '好的。根据我们 3 月 14 日的讨论：我们优先推进了数据分析仪表盘，将移动端改版推迟到 Q3。我还记得你想在董事会之前重新评估定价模型。',
+        'chat.msg3.sender': 'Sarah (设计主管)',
+        'chat.msg3.text': '记性不错——我一直在迭代仪表盘的 mockup。@设计搭子，能帮我整理最新版本吗？',
+        'chat.msg4.sender': '设计 Buddy',
+        'chat.msg4.text': '已整理好仪表盘 mockup v4.2，基于 Sarah 周二给出的反馈。附上三个变体。我注意到 Sarah 更偏好 B 变体中带深色侧边栏的卡片式布局。',
+        'network.label': '网络',
+        'network.title': '人类群体与 Agent 群体——同一张社交网络。',
+        'network.desc': 'Buddy 从第一性原理为多 Agent 协作而构建。你的策略 Agent 和研究 Agent 并行工作，设计 Agent 实时响应反馈。人类贡献与 Agent 执行之间的边界自然消融。',
+        'network.viz': '人类 × Agent 同时协作',
+        'arch.label': '架构',
+        'arch.title': '一个复合智能飞轮。',
+        'arch.sub': '三层协同运作：更丰富的社交信号训练更好的模型，更好的模型驱动更强大的 Agent，更强大的 Agent 吸引更丰富的网络。',
+        'arch.l1.title': '搭子空间',
+        'arch.l1.desc': '人类与 Agent 作为对等方交互的社交界面——工作空间、群组对话、共享记忆、实时共存。',
+        'arch.l2.title': '关系智能引擎',
+        'arch.l2.desc': '认知核心——随时间深化的持久记忆、主动意图理解、多 Agent 编排、人格建模、跨上下文推理。',
+        'arch.l3.title': 'Agent 运行时与网络',
+        'arch.l3.desc': '执行基座——分布式 Agent 编排、工具与 API 集成、安全沙箱、跨 Agent 团队的语义路由。',
+        'features.label': '功能全景',
+        'features.title': '一个空间，一切所需。',
+        'features.sub': '八项能力，使 Buddy 成为完整的搭子体验，而不是又一个塞了 AI 的聊天应用。',
+        'features.f1.title': '多 Agent 协作',
+        'features.f1.desc': '并行任务执行、实时交接、跨越人类与 Agent 的集体推理。',
+        'features.f2.title': '关系记忆',
+        'features.f2.desc': 'Agent 构建关于你的演化模型——跨会话、跨上下文、跨时间。',
+        'features.f3.title': '主动智能',
+        'features.f3.desc': 'Agent 预判需求、关注截止日期、无需提示即可提供洞察。',
+        'features.f4.title': '工作生活连续体',
+        'features.f4.desc': '专业与个人世界在同一连贯空间——无需模式切换。',
+        'features.f5.title': 'Agent 身份与人格',
+        'features.f5.desc': '独特的身份、名字、画像、沟通风格——是可辨识的搭子，不是功能。',
+        'features.f6.title': '跨上下文理解',
+        'features.f6.desc': '工作上下文融入个人理解——实现孤立工具无法达成的连接。',
+        'features.f7.title': '共享知识库',
+        'features.f7.desc': '对话与决策变成活生生的团队知识——信息无障碍流动。',
+        'features.f8.title': '隐私与控制',
+        'features.f8.desc': '精细的上下文控制。你决定每个 Agent 看到什么、记住什么。',
+        'usecases.label': '使用场景',
+        'usecases.title': '搭子关系的四个维度。',
+        'usecases.sub': 'Buddy 将其他平台割裂的东西统一——工作、生活、社区和自己。',
+        'usecases.u1.title': '工作',
+        'usecases.u1.desc': '你的团队和你的 Agent 团队作为一个整体运作。策略讨论伴随实时调研，文档由你的写作 Agent 共同撰写，Sprint 回顾中有全程在场的 Agent 参与。不是"AI辅助"——只是工作，有了更能干的队友。',
+        'usecases.u2.title': '生活',
+        'usecases.u2.desc': '与朋友规划周末出行。每个人的偏好都被记住。推荐符合群体氛围的活动。在你度过糟糕一天时的问候。是陪伴，不是生产力。',
+        'usecases.u3.title': '社区',
+        'usecases.u3.desc': '学习社区中 Agent 提炼阅读要点、连接成员。创作者社区中 Agent 提供草稿反馈与协作匹配。集体智慧随每一次交互而增长。',
+        'usecases.u4.title': '自己',
+        'usecases.u4.desc': '你的个人 Agent 是最懂你的那个——目标、习惯、挣扎、成长。重大决策的思维伙伴，处理经历的反思日记，那个永远站在你这边的人的 Agent 版本。',
+        'cta.title': '准备好见你的 Buddy 了吗？',
+        'cta.desc': '首个 AI 原生空间，你不是在"使用"Agent——而是与它们并肩生活。加入等候名单，成为第一批体验者。',
+        'cta.btn': '在 GitHub 加星',
+        'cta.btn2': '加入等候名单',
+        'footer.copyright': '© 2026 Buddy',
+        'footer.docs': 'English Docs'
+      }
+    };
+
+    /* ═══════════════════════════════════════════
+       LANGUAGE SWITCHER
+       ═══════════════════════════════════════════ */
+    let currentLang = localStorage.getItem('buddy-lang') || 'en';
+
+    function setLanguage(lang) {
+      currentLang = lang;
+      localStorage.setItem('buddy-lang', lang);
+      document.documentElement.lang = lang;
+
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (translations[lang] && translations[lang][key]) {
+          el.innerHTML = translations[lang][key];
+        }
+      });
+
+      document.querySelectorAll('.lang-option').forEach(opt => {
+        opt.classList.toggle('active', opt.getAttribute('data-lang') === lang);
+      });
+
+      const metaDesc = document.querySelector('meta[name="description"]');
+      if (metaDesc && translations[lang]['hero.desc']) {
+        metaDesc.setAttribute('content', translations[lang]['hero.desc'].replace(/<[^>]*>/g, ''));
+      }
+      if (translations[lang]['meta.title']) {
+        document.title = translations[lang]['meta.title'];
+      }
+    }
+
+    document.getElementById('langToggle').addEventListener('click', function(e) {
+      const opt = e.target.closest('.lang-option');
+      if (!opt) return;
+      const lang = opt.getAttribute('data-lang');
+      if (lang !== currentLang) setLanguage(lang);
+    });
+
+    setLanguage(currentLang);
+
+    /* ═══════════════════════════════════════════
+       SPIDERWEB NETWORK SYSTEM
+       ═══════════════════════════════════════════ */
+    const canvas = document.getElementById('particles');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let nodes = [];
+    let mouse = { x: -1000, y: -1000 };
+    let time = 0;
+
+    class Particle {
+      constructor() {
+        this.reset();
+        this.y = Math.random() * canvas.height;
+      }
+      reset() {
+        this.x = Math.random() * canvas.width;
+        this.y = -12;
+        this.size = Math.random() * 2 + 0.3;
+        this.speedY = Math.random() * 0.35 + 0.07;
+        this.speedX = (Math.random() - 0.5) * 0.22;
+        this.opacity = Math.random() * 0.5 + 0.06;
+        this.type = Math.random() > 0.6 ? (Math.random() > 0.5 ? 'amber' : 'cyan') : 'blue';
+      }
+      update() {
+        this.y += this.speedY;
+        this.x += this.speedX;
+        const dx = mouse.x - this.x;
+        const dy = mouse.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 200) {
+          const angle = Math.atan2(dy, dx);
+          const force = (200 - dist) / 600;
+          this.x -= Math.cos(angle) * force * 2;
+          this.y -= Math.sin(angle) * force * 2;
+        }
+        if (this.y > canvas.height + 15) this.reset();
+        if (this.x < -15) this.x = canvas.width + 15;
+        if (this.x > canvas.width + 15) this.x = -15;
+      }
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        let color;
+        if (this.type === 'blue') color = '59, 130, 246';
+        else if (this.type === 'amber') color = '245, 158, 11';
+        else color = '6, 182, 212';
+        ctx.fillStyle = `rgba(${color}, ${this.opacity})`;
+        ctx.fill();
+      }
+    }
+
+    class WebNode {
+      constructor() {
+        this.baseX = Math.random() * canvas.width;
+        this.baseY = Math.random() * canvas.height;
+        this.x = this.baseX;
+        this.y = this.baseY;
+        this.size = Math.random() * 2 + 1;
+        this.speedX = (Math.random() - 0.5) * 0.12;
+        this.speedY = (Math.random() - 0.5) * 0.12;
+        this.phase = Math.random() * Math.PI * 2;
+        this.amplitude = Math.random() * 10 + 3;
+        this.type = Math.random() > 0.5 ? 'blue' : 'amber';
+        this.pulsePhase = Math.random() * Math.PI * 2;
+      }
+      update() {
+        this.baseX += this.speedX;
+        this.baseY += this.speedY;
+        if (this.baseX < -40) this.baseX = canvas.width + 40;
+        if (this.baseX > canvas.width + 40) this.baseX = -40;
+        if (this.baseY < -40) this.baseY = canvas.height + 40;
+        if (this.baseY > canvas.height + 40) this.baseY = -40;
+        this.x = this.baseX + Math.sin(time * 0.0018 + this.phase) * this.amplitude;
+        this.y = this.baseY + Math.cos(time * 0.0018 + this.phase) * this.amplitude * 0.6;
+      }
+      draw() {
+        const pulse = 1 + Math.sin(time * 0.003 + this.pulsePhase) * 0.3;
+        const r = this.size * pulse;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+        const color = this.type === 'blue' ? '59, 130, 246' : '245, 158, 11';
+        ctx.fillStyle = `rgba(${color}, 0.6)`;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, r + 5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${color}, 0.08)`;
+        ctx.fill();
+      }
+    }
+
+    function initNodes() {
+      nodes = [];
+      const nodeCount = Math.min(35, Math.floor((canvas.width * canvas.height) / 28000));
+      for (let i = 0; i < nodeCount; i++) nodes.push(new WebNode());
+    }
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      initNodes();
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    const particleCount = Math.min(100, Math.floor(window.innerWidth / 12));
+    for (let i = 0; i < particleCount; i++) particles.push(new Particle());
+    initNodes();
+
+    function animateParticles() {
+      time++;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      nodes.forEach(n => { n.update(); n.draw(); });
+      particles.forEach(p => { p.update(); p.draw(); });
+
+      // Spiderweb: draw all node-to-node connections
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dx = nodes[i].x - nodes[j].x;
+          const dy = nodes[i].y - nodes[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const maxDist = 230;
+          if (dist < maxDist) {
+            const alpha = 0.18 * (1 - dist / maxDist);
+            ctx.beginPath();
+            ctx.moveTo(nodes[i].x, nodes[i].y);
+            ctx.lineTo(nodes[j].x, nodes[j].y);
+            let color;
+            if (nodes[i].type !== nodes[j].type) color = '147, 197, 253';
+            else if (nodes[i].type === 'blue') color = '59, 130, 246';
+            else color = '245, 158, 11';
+            ctx.strokeStyle = `rgba(${color}, ${alpha})`;
+            ctx.lineWidth = 0.7;
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Mouse creates spiderweb effect — connects to nearby nodes
+      nodes.forEach(n => {
+        const dx = mouse.x - n.x;
+        const dy = mouse.y - n.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const maxMDist = 280;
+        if (dist < maxMDist) {
+          const alpha = 0.22 * (1 - dist / maxMDist);
+          ctx.beginPath();
+          ctx.moveTo(mouse.x, mouse.y);
+          ctx.lineTo(n.x, n.y);
+          const color = n.type === 'blue' ? '59, 130, 246' : '245, 158, 11';
+          ctx.strokeStyle = `rgba(${color}, ${alpha})`;
+          ctx.lineWidth = 0.6;
+          ctx.stroke();
+          // Also draw a subtle pulse at the node when mouse is near
+          if (dist < 100) {
+            const glowAlpha = 0.25 * (1 - dist / 100);
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, n.size + 8, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${color}, ${glowAlpha})`;
+            ctx.fill();
+          }
+        }
+      });
+
+      // Particle connections (subtle dust layer)
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 90) {
+            const alpha = 0.04 * (1 - dist / 90);
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            const color = particles[i].type === 'blue' && particles[j].type === 'amber' ? '147, 197, 253'
+              : particles[i].type === 'blue' ? '59, 130, 246'
+              : particles[i].type === 'amber' ? '245, 158, 11'
+              : '6, 182, 212';
+            ctx.strokeStyle = `rgba(${color}, ${alpha})`;
+            ctx.lineWidth = 0.4;
+            ctx.stroke();
+          }
+        }
+      }
+
+      requestAnimationFrame(animateParticles);
+    }
+    animateParticles();
+    document.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+    document.addEventListener('mouseleave', () => { mouse.x = -1000; mouse.y = -1000; });
+
+    /* ═══════════════════════════════════════════
+       SCROLL REVEAL
+       ═══════════════════════════════════════════ */
+    const revealElements = document.querySelectorAll('.reveal');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    revealElements.forEach(el => observer.observe(el));
+
+    /* ═══════════════════════════════════════════
+       NAVBAR SCROLL
+       ═══════════════════════════════════════════ */
+    const navbar = document.getElementById('navbar');
+    window.addEventListener('scroll', () => {
+      navbar.classList.toggle('scrolled', window.scrollY > 50);
+    }, { passive: true });
+
+    /* ═══════════════════════════════════════════
+       CHAT MESSAGE ANIMATION DELAYS
+       ═══════════════════════════════════════════ */
+    document.querySelectorAll('.chat-msg').forEach((msg, i) => {
+      msg.style.animationDelay = `${i * 0.55}s`;
+    });
+  </script>
+</body>
+</html>
