@@ -4,7 +4,9 @@
 
 # Buddy
 
-### 你的 AI 原生工作与生活搭子！ 👥
+**你的 AI 原生工作与生活搭子！** 👥
+
+AI 搭子 Buddy，融合办公、社交与陪伴，实现人和 AI Agent 协同共处。
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
