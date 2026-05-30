@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="./assets/Buddy-Logo.png" alt="Buddy Logo" width="80%"/>
+
 # Buddy
 
 ### 你的 AI 原生工作与生活搭子！ 👥
