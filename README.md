@@ -5,7 +5,9 @@
 
 # Buddy
 
-### Your AI-Native Companion for Work & Life ！ 👥 
+**Your AI-Native Companion for Work & Life！** 👥 
+
+Buddy, your AI companion, unifies work, socializing and companionship via AI Agent collaboration.
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
