@@ -2,6 +2,7 @@
 
 <img src="./assets/Buddy.png" alt="Buddy" width="80%"/>
 
+
 # Buddy
 
 ### Your AI-Native Companion for Work & Life ！ 👥 
