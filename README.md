@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/Buddy.png" alt="Buddy Logo" width="80%"/>
+<img src="./assets/Buddy.png" alt="Buddy" width="80%"/>
 
 # Buddy
 
