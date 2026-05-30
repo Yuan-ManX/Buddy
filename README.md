@@ -13,7 +13,7 @@ Your AI Buddy, Unifies Work, Socializing and Companionship via AI Agent Collabor
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Stars](https://img.shields.io/github/stars/Yuan-ManX/Buddy?style=social)
 
-[Buddy](#what-is-buddy?) · [Innovation](#innovation) · [Quickstart](#quick-start) · [Architecture](#architecture) · [Contributing](#contributing)
+[Website](https://yuan-manx.github.io/Buddy/) · [Buddy](#what-is-buddy?) · [Innovation](#innovation) · [Quickstart](#quick-start) · [Architecture](#architecture) · [Contributing](#contributing)
 
 #### [English](./README.md) | [中文文档](./README_CN.md)
 
