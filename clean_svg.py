@@ -1,19 +1,13 @@
-"""Clean and simplify the Buddy logo SVG - merge fragments, unify colors, remove noise."""
+"""Clean Buddy SVG: keep original structure, simplify paths, unify colors, remove noise."""
 import xml.etree.ElementTree as ET
 import re
 import math
 from collections import defaultdict
 
-# Parse original SVG
-tree = ET.parse('/Users/derrick/Desktop/GitHub/Buddy/assets/icon.svg')
-root = tree.getroot()
-ns = 'http://www.w3.org/2000/svg'
-
 def parse_path_to_absolute(d, tx, ty):
-    """Parse SVG path d attribute and convert to absolute coordinates."""
     tokens = re.findall(r'[MmLlHhVvCcSsQqTtAaZz]|[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?', d)
-    points = []
-    cx, cy = tx, ty  # start with transform offset
+    abs_commands = []
+    cx, cy = tx, ty
     start_x, start_y = cx, cy
     prev_cpx, prev_cpy = cx, cy
     i = 0
@@ -23,7 +17,7 @@ def parse_path_to_absolute(d, tx, ty):
         i += 1
         if cmd in 'Zz':
             cx, cy = start_x, start_y
-            points.append((cx, cy))
+            abs_commands.append(('Z', []))
             continue
         
         params = []
@@ -33,30 +27,31 @@ def parse_path_to_absolute(d, tx, ty):
         
         rel = cmd.islower()
         cmd_u = cmd.upper()
+        new_params = []
         
         if cmd_u == 'M':
             for j in range(0, len(params), 2):
                 x, y = params[j], params[j+1]
                 if rel: x += cx; y += cy
+                new_params.extend([x, y])
                 cx, cy = x, y
                 start_x, start_y = x, y
-                points.append((x, y))
         elif cmd_u == 'L':
             for j in range(0, len(params), 2):
                 x, y = params[j], params[j+1]
                 if rel: x += cx; y += cy
+                new_params.extend([x, y])
                 cx, cy = x, y
-                points.append((x, y))
         elif cmd_u == 'H':
             for p in params:
                 x = p + (cx if rel else 0)
+                new_params.append(x)
                 cx = x
-                points.append((cx, cy))
         elif cmd_u == 'V':
             for p in params:
                 y = p + (cy if rel else 0)
+                new_params.append(y)
                 cy = y
-                points.append((cx, cy))
         elif cmd_u == 'C':
             for j in range(0, len(params), 6):
                 cp1x, cp1y = params[j], params[j+1]
@@ -66,9 +61,7 @@ def parse_path_to_absolute(d, tx, ty):
                     cp1x += cx; cp1y += cy
                     cp2x += cx; cp2y += cy
                     x += cx; y += cy
-                points.append((cp1x, cp1y))
-                points.append((cp2x, cp2y))
-                points.append((x, y))
+                new_params.extend([cp1x, cp1y, cp2x, cp2y, x, y])
                 prev_cpx, prev_cpy = cp2x, cp2y
                 cx, cy = x, y
         elif cmd_u == 'S':
@@ -80,9 +73,7 @@ def parse_path_to_absolute(d, tx, ty):
                 if rel:
                     cp2x += cx; cp2y += cy
                     x += cx; y += cy
-                points.append((cp1x, cp1y))
-                points.append((cp2x, cp2y))
-                points.append((x, y))
+                new_params.extend([cp1x, cp1y, cp2x, cp2y, x, y])
                 prev_cpx, prev_cpy = cp2x, cp2y
                 cx, cy = x, y
         elif cmd_u == 'Q':
@@ -92,8 +83,7 @@ def parse_path_to_absolute(d, tx, ty):
                 if rel:
                     cp1x += cx; cp1y += cy
                     x += cx; y += cy
-                points.append((cp1x, cp1y))
-                points.append((x, y))
+                new_params.extend([cp1x, cp1y, x, y])
                 prev_cpx, prev_cpy = cp1x, cp1y
                 cx, cy = x, y
         elif cmd_u == 'T':
@@ -103,19 +93,40 @@ def parse_path_to_absolute(d, tx, ty):
                 cp1y = 2*cy - prev_cpy
                 if rel:
                     x += cx; y += cy
-                points.append((cp1x, cp1y))
-                points.append((x, y))
+                new_params.extend([x, y])
                 cx, cy = x, y
         elif cmd_u == 'A':
             for j in range(0, len(params), 7):
-                x, y = params[j+5], params[j+6]
+                rx, ry, xrot, large, sweep, x, y = params[j:j+7]
                 if rel: x += cx; y += cy
-                points.append((x, y))
+                new_params.extend([rx, ry, xrot, large, sweep, x, y])
                 cx, cy = x, y
-    return points
+        abs_commands.append((cmd_u, new_params))
+    
+    return abs_commands
 
-def path_area(points):
-    """Compute approximate area of a polygon using shoelace formula."""
+def abs_commands_to_d(commands):
+    parts = []
+    for cmd, params in commands:
+        if cmd == 'Z':
+            parts.append('Z')
+        else:
+            parts.append(f'{cmd}{",".join(f"{p:.1f}" for p in params)}')
+    return ''.join(parts)
+
+def path_area_from_commands(commands):
+    """Compute approximate area from path commands."""
+    points = []
+    for cmd, params in commands:
+        if cmd == 'M':
+            for j in range(0, len(params), 2):
+                points.append((params[j], params[j+1]))
+        elif cmd == 'L':
+            for j in range(0, len(params), 2):
+                points.append((params[j], params[j+1]))
+        elif cmd == 'Z':
+            if points:
+                points.append(points[0])
     if len(points) < 3:
         return 0
     area = 0
@@ -126,30 +137,48 @@ def path_area(points):
         area -= points[j][0] * points[i][1]
     return abs(area) / 2
 
-def path_bbox(points):
-    if not points:
-        return (0, 0, 0, 0)
-    xs = [p[0] for p in points]
-    ys = [p[1] for p in points]
-    return (min(xs), min(ys), max(xs), max(ys))
+def simplify_commands(commands, tolerance=2.5):
+    """Simplify path by converting L/M segments to fewer points using RDP."""
+    new_commands = []
+    i = 0
+    while i < len(commands):
+        cmd, params = commands[i]
+        
+        if cmd in ('M', 'L'):
+            # Collect consecutive M/L commands as polygon vertices
+            vertices = []
+            j = i
+            while j < len(commands) and commands[j][0] in ('M', 'L'):
+                c2, p2 = commands[j]
+                for k in range(0, len(p2), 2):
+                    vertices.append((p2[k], p2[k+1]))
+                j += 1
+            
+            # Simplify polygon vertices
+            simplified = simplify_points(vertices, tolerance)
+            
+            if simplified:
+                # First point as M, rest as L
+                new_commands.append(('M', [simplified[0][0], simplified[0][1]]))
+                for pt in simplified[1:]:
+                    new_commands.append(('L', [pt[0], pt[1]]))
+            
+            i = j
+        elif cmd == 'Z':
+            new_commands.append(('Z', []))
+            i += 1
+        else:
+            new_commands.append((cmd, params))
+            i += 1
+    
+    return new_commands
 
-def points_to_path_d(points):
-    if not points:
-        return ''
-    d = f'M{points[0][0]:.1f},{points[0][1]:.1f}'
-    for p in points[1:]:
-        d += f'L{p[0]:.1f},{p[1]:.1f}'
-    d += 'Z'
-    return d
-
-def simplify_points(points, tolerance=2.0):
-    """Ramer-Douglas-Peucker simplification."""
+def simplify_points(points, tolerance=2.5):
     if len(points) <= 2:
         return points
     max_dist = 0
     max_idx = 0
     for i in range(1, len(points) - 1):
-        # Distance from point to line segment (first to last)
         x0, y0 = points[0]
         x1, y1 = points[-1]
         x, y = points[i]
@@ -171,40 +200,50 @@ def simplify_points(points, tolerance=2.0):
         return left[:-1] + right
     return [points[0], points[-1]]
 
-# Color quantization - map similar colors to a palette
 def quantize_color(hex_color):
-    """Map a hex color to one of the key palette colors."""
     r = int(hex_color[1:3], 16)
     g = int(hex_color[3:5], 16)
     b = int(hex_color[5:7], 16)
     
-    # Define palette
-    palette = {
-        'bg':      (253, 253, 253, '#FDFDFD'),
-        'blue':    (50, 110, 240, '#326EF0'),
-        'blue_dk': (13, 14, 48, '#0D0E30'),
-        'blue_md': (15, 20, 70, '#0F1446'),
-        'white':   (245, 245, 245, '#F5F5F5'),
-        'gray':    (180, 180, 185, '#B4B4B9'),
-        'accent':  (30, 30, 45, '#1E1E2D'),
-        'warm':    (220, 160, 160, '#DCA0A0'),
-    }
+    palette = [
+        ('#FDFDFD', (253, 253, 253)),
+        ('#326EF0', (50, 110, 240)),
+        ('#0D0E30', (13, 14, 48)),
+        ('#0F1446', (15, 20, 70)),
+        ('#F5F5F5', (245, 245, 245)),
+        ('#1E1E2D', (30, 30, 45)),
+        ('#DCA0A0', (220, 160, 160)),
+        ('#B4B4B9', (180, 180, 185)),
+        ('#3870E5', (56, 112, 229)),
+        ('#181B4A', (24, 27, 74)),
+        ('#141A3C', (20, 26, 60)),
+        ('#0E1039', (14, 16, 57)),
+        ('#10113B', (16, 17, 59)),
+        ('#0D1044', (13, 16, 68)),
+        ('#121334', (18, 19, 52)),
+        ('#1C1F44', (28, 31, 68)),
+        ('#111538', (17, 21, 56)),
+        ('#30344A', (48, 52, 74)),
+    ]
     
-    best = None
+    best_hex = None
     best_dist = float('inf')
-    for name, (pr, pg, pb, phex) in palette.items():
+    for phex, (pr, pg, pb) in palette:
         dist = (r - pr)**2 + (g - pg)**2 + (b - pb)**2
         if dist < best_dist:
             best_dist = dist
-            best = (name, phex)
+            best_hex = phex
     
-    # If too far from any palette color, keep original
-    if best_dist > 2500:  # ~50 per channel
-        return hex_color.upper()
-    return best[1]
+    if best_dist > 1200:  # Keep if too far from any palette color
+        return f'#{r:02X}{g:02X}{b:02X}'
+    return best_hex
 
-# Collect all paths
-paths = []
+# ─── MAIN ───
+tree = ET.parse('/Users/derrick/Desktop/GitHub/Buddy/assets/icon.svg')
+root = tree.getroot()
+ns = 'http://www.w3.org/2000/svg'
+
+paths_data = []
 for path_elem in root.findall(f'.//{{{ns}}}path'):
     d = path_elem.get('d', '')
     fill = path_elem.get('fill', '').upper()
@@ -217,98 +256,71 @@ for path_elem in root.findall(f'.//{{{ns}}}path'):
             parts = m.group(1).replace(' ', '').split(',')
             tx, ty = float(parts[0]), float(parts[1])
     
-    points = parse_path_to_absolute(d, tx, ty)
-    area = path_area(points)
-    bbox = path_bbox(points)
+    commands = parse_path_to_absolute(d, tx, ty)
+    area = path_area_from_commands(commands)
     
-    paths.append({
+    paths_data.append({
+        'commands': commands,
         'fill': fill,
-        'points': points,
         'area': area,
-        'bbox': bbox,
+        'tx': tx, 'ty': ty,
     })
 
-print(f"Total paths: {len(paths)}")
+print(f"Total paths: {len(paths_data)}")
 
 # Remove background
-paths = [p for p in paths if p['fill'] not in ('#FDFDFD', '#FCFCFC', '#FFFFFF')]
-print(f"After removing background: {len(paths)}")
+paths_data = [p for p in paths_data if p['fill'] not in ('#FDFDFD', '#FCFCFC', '#FFFFFF')]
+print(f"Without background: {len(paths_data)}")
 
-# Remove tiny fragments (noise)
-MIN_AREA = 30
-paths = [p for p in paths if p['area'] > MIN_AREA]
-print(f"After removing fragments < {MIN_AREA}px²: {len(paths)}")
+# Remove tiny fragments
+MIN_AREA = 50
+paths_data = [p for p in paths_data if p['area'] > MIN_AREA]
+print(f"Without fragments < {MIN_AREA}: {len(paths_data)}")
 
-# Quantize colors
-for p in paths:
+# Simplify and quantize
+for p in paths_data:
+    p['commands'] = simplify_commands(p['commands'], tolerance=2.0)
     p['fill'] = quantize_color(p['fill'])
 
-# Group by fill color
-groups = defaultdict(list)
-for p in paths:
-    groups[p['fill']].append(p)
+# Group by fill for stats
+groups = defaultdict(int)
+for p in paths_data:
+    groups[p['fill']] += 1
 
-print(f"Color groups: {len(groups)}")
-for color, group in sorted(groups.items(), key=lambda x: -len(x[1])):
-    print(f"  {color}: {len(group)} paths")
+print(f"\nColor groups: {len(groups)}")
+for fill, count in sorted(groups.items(), key=lambda x: -x[1]):
+    print(f"  {fill}: {count} paths")
 
-# Build output SVG
-ET.register_namespace('', 'http://www.w3.org/2000/svg')
-
-# Create new root
+# Build new SVG
+ET.register_namespace('', ns)
 new_root = ET.Element('svg', {
     'version': '1.1',
-    'xmlns': 'http://www.w3.org/2000/svg',
+    'xmlns': ns,
     'viewBox': '57 33 678 219',
     'width': '678',
     'height': '219',
 })
 
-# Add background
+# Background
 bg = ET.SubElement(new_root, 'path')
 bg.set('d', 'M0,0 L800,0 L800,272 L0,272 Z')
 bg.set('fill', '#FDFDFD')
 bg.set('transform', 'translate(0,0)')
 
-# Add simplified paths grouped by color
-for color, group in sorted(groups.items(), key=lambda x: -len(x[1])):
-    # Merge all points of same color, simplify, and create one path
-    all_points = []
-    for p in group:
-        sp = simplify_points(p['points'], tolerance=2.5)
-        if len(sp) >= 3:
-            all_points.append(sp)
-    
-    # Create individual paths for each merged shape
-    for pts in all_points:
-        d = points_to_path_d(pts)
-        path_elem = ET.SubElement(new_root, 'path')
-        path_elem.set('d', d)
-        path_elem.set('fill', color)
+# Add paths - now with no transform since coordinates are absolute
+for p in paths_data:
+    d = abs_commands_to_d(p['commands'])
+    pe = ET.SubElement(new_root, 'path')
+    pe.set('d', d)
+    pe.set('fill', p['fill'])
 
-# Write output
-tree = ET.ElementTree(new_root)
 ET.indent(tree, space='  ')
 xml_str = ET.tostring(new_root, encoding='unicode')
-
-# Add XML declaration
-output = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_str
+output = '<?xml version="1.0" encoding="UTF-8"?>\n<!-- Buddy Logo -->\n' + xml_str
 
 with open('/Users/derrick/Desktop/GitHub/Buddy/assets/icon.svg', 'w') as f:
     f.write(output)
 
-# Count final paths
-final_count = len(new_root.findall(f'.//{{{ns}}}path')) - 1  # minus background
+final_count = len(paths_data)
 print(f"\nFinal paths: {final_count}")
-print(f"File size: {len(output)} bytes")
-
-# Also print the color breakdown
-color_counts = defaultdict(int)
-for path_elem in new_root.findall(f'.//{{{ns}}}path'):
-    fill = path_elem.get('fill', '')
-    if fill != '#FDFDFD':
-        color_counts[fill] += 1
-
-print("\nFinal color distribution:")
-for color, count in sorted(color_counts.items(), key=lambda x: -x[1]):
-    print(f"  {color}: {count} paths")
+print(f"Size: {len(output)} bytes")
