@@ -4,7 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title data-i18n="meta.title">Buddy — Your AI-Native Buddy for Work &amp; Life</title>
-  <meta name="description" content="Buddy is an AI-native collaborative space where humans and AI Agents live, work, and grow together — not as user and tool, but as companions.">
+  <meta name="description" content="Buddy is an AI-native collaborative space where humans and AI Agents live, work, and grow together — not as user and tool, but as buddies.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://buddy.dev">
+  <meta property="og:title" content="Buddy — Your AI-Native Buddy for Work &amp; Life">
+  <meta property="og:description" content="Buddy is an AI-native collaborative space where humans and AI Agents live, work, and grow together — not as user and tool, but as buddies.">
+  <meta property="og:image" content="https://buddy.dev/logo.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="https://buddy.dev">
+  <meta name="twitter:title" content="Buddy — Your AI-Native Buddy for Work &amp; Life">
+  <meta name="twitter:description" content="Buddy is an AI-native collaborative space where humans and AI Agents live, work, and grow together — not as user and tool, but as buddies.">
+  <meta name="twitter:image" content="https://buddy.dev/logo.png">
+  <link rel="icon" type="image/png" href="logo.png">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -101,17 +112,73 @@
       padding: 12px 48px;
     }
     .nav-logo {
+      display: flex; align-items: center; gap: 10px;
       font-size: 1.7rem; font-weight: 850; letter-spacing: -0.5px;
-      background: var(--gradient-primary);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text;
+      color: var(--text);
       position: relative;
+    }
+    .nav-logo-icon {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: linear-gradient(135deg, #fbbf24 0%, #f97316 35%, #ec4899 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem; font-weight: 900; color: #fff;
+      box-shadow: 0 4px 20px rgba(249, 115, 22, 0.4), inset 0 2px 4px rgba(255,255,255,0.25);
+      position: relative; overflow: hidden;
+      transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      letter-spacing: -2px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .nav-logo-icon::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.25) 0%, transparent 50%);
+      pointer-events: none;
+    }
+    .nav-logo-icon::after {
+      content: '';
+      position: absolute;
+      width: 6px; height: 6px;
+      background: rgba(255,255,255,0.6);
+      border-radius: 50%;
+      top: 12px; right: 10px;
+      pointer-events: none;
+    }
+    .nav-logo-icon:hover {
+      transform: scale(1.15);
+      box-shadow: 0 8px 32px rgba(249, 115, 22, 0.55), inset 0 2px 4px rgba(255,255,255,0.3);
     }
     .nav-links { display: flex; gap: 36px; align-items: center; }
     .nav-links a {
       color: var(--text-muted); text-decoration: none; font-size: 0.875rem;
       font-weight: 500; transition: color 0.3s; position: relative;
     }
+    .nav-hamburger {
+      display: none; flex-direction: column; gap: 5px;
+      background: none; border: none; cursor: pointer;
+      padding: 8px; z-index: 102;
+    }
+    .nav-hamburger span {
+      display: block; width: 22px; height: 1.5px;
+      background: var(--text); border-radius: 2px;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .nav-hamburger.active span:nth-child(1) { transform: rotate(45deg) translate(4.5px, 4.5px); }
+    .nav-hamburger.active span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+    .nav-hamburger.active span:nth-child(3) { transform: rotate(-45deg) translate(4.5px, -4.5px); }
+    .mobile-menu {
+      display: none; position: fixed; inset: 0; z-index: 99;
+      background: rgba(8, 13, 26, 0.96);
+      backdrop-filter: blur(32px); -webkit-backdrop-filter: blur(32px);
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 32px; opacity: 0; pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+    .mobile-menu.open { opacity: 1; pointer-events: all; }
+    .mobile-menu a {
+      color: var(--text); text-decoration: none; font-size: 1.5rem;
+      font-weight: 700; transition: all 0.3s;
+    }
+    .mobile-menu a:hover { color: var(--blue-400); }
     .nav-links a::after {
       content: ''; position: absolute; bottom: -4px; left: 0; right: 0;
       height: 1.5px; background: var(--gradient-primary);
@@ -135,26 +202,82 @@
     /* ─── Hero ─── */
     .hero {
       position: relative; z-index: 1;
-      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
       text-align: center; padding: 160px 40px 140px;
+    }
+    .hero-logo-display {
+      margin-bottom: 32px;
+      animation: fadeUp 0.8s ease-out both, logoFloat 5s ease-in-out infinite;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .hero-logo-display::after {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(ellipse at center, rgba(139, 92, 246, 0.15), rgba(16, 185, 129, 0.08), transparent 70%);
+      pointer-events: none;
+      animation: auraPulse 4s ease-in-out infinite;
+      z-index: -1;
+    }
+    .hero-logo-display img {
+      height: 200px;
+      width: auto;
+      display: block;
+      filter: drop-shadow(0 8px 32px rgba(0, 0, 0, 0.6));
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      animation: logoHueShift 8s linear infinite;
+    }
+    .hero-logo-display:hover img {
+      filter: drop-shadow(0 12px 48px rgba(0, 0, 0, 0.7)) brightness(1.12);
+      transform: scale(1.08);
+      animation-play-state: paused;
+    }
+    @keyframes logoFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    @keyframes auraPulse {
+      0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
+      50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+    }
+    @keyframes logoHueShift {
+      0% { filter: drop-shadow(0 8px 32px rgba(0, 0, 0, 0.6)) hue-rotate(0deg); }
+      25% { filter: drop-shadow(0 8px 32px rgba(0, 0, 0, 0.6)) hue-rotate(5deg); }
+      50% { filter: drop-shadow(0 8px 32px rgba(0, 0, 0, 0.6)) hue-rotate(0deg); }
+      75% { filter: drop-shadow(0 8px 32px rgba(0, 0, 0, 0.6)) hue-rotate(-5deg); }
+      100% { filter: drop-shadow(0 8px 32px rgba(0, 0, 0, 0.6)) hue-rotate(0deg); }
     }
     .hero p {
       font-size: clamp(1.05rem, 2vw, 1.3rem); color: var(--text-secondary);
       max-width: 660px; margin: 0 auto 44px; line-height: 1.7;
-      animation: fadeUp 0.9s ease-out 0.2s both;
+      opacity: 0; transform: translateY(30px);
+      animation: heroFadeIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards;
     }
     .hero h1 {
       font-size: clamp(3.2rem, 7.5vw, 5.8rem); font-weight: 900;
       line-height: 1.06; letter-spacing: -2.5px; margin-bottom: 28px;
-      animation: fadeUp 0.9s ease-out 0.1s both;
+      opacity: 0; transform: translateY(30px);
+      animation: heroFadeIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.35s forwards;
+    }
+    .hero-actions {
+      display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+      opacity: 0; transform: translateY(30px);
+      animation: heroFadeIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.85s forwards;
+    }
+    @keyframes heroFadeIn {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     .hero h1 .gradient {
       background: var(--gradient-hero); -webkit-background-clip: text;
       -webkit-text-fill-color: transparent; background-clip: text;
-    }
-    .hero-actions {
-      display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
-      animation: fadeUp 0.9s ease-out 0.3s both;
     }
     .btn-primary {
       background: var(--gradient-blue); color: #fff; border: none;
@@ -363,6 +486,9 @@
       display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 20px;
     }
+    .why-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
     .feature-card {
       background: var(--bg-card); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 40px 36px;
@@ -489,9 +615,256 @@
     .nm-dot.agent { background: var(--amber-500); }
     .nm-dot:hover { transform: scale(2); }
 
+    /* ─── Live Demo Frame ─── */
+    .demo-frame {
+      background: var(--bg-elevated); border: 1px solid var(--border);
+      border-radius: 16px; overflow: hidden; max-width: 900px; margin: 0 auto;
+      box-shadow: 0 40px 80px rgba(0,0,0,0.4);
+    }
+    .demo-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 20px; background: rgba(0,0,0,0.2);
+      border-bottom: 1px solid var(--border);
+    }
+    .demo-dots { display: flex; gap: 6px; }
+    .demo-dots span {
+      width: 10px; height: 10px; border-radius: 50%;
+    }
+    .demo-dots span:nth-child(1) { background: #ff5f57; }
+    .demo-dots span:nth-child(2) { background: #febc2e; }
+    .demo-dots span:nth-child(3) { background: #28c840; }
+    .demo-title {
+      font-size: 0.8rem; font-weight: 600; color: var(--text-muted);
+      flex: 1; text-align: center; padding-right: 40px;
+    }
+    .demo-body { display: flex; min-height: 420px; }
+    .demo-sidebar {
+      width: 200px; background: rgba(0,0,0,0.15);
+      border-right: 1px solid var(--border); padding: 20px 16px;
+      flex-shrink: 0;
+    }
+    .demo-section-title {
+      font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 12px;
+    }
+    .demo-channel {
+      padding: 7px 10px; border-radius: 6px; font-size: 0.82rem;
+      color: var(--text-secondary); cursor: pointer; margin-bottom: 2px;
+      transition: all 0.2s;
+    }
+    .demo-channel:hover, .demo-channel.active {
+      background: rgba(59,130,246,0.1); color: var(--text);
+    }
+    .demo-hash { color: var(--text-muted); margin-right: 4px; }
+    .demo-divider {
+      height: 1px; background: var(--border); margin: 16px 0;
+    }
+    .demo-agent {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 10px; border-radius: 6px; font-size: 0.8rem;
+      color: var(--text-secondary); margin-bottom: 2px;
+    }
+    .demo-avatar {
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.65rem; font-weight: 800; color: #fff; flex-shrink: 0;
+    }
+    .demo-chat { flex: 1; display: flex; flex-direction: column; }
+    .demo-chat-header {
+      padding: 12px 20px; font-size: 0.8rem; font-weight: 700;
+      color: var(--text); border-bottom: 1px solid var(--border);
+    }
+    .demo-messages { flex: 1; padding: 20px; overflow-y: auto; }
+    .demo-msg {
+      display: flex; gap: 12px; margin-bottom: 18px;
+      animation: fadeUpMsg 0.4s ease-out both;
+    }
+    .demo-msg:nth-child(1) { animation-delay: 0s; }
+    .demo-msg:nth-child(2) { animation-delay: 0.3s; }
+    .demo-msg:nth-child(3) { animation-delay: 0.6s; }
+    .demo-msg:nth-child(4) { animation-delay: 0.9s; }
+    .demo-msg-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700; color: #fff; flex-shrink: 0;
+    }
+    .demo-msg-name {
+      font-size: 0.82rem; font-weight: 700; color: var(--text);
+      margin-bottom: 4px;
+    }
+    .demo-msg-time {
+      font-size: 0.7rem; font-weight: 400; color: var(--text-muted);
+      margin-left: 6px;
+    }
+    .demo-msg-text {
+      font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;
+    }
+    .demo-badge {
+      font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--blue-400);
+      background: rgba(59,130,246,0.1); padding: 2px 6px;
+      border-radius: 4px; margin-left: 4px;
+    }
+    .demo-typing {
+      display: flex; align-items: center; margin-top: 8px;
+      padding-left: 44px;
+    }
+    .demo-typing-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--text-muted); margin-right: 3px;
+      animation: typingBounce 1.4s ease-in-out infinite;
+    }
+    .demo-typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .demo-typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typingBounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-4px); }
+    }
+    .demo-input {
+      padding: 14px 20px; border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+    @media (max-width: 768px) {
+      .demo-sidebar { display: none; }
+      .demo-frame { border-radius: 12px; }
+    }
+
+    /* ─── Roadmap ─── */
+    .roadmap-wrap { position: relative; }
+    .roadmap-line {
+      position: absolute; left: 50%; top: 0; bottom: 0; width: 2px;
+      background: linear-gradient(180deg, var(--blue-500), var(--amber-500), transparent);
+      transform: translateX(-50%); opacity: 0.25;
+    }
+    .roadmap-item {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 48px; margin-bottom: 48px; position: relative;
+    }
+    .roadmap-item:last-child { margin-bottom: 0; }
+    .roadmap-item:nth-child(odd) .roadmap-card { grid-column: 2; }
+    .roadmap-item:nth-child(odd) .roadmap-meta { grid-column: 1; text-align: right; }
+    .roadmap-item:nth-child(even) .roadmap-card { grid-column: 1; }
+    .roadmap-item:nth-child(even) .roadmap-meta { grid-column: 2; }
+    .roadmap-dot {
+      position: absolute; left: 50%; top: 8px;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--bg); border: 3px solid var(--blue-400);
+      transform: translateX(-50%); z-index: 2;
+      box-shadow: 0 0 0 4px rgba(59,130,246,0.1);
+    }
+    .roadmap-item.done .roadmap-dot { border-color: var(--emerald-400,#10b981); background: var(--emerald-500,#10b981); box-shadow: 0 0 0 4px rgba(16,185,129,0.1); }
+    .roadmap-item.active .roadmap-dot { border-color: var(--amber-400); animation: roadmapPulse 2s ease-in-out infinite; }
+    @keyframes roadmapPulse {
+      0%, 100% { box-shadow: 0 0 0 4px rgba(245,158,11,0.1); }
+      50% { box-shadow: 0 0 0 8px rgba(245,158,11,0.2); }
+    }
+    .roadmap-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 28px 32px;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .roadmap-card:hover { border-color: var(--border-blue); transform: translateY(-4px); }
+    .roadmap-status {
+      display: inline-block; padding: 4px 12px; border-radius: 100px;
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1px; margin-bottom: 12px;
+    }
+    .roadmap-status.done { background: rgba(16,185,129,0.1); color: var(--emerald-400,#34d399); }
+    .roadmap-status.active { background: rgba(245,158,11,0.1); color: var(--amber-400); }
+    .roadmap-status.planned { background: rgba(100,116,139,0.1); color: var(--text-muted); }
+    .roadmap-card h4 { font-size: 1.1rem; font-weight: 800; margin-bottom: 8px; }
+    .roadmap-card p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.7; }
+    .roadmap-meta { padding-top: 8px; }
+    .roadmap-date {
+      font-size: 0.8rem; font-weight: 700; color: var(--text-muted);
+      letter-spacing: 1px; text-transform: uppercase;
+    }
+    @media (max-width: 768px) {
+      .roadmap-line { left: 12px; }
+      .roadmap-item { grid-template-columns: 1fr !important; gap: 16px; padding-left: 36px; }
+      .roadmap-item .roadmap-card, .roadmap-item .roadmap-meta { grid-column: 1 !important; text-align: left !important; }
+      .roadmap-dot { left: 12px; }
+    }
+
+    /* ─── Pricing ─── */
+    .pricing-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+      max-width: 960px; margin: 0 auto;
+    }
+    .pricing-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 40px 32px;
+      position: relative; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .pricing-card:hover { border-color: var(--border-blue); transform: translateY(-6px); box-shadow: 0 24px 48px rgba(0,0,0,0.3); }
+    .pricing-card.featured {
+      border-color: var(--blue-400);
+      background: linear-gradient(180deg, rgba(37,99,235,0.04) 0%, var(--bg-card) 100%);
+      box-shadow: 0 8px 32px rgba(37,99,235,0.08);
+    }
+    .pricing-card.featured::before {
+      content: attr(data-badge);
+      position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+      background: var(--gradient-primary); color: #fff;
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1.5px; padding: 6px 16px; border-radius: 100px;
+    }
+    .pricing-tier {
+      font-size: 1.1rem; font-weight: 800; color: var(--text); margin-bottom: 8px;
+    }
+    .pricing-price {
+      font-size: 2.8rem; font-weight: 900; color: var(--text); line-height: 1;
+      margin-bottom: 8px;
+    }
+    .pricing-price span {
+      font-size: 1rem; font-weight: 500; color: var(--text-muted);
+    }
+    .pricing-desc {
+      font-size: 0.88rem; color: var(--text-muted); margin-bottom: 28px; line-height: 1.6;
+    }
+    .pricing-features { list-style: none; margin-bottom: 32px; }
+    .pricing-features li {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 12px;
+    }
+    .pricing-features li::before {
+      content: '✓'; color: var(--emerald-400,#34d399); font-weight: 700; font-size: 0.9rem;
+    }
+    @media (max-width: 768px) {
+      .pricing-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ─── Compare ─── */
+    .compare-table {
+      width: 100%; border-collapse: separate; border-spacing: 0;
+      max-width: 900px; margin: 0 auto;
+    }
+    .compare-table th, .compare-table td {
+      padding: 16px 24px; text-align: left; font-size: 0.9rem;
+    }
+    .compare-table thead th {
+      color: var(--text-muted); font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1.5px; font-size: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .compare-table thead th:first-child { text-align: left; }
+    .compare-table thead th:not(:first-child) { text-align: center; }
+    .compare-table tbody tr { transition: background 0.3s; }
+    .compare-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+    .compare-table tbody td {
+      border-bottom: 1px solid var(--border); color: var(--text-secondary);
+    }
+    .compare-table tbody td:first-child { font-weight: 600; color: var(--text); }
+    .compare-table tbody td:not(:first-child) { text-align: center; }
+    .compare-check { color: var(--emerald-400,#34d399); font-size: 1.1rem; }
+    .compare-cross { color: var(--text-muted); font-size: 1.1rem; }
+    .compare-buddy { background: rgba(37,99,235,0.04); }
+    .compare-buddy td { border-bottom-color: var(--border-blue); }
+
     /* ─── CTA Section ─── */
     .cta-section {
-      text-align: center; padding: 160px 40px;
+      text-align: center; padding: 160px 40px; position: relative; overflow: hidden;
     }
     .cta-glow {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -500,15 +873,141 @@
       pointer-events: none; animation: pulseGlow 4s ease-in-out infinite;
     }
 
+    /* ─── Back to Top ─── */
+    .back-to-top {
+      position: fixed; bottom: 28px; right: 28px;
+      width: 46px; height: 46px; border-radius: 50%;
+      background: var(--bg-card); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; z-index: 100;
+      opacity: 0; transform: translateY(20px); pointer-events: none;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .back-to-top.visible {
+      opacity: 1; transform: translateY(0); pointer-events: all;
+    }
+    .back-to-top:hover {
+      border-color: var(--blue-400);
+      background: rgba(37, 99, 235, 0.08);
+      transform: translateY(-2px);
+    }
+    .back-to-top svg {
+      stroke: var(--text-muted); transition: stroke 0.3s;
+    }
+    .back-to-top:hover svg { stroke: var(--blue-400); }
+
+    /* ─── Scroll Indicator ─── */
+    .scroll-indicator {
+      position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      opacity: 0.5; animation: fadeUpDown 2s ease-in-out infinite;
+    }
+    .scroll-indicator span {
+      font-size: 0.65rem; text-transform: uppercase; letter-spacing: 3px;
+      color: var(--text-muted);
+    }
+    @keyframes fadeUpDown {
+      0%, 100% { transform: translateX(-50%) translateY(0); opacity: 0.5; }
+      50% { transform: translateX(-50%) translateY(8px); opacity: 0.2; }
+    }
+
+    /* ─── Architecture Connectors ─── */
+    .arch-connectors {
+      position: absolute; left: 50%; top: 0; bottom: 0; width: 2px;
+      transform: translateX(-50%);
+      background: linear-gradient(180deg, var(--blue-500), var(--amber-500), var(--cyan-500));
+      opacity: 0.3;
+    }
+    .arch-connector-dot {
+      position: absolute; left: 50%; width: 10px; height: 10px;
+      border-radius: 50%; transform: translateX(-50%);
+      background: var(--blue-400);
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+      animation: connectorPulse 2.5s ease-in-out infinite;
+    }
+    .arch-connector-dot:nth-child(2) { background: var(--amber-400); box-shadow: 0 0 12px rgba(245, 158, 11, 0.5); animation-delay: 0.8s; }
+    .arch-connector-dot:nth-child(3) { background: var(--cyan-400); box-shadow: 0 0 12px rgba(6, 182, 212, 0.5); animation-delay: 1.6s; }
+    @keyframes connectorPulse {
+      0%, 100% { transform: translateX(-50%) scale(1); opacity: 1; }
+      50% { transform: translateX(-50%) scale(1.5); opacity: 0.6; }
+    }
+
+    /* ─── FAQ Accordion ─── */
+    .faq-item {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); margin-bottom: 12px;
+      overflow: hidden; transition: border-color 0.3s ease;
+    }
+    .faq-item:hover { border-color: var(--border-blue); }
+    .faq-question {
+      padding: 22px 28px; cursor: pointer; display: flex;
+      justify-content: space-between; align-items: center;
+      font-weight: 700; font-size: 1.05rem; color: var(--text);
+      transition: color 0.3s;
+    }
+    .faq-question:hover { color: var(--blue-300); }
+    .faq-icon {
+      width: 22px; height: 22px; position: relative; flex-shrink: 0; margin-left: 16px;
+    }
+    .faq-icon::before, .faq-icon::after {
+      content: ''; position: absolute; background: var(--text-muted);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .faq-icon::before { width: 12px; height: 1.5px; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+    .faq-icon::after { width: 1.5px; height: 12px; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+    .faq-item.open .faq-icon::after { transform: translate(-50%, -50%) rotate(90deg); opacity: 0; }
+    .faq-item.open .faq-icon::before { background: var(--blue-400); }
+    .faq-answer {
+      max-height: 0; overflow: hidden;
+      transition: max-height 0.5s cubic-bezier(0.16, 1, 0.3, 1), padding 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .faq-item.open .faq-answer {
+      max-height: 300px;
+      padding: 0 28px 24px;
+    }
+    .faq-answer p {
+      color: var(--text-muted); font-size: 0.95rem; line-height: 1.7;
+    }
+
     /* ─── Footer ─── */
     footer {
-      border-top: 1px solid var(--border); padding: 44px 48px;
-      display: flex; justify-content: space-between; align-items: center;
-      flex-wrap: wrap; gap: 24px;
-      color: var(--text-muted); font-size: 0.85rem; z-index: 1; position: relative;
+      border-top: 1px solid var(--border);
+      font-size: 0.875rem; color: var(--text-muted);
+      position: relative; z-index: 1;
     }
-    footer a { color: var(--text-muted); text-decoration: none; transition: color 0.3s; }
-    footer a:hover { color: var(--text); }
+    .footer-main {
+      display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr;
+      gap: 48px; padding: 64px 48px 48px;
+    }
+    .footer-brand .nav-logo {
+      font-size: 1.3rem; font-weight: 900; color: var(--text);
+      display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+    }
+    .footer-brand p {
+      color: var(--text-muted); font-size: 0.9rem; line-height: 1.7; max-width: 280px;
+    }
+    .footer-links h4 {
+      font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 2px; color: var(--text); margin-bottom: 20px;
+    }
+    .footer-links a {
+      display: block; color: var(--text-muted); text-decoration: none;
+      font-size: 0.88rem; margin-bottom: 12px; transition: color 0.3s;
+    }
+    .footer-links a:hover { color: var(--blue-400); }
+    .footer-bottom {
+      border-top: 1px solid var(--border);
+      padding: 24px 48px;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 16px;
+    }
+    .footer-bottom a { color: var(--text-muted); text-decoration: none; transition: color 0.3s; }
+    .footer-bottom a:hover { color: var(--text); }
+    @media (max-width: 768px) {
+      .footer-main { grid-template-columns: 1fr 1fr; gap: 36px; padding: 48px 22px 36px; }
+      .footer-bottom { flex-direction: column; gap: 12px; text-align: center; padding: 20px 22px; }
+    }
     .footer-left { opacity: 0.8; }
     .footer-right { display: flex; gap: 28px; align-items: center; }
 
@@ -571,9 +1070,323 @@
     }
     .reveal.visible { opacity: 1; transform: translateY(0); }
 
+    /* ─── Orbital Rings ─── */
+    .orbital-ring {
+      position: absolute;
+      border-radius: 50%;
+      border: 1.5px solid rgba(59, 130, 246, 0.35);
+      pointer-events: none;
+      animation: orbitRotate 20s linear infinite;
+    }
+    .orbital-ring::before {
+      content: '';
+      position: absolute;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--blue-400);
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+      top: -3px; left: 50%; transform: translateX(-50%);
+    }
+    .orbital-ring:nth-child(2) {
+      width: 280px; height: 280px;
+      border-color: rgba(245, 158, 11, 0.3);
+      animation-duration: 28s;
+      animation-direction: reverse;
+    }
+    .orbital-ring:nth-child(2)::before {
+      background: var(--amber-400);
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.6);
+      width: 5px; height: 5px; top: -2.5px;
+    }
+    .orbital-ring:nth-child(3) {
+      width: 340px; height: 340px;
+      border-color: rgba(6, 182, 212, 0.25);
+      animation-duration: 36s;
+    }
+    .orbital-ring:nth-child(3)::before {
+      background: var(--cyan-400);
+      box-shadow: 0 0 12px rgba(6, 182, 212, 0.5);
+      width: 4px; height: 4px; top: -2px;
+    }
+    @keyframes orbitRotate {
+      from { transform: translate(-50%, -50%) rotate(0deg); }
+      to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+
+    /* ─── Text Scramble ─── */
+    .scramble-text { display: inline-block; }
+    .scramble-text .char {
+      display: inline-block;
+      opacity: 0;
+      animation: charReveal 0.5s ease forwards;
+    }
+    @keyframes charReveal {
+      from { opacity: 0; transform: translateY(12px) rotateX(-40deg); }
+      to { opacity: 1; transform: translateY(0) rotateX(0deg); }
+    }
+
+    /* ─── 3D Tilt Card ─── */
+    .tilt-card {
+      transform-style: preserve-3d;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .tilt-card .tilt-content {
+      transform: translateZ(40px);
+    }
+    .tilt-card .tilt-glow {
+      position: absolute; inset: 0; border-radius: inherit; opacity: 0;
+      transition: opacity 0.4s ease;
+      background: radial-gradient(600px circle at var(--mx, 50%) var(--my, 50%), rgba(59,130,246,0.12), transparent 40%);
+      pointer-events: none; z-index: 0;
+    }
+    .tilt-card:hover .tilt-glow { opacity: 1; }
+
+    /* ─── Magnetic Button ─── */
+    .magnetic {
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* ─── Gradient Mesh Background ─── */
+    .gradient-mesh {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 40%, rgba(37, 99, 235, 0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 60% at 80% 20%, rgba(245, 158, 11, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse 50% 80% at 60% 80%, rgba(6, 182, 212, 0.06) 0%, transparent 50%);
+      animation: meshShift 20s ease-in-out infinite alternate;
+    }
+
+    /* ─── Noise Texture Overlay ─── */
+    .noise-overlay {
+      position: fixed; inset: 0; pointer-events: none; z-index: 9998;
+      opacity: 0.028;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+      background-size: 180px 180px;
+    }
+
+    /* ─── Scroll Progress Bar ─── */
+    .scroll-progress {
+      position: fixed; top: 0; left: 0; height: 2.5px;
+      background: var(--gradient-primary);
+      z-index: 101;
+      width: 0%;
+      transition: width 0.1s linear;
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+    }
+    @keyframes meshShift {
+      0% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(30px, -20px) scale(1.05); }
+      66% { transform: translate(-20px, 30px) scale(0.95); }
+      100% { transform: translate(10px, 10px) scale(1.02); }
+    }
+
+    /* ─── Marquee ─── */
+    .marquee-track {
+      display: flex; gap: 48px;
+      animation: marqueeScroll 30s linear infinite;
+      width: max-content;
+    }
+    @keyframes marqueeScroll {
+      from { transform: translateX(0); }
+      to { transform: translateX(-50%); }
+    }
+    .marquee-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 28px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      font-size: 0.95rem; font-weight: 600;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    /* ─── Timeline ─── */
+    .timeline {
+      position: relative;
+      padding-left: 40px;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute; left: 0; top: 0; bottom: 0;
+      width: 1px;
+      background: linear-gradient(180deg, var(--blue-500), var(--amber-500), transparent);
+    }
+    .timeline-item {
+      position: relative;
+      padding: 0 0 48px 32px;
+    }
+    .timeline-item::before {
+      content: '';
+      position: absolute; left: -44px; top: 6px;
+      width: 9px; height: 9px; border-radius: 50%;
+      background: var(--bg);
+      border: 2px solid var(--blue-400);
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1), 0 0 12px rgba(59, 130, 246, 0.3);
+    }
+    .timeline-item:nth-child(even)::before {
+      border-color: var(--amber-400);
+      box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.1), 0 0 12px rgba(245, 158, 11, 0.3);
+    }
+    .timeline-time {
+      font-size: 0.78rem; font-weight: 700;
+      color: var(--text-muted); letter-spacing: 1px;
+      margin-bottom: 8px; text-transform: uppercase;
+    }
+    .timeline-content {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .timeline-content:hover {
+      border-color: var(--border-blue);
+      transform: translateX(8px);
+      box-shadow: 0 20px 48px rgba(0,0,0,0.3);
+    }
+    .timeline-content h4 {
+      font-size: 1.15rem; font-weight: 800; margin-bottom: 6px;
+    }
+    .timeline-content p {
+      color: var(--text-muted); font-size: 0.92rem; line-height: 1.7;
+    }
+    .timeline-agent {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 12px; padding: 6px 14px;
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.15);
+      border-radius: 100px;
+      font-size: 0.78rem; font-weight: 700;
+      color: var(--amber-400);
+    }
+
+    /* ─── Cursor Glow ─── */
+    .cursor-glow {
+      position: fixed; width: 400px; height: 400px;
+      border-radius: 50%; pointer-events: none; z-index: 9999;
+      background: radial-gradient(circle, rgba(37, 99, 235, 0.04) 0%, transparent 70%);
+      transform: translate(-50%, -50%);
+      transition: left 0.15s ease, top 0.15s ease;
+      mix-blend-mode: screen;
+    }
+
+    /* ─── Preloader ─── */
+    .preloader {
+      position: fixed; inset: 0; z-index: 100000;
+      background: var(--bg);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.8s;
+    }
+    .preloader.done {
+      opacity: 0; visibility: hidden; pointer-events: none;
+    }
+    .preloader-logo {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: var(--gradient-hero);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem; font-weight: 900; color: #fff;
+      margin-bottom: 28px;
+      animation: preloaderPulse 1.8s ease-in-out infinite;
+      box-shadow: 0 8px 32px rgba(249, 115, 22, 0.3);
+    }
+    @keyframes preloaderPulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 8px 32px rgba(249, 115, 22, 0.3); }
+      50% { transform: scale(1.08); box-shadow: 0 12px 40px rgba(249, 115, 22, 0.45); }
+    }
+    .preloader-text {
+      font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 6px; color: var(--text-muted);
+      overflow: hidden;
+    }
+    .preloader-text span {
+      display: inline-block;
+      animation: preloaderChar 0.6s ease-out forwards;
+      opacity: 0; transform: translateY(12px);
+    }
+    @keyframes preloaderChar {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .preloader-bar {
+      width: 120px; height: 1.5px; background: var(--border);
+      border-radius: 2px; margin-top: 20px; overflow: hidden;
+    }
+    .preloader-bar-inner {
+      height: 100%; width: 0%;
+      background: var(--gradient-hero);
+      border-radius: 2px;
+      animation: preloaderBar 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes preloaderBar {
+      0% { width: 0%; }
+      60% { width: 70%; }
+      100% { width: 100%; }
+    }
+
+    /* ─── Custom Cursor ─── */
+    .custom-cursor {
+      position: fixed; width: 8px; height: 8px;
+      border-radius: 50%; pointer-events: none; z-index: 10001;
+      background: var(--blue-400);
+      box-shadow: 0 0 8px rgba(59, 130, 246, 0.5), 0 0 16px rgba(59, 130, 246, 0.2);
+      transform: translate(-50%, -50%);
+      transition: width 0.25s ease, height 0.25s ease, background 0.25s ease;
+    }
+    .custom-cursor.hovering {
+      width: 40px; height: 40px;
+      background: transparent;
+      border: 1.5px solid var(--blue-400);
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+    }
+    @media (pointer: coarse) {
+      .custom-cursor, .cursor-glow { display: none !important; }
+    }
+
+    /* ─── Enhanced Nav Glass ─── */
+    nav.scrolled {
+      background: rgba(8, 13, 26, 0.75);
+      backdrop-filter: blur(32px) saturate(1.2);
+      -webkit-backdrop-filter: blur(32px) saturate(1.2);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    /* ─── Glowing Border Card ─── */
+    .glow-border {
+      position: relative;
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .glow-border::before {
+      content: '';
+      position: absolute; inset: 0; border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(59,130,246,0.3), rgba(245,158,11,0.2), rgba(6,182,212,0.2), rgba(59,130,246,0.3));
+      background-size: 300% 300%;
+      animation: borderGlow 4s ease infinite;
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    .glow-border:hover::before { opacity: 1; }
+    @keyframes borderGlow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
     /* ─── Responsive ─── */
     @media (max-width: 1024px) {
       .usecase-grid { grid-template-columns: repeat(2, 1fr); }
+      .hero-logo-display img { height: 160px; }
     }
     @media (max-width: 768px) {
       .feature-block { grid-template-columns: 1fr; gap: 44px; }
@@ -581,27 +1394,61 @@
       nav { padding: 14px 22px; }
       nav.scrolled { padding: 10px 22px; }
       .nav-links { display: none; }
+      .nav-hamburger { display: flex; }
+      .mobile-menu { display: flex; }
+      .nav-cta { display: none; }
       section { padding: 90px 22px; }
       .innovation-grid { grid-template-columns: 1fr; }
       .hero { padding: 120px 22px 90px; }
       .hero h1 { font-size: clamp(2.2rem, 8vw, 3.6rem); }
+      .hero-logo-display img { height: 130px; }
       .usecase-grid { grid-template-columns: 1fr; }
       .feature-grid { grid-template-columns: 1fr; }
+      .why-grid { grid-template-columns: 1fr; }
       footer { padding: 32px 22px; flex-direction: column; text-align: center; }
+      .timeline { padding-left: 28px; }
+      .timeline-item { padding: 0 0 36px 24px; }
+      .timeline-item::before { left: -32px; }
+      .orbital-ring:nth-child(1) { width: 160px; height: 160px; }
+      .orbital-ring:nth-child(2) { width: 200px; height: 200px; }
+      .orbital-ring:nth-child(3) { width: 240px; height: 240px; }
     }
     @media (max-width: 480px) {
       .hero-actions { flex-direction: column; align-items: stretch; }
       .btn-primary, .btn-secondary { justify-content: center; }
+      .hero-logo-display img { height: 100px; }
     }
   </style>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Buddy",
+    "applicationCategory": "ProductivityApplication",
+    "operatingSystem": "Any",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "description": "Buddy is an AI-native collaborative space where humans and AI Agents live, work, and grow together — not as user and tool, but as buddies.",
+    "url": "https://buddy.dev",
+    "image": "https://buddy.dev/logo.png"
+  }
+  </script>
 </head>
 <body>
 
   <div class="bg-grid"></div>
+  <div class="gradient-mesh"></div>
+  <div class="noise-overlay"></div>
+  <div class="cursor-glow" id="cursorGlow"></div>
+  <div class="custom-cursor" id="customCursor"></div>
+  <div class="scroll-progress" id="scrollProgress"></div>
   <canvas id="particles"></canvas>
 
   <nav id="navbar">
-    <div class="nav-logo">Buddy</div>
+    <div class="nav-logo"><span class="nav-logo-icon">B</span>Buddy</div>
     <div class="nav-links">
       <a href="#innovation" data-i18n="nav.innovation">Innovation</a>
       <a href="#architecture" data-i18n="nav.architecture">Architecture</a>
@@ -609,7 +1456,17 @@
       <a href="#usecases" data-i18n="nav.usecases">Use Cases</a>
     </div>
     <a href="#cta" class="nav-cta" data-i18n="nav.cta">Get Early Access →</a>
+    <button class="nav-hamburger" id="navHamburger" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
   </nav>
+  <div class="mobile-menu" id="mobileMenu">
+    <a href="#innovation" data-i18n="nav.innovation">Innovation</a>
+    <a href="#architecture" data-i18n="nav.architecture">Architecture</a>
+    <a href="#features" data-i18n="nav.features">Features</a>
+    <a href="#usecases" data-i18n="nav.usecases">Use Cases</a>
+    <a href="#cta" data-i18n="nav.cta">Get Early Access →</a>
+  </div>
 
   <!-- ═══════════ HERO ═══════════ -->
   <section class="hero">
@@ -617,23 +1474,86 @@
     <div class="orb orb-2"></div>
     <div class="orb orb-3"></div>
     <div class="orb orb-4"></div>
+    <div class="hero-logo-display" style="position:relative;">
+      <div class="orbital-ring" style="width:220px;height:220px;left:50%;top:50%;"></div>
+      <div class="orbital-ring" style="left:50%;top:50%;"></div>
+      <div class="orbital-ring" style="left:50%;top:50%;"></div>
+      <img src="logo.png" alt="Buddy Logo" />
+    </div>
     <div>
       <h1>
         <span data-i18n="hero.line1">Not a tool you summon.</span><br>
-        <span class="gradient" data-i18n="hero.line2">A companion you live alongside.</span>
+        <span class="gradient" data-i18n="hero.line2">A buddy you live alongside.</span>
       </h1>
       <p data-i18n="hero.desc">
-        Buddy is the first AI-native space where humans and intelligent Agents share everyday life — working, socializing, and growing together as companions, not as user and machine.
+        Buddy is the first AI-native space where humans and intelligent Agents share everyday life — working, socializing, and growing together as buddies, not as user and machine.
       </p>
       <div class="hero-actions">
-        <a href="#cta" class="btn-primary">
+        <a href="#cta" class="btn-primary magnetic">
           <span data-i18n="hero.cta1">Join the Waitlist</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         </a>
-        <a href="https://github.com/Yuan-ManX/Buddy" class="btn-secondary" target="_blank">
+        <a href="https://github.com/Yuan-ManX/Buddy" class="btn-secondary magnetic" target="_blank">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12 24 5.37 18.63 0 12 0z"/></svg>
           <span data-i18n="hero.cta2">View on GitHub</span>
         </a>
+      </div>
+      <div class="scroll-indicator">
+        <span>Scroll</span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ DAY IN THE LIFE ═══════════ -->
+  <section style="padding-top:40px;">
+    <div class="container">
+      <div class="section-label reveal" data-i18n="day.label">A Day with Buddy</div>
+      <h2 class="section-title reveal" data-i18n="day.title">Your day, amplified.</h2>
+      <p class="section-sub reveal" data-i18n="day.sub">
+        From sunrise to deep night, Buddy is present — not as a tool you open, but as a buddy that lives in your rhythm.
+      </p>
+      <div class="timeline reveal">
+        <div class="timeline-item">
+          <div class="timeline-time" data-i18n="day.t1.time">09:00</div>
+          <div class="timeline-content">
+            <h4 data-i18n="day.t1.title">Morning. Three things need you today.</h4>
+            <p data-i18n="day.t1.desc">Buddy checked your channels overnight, confirmed your calendar, and surfaced the hiring thread that needs your eyes. You start the day knowing exactly where to place your attention.</p>
+            <span class="timeline-agent">&#10003; Strategy Buddy</span>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-time" data-i18n="day.t2.time">10:30</div>
+          <div class="timeline-content">
+            <h4 data-i18n="day.t2.title">Saw the dashboard idea in the channel. Already building.</h4>
+            <p data-i18n="day.t2.desc">Design Buddy picked up on the discussion, opened a coding session, and started iterating. By the time you look up, a working prototype is waiting in the shared workspace.</p>
+            <span class="timeline-agent">&#10003; Design Buddy</span>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-time" data-i18n="day.t3.time">14:00</div>
+          <div class="timeline-content">
+            <h4 data-i18n="day.t3.title">Meeting notes are already live.</h4>
+            <p data-i18n="day.t3.desc">Buddy joined the product review, streamed key decisions into the channel, and assigned follow-ups to the right people — including itself. By the time the call ends, the backlog is already updated.</p>
+            <span class="timeline-agent">&#10003; Meeting Buddy</span>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-time" data-i18n="day.t4.time">18:30</div>
+          <div class="timeline-content">
+            <h4 data-i18n="day.t4.title">Weekend trip plans, refined.</h4>
+            <p data-i18n="day.t4.desc">Life Buddy remembered everyone's preferences from last time, checked weather and availability, and proposed an itinerary that feels right for the whole group. One tap to confirm.</p>
+            <span class="timeline-agent">&#10003; Life Buddy</span>
+          </div>
+        </div>
+        <div class="timeline-item" style="padding-bottom:0;">
+          <div class="timeline-time" data-i18n="day.t5.time">23:00</div>
+          <div class="timeline-content">
+            <h4 data-i18n="day.t5.title">Dream cycle running.</h4>
+            <p data-i18n="day.t5.desc">Buddy reviews every interaction from the day, reflects on what helped, and writes what it learned into its memory. Tomorrow it will be a little better at being yours.</p>
+            <span class="timeline-agent">&#10003; Buddy</span>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -650,40 +1570,55 @@
         Five architectural principles that make Buddy fundamentally different from every AI platform that came before.
       </p>
       <div class="innovation-grid">
-        <div class="innovation-card reveal">
-          <div class="innovation-icon blue">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <div class="innovation-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content">
+            <div class="innovation-icon blue">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
+            <h3 data-i18n="innovation.card1.title">Agents Are Dwellers, Not Tools</h3>
+            <p data-i18n="innovation.card1.desc">In Buddy, Agents have identity, memory, and presence. They inhabit your spaces as genuine participants — not summoned by commands, but simply there, like any member of your circle.</p>
           </div>
-          <h3 data-i18n="innovation.card1.title">Agents Are Dwellers, Not Tools</h3>
-          <p data-i18n="innovation.card1.desc">In Buddy, Agents have identity, memory, and presence. They inhabit your spaces as genuine participants — not summoned by commands, but simply there, like any member of your circle.</p>
         </div>
-        <div class="innovation-card reveal">
-          <div class="innovation-icon cyan">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <div class="innovation-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content">
+            <div class="innovation-icon cyan">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            </div>
+            <h3 data-i18n="innovation.card2.title">Multi-Agent Social Fabric</h3>
+            <p data-i18n="innovation.card2.desc">Built from the ground up for N humans collaborating with M agents. A living social graph where contributions flow fluidly between people and Agents, dissolving the boundary that never mattered.</p>
           </div>
-          <h3 data-i18n="innovation.card2.title">Multi-Agent Social Fabric</h3>
-          <p data-i18n="innovation.card2.desc">Built from the ground up for N humans collaborating with M agents. A living social graph where contributions flow fluidly between people and Agents, dissolving the boundary that never mattered.</p>
         </div>
-        <div class="innovation-card reveal">
-          <div class="innovation-icon amber">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        <div class="innovation-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content">
+            <div class="innovation-icon amber">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+            </div>
+            <h3 data-i18n="innovation.card3.title">One Space for Work and Life</h3>
+            <p data-i18n="innovation.card3.desc">No mode switching. The Agent that refines your presentation at 3 PM is the same one that asks about your day at 9 PM — because it has been with you the whole time.</p>
           </div>
-          <h3 data-i18n="innovation.card3.title">One Space for Work and Life</h3>
-          <p data-i18n="innovation.card3.desc">No mode switching. The Agent that refines your presentation at 3 PM is the same one that asks about your day at 9 PM — because it has been with you the whole time.</p>
         </div>
-        <div class="innovation-card reveal">
-          <div class="innovation-icon blue">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        <div class="innovation-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content">
+            <div class="innovation-icon blue">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            </div>
+            <h3 data-i18n="innovation.card4.title">Relational Memory</h3>
+            <p data-i18n="innovation.card4.desc">Not session-based context, but a living model of who you are. Agents remember how things felt, track your growth over months, and build a story — not a snapshot.</p>
           </div>
-          <h3 data-i18n="innovation.card4.title">Relational Memory</h3>
-          <p data-i18n="innovation.card4.desc">Not session-based context, but a living model of who you are. Agents remember how things felt, track your growth over months, and build a story — not a snapshot.</p>
         </div>
-        <div class="innovation-card reveal">
-          <div class="innovation-icon amber">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        <div class="innovation-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content">
+            <div class="innovation-icon amber">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </div>
+            <h3 data-i18n="innovation.card5.title">Proactive by Nature</h3>
+            <p data-i18n="innovation.card5.desc">Agents don't wait to be called. They notice deadlines approaching, surface context when you need it, and offer perspective when you seem stuck. Presence, not passivity.</p>
           </div>
-          <h3 data-i18n="innovation.card5.title">Proactive by Nature</h3>
-          <p data-i18n="innovation.card5.desc">Agents don't wait to be called. They notice deadlines approaching, surface context when you need it, and offer perspective when you seem stuck. Presence, not passivity.</p>
         </div>
       </div>
     </div>
@@ -699,7 +1634,7 @@
           <div class="section-label" data-i18n="chat.label">Experience</div>
           <h3 data-i18n="chat.title">Conversations that remember you.</h3>
           <p data-i18n="chat.desc">
-            Every interaction builds relational memory. Your Agent doesn't start from zero — it remembers last week's decision, the project's history, and how you like to work. This is not context injection. This is the foundation of genuine companionship.
+            Every interaction builds relational memory. Your Agent doesn't start from zero — it remembers last week's decision, the project's history, and how you like to work. This is not context injection. This is the foundation of genuine buddyship.
           </p>
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
             <span class="tag tag-blue" data-i18n="chat.tag1">Identity</span>
@@ -787,11 +1722,16 @@
       <p class="section-sub reveal" data-i18n="arch.sub">
         Three layers working in concert: richer social signals produce better models, better models power more capable Agents, more capable Agents attract a richer network.
       </p>
-      <div class="arch-layers reveal">
+      <div class="arch-layers reveal" style="position:relative;">
+        <div class="arch-connectors">
+          <div class="arch-connector-dot" style="top:22%;"></div>
+          <div class="arch-connector-dot" style="top:50%;"></div>
+          <div class="arch-connector-dot" style="top:78%;"></div>
+        </div>
         <div class="arch-layer">
           <div class="arch-layer-label">Layer 1</div>
           <div class="arch-indicator"></div>
-          <h4 data-i18n="arch.l1.title">The Companion Space</h4>
+          <h4 data-i18n="arch.l1.title">The Buddy Space</h4>
           <p data-i18n="arch.l1.desc">The social surface where humans and Agents interact as peers — workspaces, group conversations, shared memory, real-time coexistence.</p>
         </div>
         <div class="arch-layer">
@@ -818,48 +1758,56 @@
       <div class="section-label reveal" data-i18n="features.label">Feature Landscape</div>
       <h2 class="section-title reveal" data-i18n="features.title">Everything you need in one space.</h2>
       <p class="section-sub reveal" data-i18n="features.sub">
-        Eight capabilities that make Buddy a complete companion experience, not just another chat app with AI bolted on.
+        Eight capabilities that make Buddy a complete buddy experience, not just another chat app with AI bolted on.
       </p>
       <div class="feature-grid">
-        <div class="feature-card reveal">
-          <div class="icon">🔀</div>
+        <div class="feature-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content"><div class="icon">🔀</div>
           <h3 data-i18n="features.f1.title">Multi-Agent Collaboration</h3>
-          <p data-i18n="features.f1.desc">Parallel task execution, real-time handoffs, collective reasoning across humans and Agents.</p>
+          <p data-i18n="features.f1.desc">Parallel task execution, real-time handoffs, collective reasoning across humans and Agents.</p></div>
         </div>
-        <div class="feature-card reveal">
-          <div class="icon">💾</div>
+        <div class="feature-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content"><div class="icon">💾</div>
           <h3 data-i18n="features.f2.title">Relational Memory</h3>
-          <p data-i18n="features.f2.desc">Agents build evolving models of who you are — across sessions, contexts, and time.</p>
+          <p data-i18n="features.f2.desc">Agents build evolving models of who you are — across sessions, contexts, and time.</p></div>
         </div>
-        <div class="feature-card reveal">
-          <div class="icon">🔮</div>
+        <div class="feature-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content"><div class="icon">🔮</div>
           <h3 data-i18n="features.f3.title">Proactive Intelligence</h3>
-          <p data-i18n="features.f3.desc">Agents anticipate needs, check deadlines, and offer insight without waiting to be prompted.</p>
+          <p data-i18n="features.f3.desc">Agents anticipate needs, check deadlines, and offer insight without waiting to be prompted.</p></div>
         </div>
-        <div class="feature-card reveal">
-          <div class="icon">🌐</div>
+        <div class="feature-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content"><div class="icon">🌐</div>
           <h3 data-i18n="features.f4.title">Work &amp; Life Continuum</h3>
-          <p data-i18n="features.f4.desc">Professional and personal worlds in one coherent space — no mode switching required.</p>
+          <p data-i18n="features.f4.desc">Professional and personal worlds in one coherent space — no mode switching required.</p></div>
         </div>
-        <div class="feature-card reveal">
-          <div class="icon">🎭</div>
+        <div class="feature-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content"><div class="icon">🎭</div>
           <h3 data-i18n="features.f5.title">Agent Identity &amp; Personality</h3>
-          <p data-i18n="features.f5.desc">Distinct identities with names, profiles, communication styles — companions, not functions.</p>
+          <p data-i18n="features.f5.desc">Distinct identities with names, profiles, communication styles — buddies, not functions.</p></div>
         </div>
-        <div class="feature-card reveal">
-          <div class="icon">🔗</div>
+        <div class="feature-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content"><div class="icon">🔗</div>
           <h3 data-i18n="features.f6.title">Cross-Context Understanding</h3>
-          <p data-i18n="features.f6.desc">Work context informs personal understanding — enabling connections isolated tools miss.</p>
+          <p data-i18n="features.f6.desc">Work context informs personal understanding — enabling connections isolated tools miss.</p></div>
         </div>
-        <div class="feature-card reveal">
-          <div class="icon">📚</div>
+        <div class="feature-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content"><div class="icon">📚</div>
           <h3 data-i18n="features.f7.title">Shared Knowledge Base</h3>
-          <p data-i18n="features.f7.desc">Conversations and decisions become living team knowledge — information flows without silos.</p>
+          <p data-i18n="features.f7.desc">Conversations and decisions become living team knowledge — information flows without silos.</p></div>
         </div>
-        <div class="feature-card reveal">
-          <div class="icon">🔒</div>
+        <div class="feature-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content"><div class="icon">🔒</div>
           <h3 data-i18n="features.f8.title">Privacy &amp; Control</h3>
-          <p data-i18n="features.f8.desc">Granular context control. You decide what each Agent sees and remembers.</p>
+          <p data-i18n="features.f8.desc">Granular context control. You decide what each Agent sees and remembers.</p></div>
         </div>
       </div>
     </div>
@@ -871,31 +1819,186 @@
   <section id="usecases">
     <div class="container">
       <div class="section-label reveal" data-i18n="usecases.label">Use Cases</div>
-      <h2 class="section-title reveal" data-i18n="usecases.title">Four dimensions of companionship.</h2>
+      <h2 class="section-title reveal" data-i18n="usecases.title">Four dimensions of buddyship.</h2>
       <p class="section-sub reveal" data-i18n="usecases.sub">
         Buddy unifies what other platforms keep apart — work, life, community, and self.
       </p>
       <div class="usecase-grid">
-        <div class="usecase-card reveal">
-          <span class="icon">💼</span>
+        <div class="usecase-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content"><span class="icon">💼</span>
           <h3 data-i18n="usecases.u1.title">For Work</h3>
-          <p data-i18n="usecases.u1.desc">Your team and your Agent team operate as one. Strategy with real-time research, documents co-authored with your writing Agent, sprint retros with Agents who were actually there. Not "AI-assisted" — just work, with more capable teammates.</p>
+          <p data-i18n="usecases.u1.desc">Your team and your Agent team operate as one. Strategy with real-time research, documents co-authored with your writing Agent, sprint retros with Agents who were actually there. Not "AI-assisted" — just work, with more capable teammates.</p></div>
         </div>
-        <div class="usecase-card reveal">
-          <span class="icon">🎉</span>
+        <div class="usecase-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content"><span class="icon">🎉</span>
           <h3 data-i18n="usecases.u2.title">For Life</h3>
-          <p data-i18n="usecases.u2.desc">Weekend trip planning with friends. Everyone's preferences remembered. Activities that fit the group's vibe. A check-in when you've had a rough day. Companionship, not productivity.</p>
+          <p data-i18n="usecases.u2.desc">Weekend trip planning with friends. Everyone's preferences remembered. Activities that fit the group's vibe. A check-in when you've had a rough day. Buddyship, not productivity.</p></div>
         </div>
-        <div class="usecase-card reveal">
-          <span class="icon">🌍</span>
+        <div class="usecase-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content"><span class="icon">🌍</span>
           <h3 data-i18n="usecases.u3.title">For Communities</h3>
-          <p data-i18n="usecases.u3.desc">Learning communities with Agents that summarize readings and connect members. Creator communities with feedback on drafts and collaboration matching. Collective intelligence that grows with every interaction.</p>
+          <p data-i18n="usecases.u3.desc">Learning communities with Agents that summarize readings and connect members. Creator communities with feedback on drafts and collaboration matching. Collective intelligence that grows with every interaction.</p></div>
         </div>
-        <div class="usecase-card reveal">
-          <span class="icon">🧘</span>
+        <div class="usecase-card tilt-card reveal" data-tilt>
+          <div class="tilt-glow"></div>
+          <div class="tilt-content"><span class="icon">🧘</span>
           <h3 data-i18n="usecases.u4.title">For Yourself</h3>
-          <p data-i18n="usecases.u4.desc">Your personal Agent knows you best — goals, habits, struggles, growth. A thinking partner for big decisions. A reflective journal for processing. The Agent version of the person who's always had your back.</p>
+          <p data-i18n="usecases.u4.desc">Your personal Agent knows you best — goals, habits, struggles, growth. A thinking partner for big decisions. A reflective journal for processing. The Agent version of the person who's always had your back.</p></div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="container"><hr class="section-divider"></div>
+
+  <!-- ═══════════ LIVE DEMO ═══════════ -->
+  <section id="demo">
+    <div class="container">
+      <div class="section-label reveal" data-i18n="demo.label">Live Preview</div>
+      <h2 class="section-title reveal" data-i18n="demo.title">See Buddy in action.</h2>
+      <p class="section-sub reveal" data-i18n="demo.sub">
+        A glimpse into the buddy space where humans and Agents share the same channels, the same context, and the same timeline.
+      </p>
+      <div class="demo-frame reveal">
+        <div class="demo-header">
+          <div class="demo-dots"><span></span><span></span><span></span></div>
+          <div class="demo-title">Buddy Space</div>
+        </div>
+        <div class="demo-body">
+          <div class="demo-sidebar">
+            <div class="demo-section-title">Channels</div>
+            <div class="demo-channel active"><span class="demo-hash">#</span>general</div>
+            <div class="demo-channel"><span class="demo-hash">#</span>product-launch</div>
+            <div class="demo-channel"><span class="demo-hash">#</span>weekend-trip</div>
+            <div class="demo-channel"><span class="demo-hash">#</span>dev-sprint</div>
+            <div class="demo-divider"></div>
+            <div class="demo-section-title">Agents</div>
+            <div class="demo-agent"><span class="demo-avatar" style="background:var(--blue-500)">S</span>Strategy Buddy</div>
+            <div class="demo-agent"><span class="demo-avatar" style="background:var(--amber-500)">D</span>Design Buddy</div>
+            <div class="demo-agent"><span class="demo-avatar" style="background:var(--cyan-500)">C</span>Code Buddy</div>
+            <div class="demo-agent"><span class="demo-avatar" style="background:var(--emerald-500,#10b981)">L</span>Life Buddy</div>
+          </div>
+          <div class="demo-chat">
+            <div class="demo-chat-header">#general · 4 humans · 4 agents</div>
+            <div class="demo-messages">
+              <div class="demo-msg">
+                <div class="demo-msg-avatar" style="background:#64748b">A</div>
+                <div class="demo-msg-content">
+                  <div class="demo-msg-name">Alex <span class="demo-msg-time">09:12</span></div>
+                  <div class="demo-msg-text">Morning team. Big presentation at 2pm — need the latest numbers.</div>
+                </div>
+              </div>
+              <div class="demo-msg agent-msg">
+                <div class="demo-msg-avatar" style="background:var(--blue-500)">S</div>
+                <div class="demo-msg-content">
+                  <div class="demo-msg-name">Strategy Buddy <span class="demo-badge">Agent</span> <span class="demo-msg-time">09:12</span></div>
+                  <div class="demo-msg-text">Already on it. Pulled Q3 metrics, competitive analysis, and drafted 3 narrative angles. Preview in the thread.</div>
+                </div>
+              </div>
+              <div class="demo-msg">
+                <div class="demo-msg-avatar" style="background:#64748b">M</div>
+                <div class="demo-msg-content">
+                  <div class="demo-msg-name">Mia <span class="demo-msg-time">09:14</span></div>
+                  <div class="demo-msg-text">Strategy Buddy, can you cross-check the revenue forecast with last year's model?</div>
+                </div>
+              </div>
+              <div class="demo-msg agent-msg">
+                <div class="demo-msg-avatar" style="background:var(--blue-500)">S</div>
+                <div class="demo-msg-content">
+                  <div class="demo-msg-name">Strategy Buddy <span class="demo-badge">Agent</span> <span class="demo-msg-time">09:14</span></div>
+                  <div class="demo-msg-text">Done. Variance is 4.2% — well within range. Flagging one anomaly in churn rate for your eyes.</div>
+                </div>
+              </div>
+              <div class="demo-typing">
+                <span class="demo-typing-dot"></span>
+                <span class="demo-typing-dot"></span>
+                <span class="demo-typing-dot"></span>
+                <span style="font-size:0.75rem;color:var(--text-muted);margin-left:8px;">Design Buddy is crafting visuals...</span>
+              </div>
+            </div>
+            <div class="demo-input">
+              <span style="color:var(--text-muted);">Message #general...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="container"><hr class="section-divider"></div>
+
+  <!-- ═══════════ FAQ ═══════════ -->
+  <section>
+    <div class="container">
+      <div class="section-label reveal" data-i18n="faq.label">Questions</div>
+      <h2 class="section-title reveal" data-i18n="faq.title">Before you hit send.</h2>
+      <div class="faq-list" style="max-width:760px;margin:0 auto;">
+        <div class="faq-item reveal">
+          <div class="faq-question">
+            <span data-i18n="faq.q1.title">Can Agents act on their own?</span>
+            <span class="faq-icon"></span>
+          </div>
+          <div class="faq-answer">
+            <p data-i18n="faq.q1.desc">Yes — that's the point. They pick up tasks, run sessions, and move work forward without waiting to be asked. Anything high-stakes gets routed to you for approval first.</p>
+          </div>
+        </div>
+        <div class="faq-item reveal">
+          <div class="faq-question">
+            <span data-i18n="faq.q2.title">How does privacy work?</span>
+            <span class="faq-icon"></span>
+          </div>
+          <div class="faq-answer">
+            <p data-i18n="faq.q2.desc">You control what each Agent sees and remembers. Granular context permissions, local-first options, and transparent memory management — your data is yours.</p>
+          </div>
+        </div>
+        <div class="faq-item reveal">
+          <div class="faq-question">
+            <span data-i18n="faq.q3.title">Is Buddy open source?</span>
+            <span class="faq-icon"></span>
+          </div>
+          <div class="faq-answer">
+            <p data-i18n="faq.q3.desc">Core protocols and Agent runtimes are open source. The hosted buddy space will have a generous free tier with premium features for power users and teams.</p>
+          </div>
+        </div>
+        <div class="faq-item reveal">
+          <div class="faq-question">
+            <span data-i18n="faq.q4.title">How do I get started?</span>
+            <span class="faq-icon"></span>
+          </div>
+          <div class="faq-answer">
+            <p data-i18n="faq.q4.desc">Join the waitlist to be among the first. In the meantime, you can explore the open-source runtime and documentation on GitHub.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ MARQUEE ═══════════ -->
+  <section style="padding:80px 0;overflow:hidden;">
+    <div style="margin-bottom:28px;text-align:center;">
+      <span class="section-label reveal" data-i18n="marquee.label">Built for Modern Workflows</span>
+    </div>
+    <div class="reveal" style="overflow:hidden;mask-image:linear-gradient(90deg,transparent,black 15%,black 85%,transparent);-webkit-mask-image:linear-gradient(90deg,transparent,black 15%,black 85%,transparent);">
+      <div class="marquee-track">
+        <div class="marquee-item">&#128187; Multi-Agent Collaboration</div>
+        <div class="marquee-item">&#128218; Relational Memory</div>
+        <div class="marquee-item">&#9889; Proactive Intelligence</div>
+        <div class="marquee-item">&#127758; Work &amp; Life Continuum</div>
+        <div class="marquee-item">&#128374; Agent Identity</div>
+        <div class="marquee-item">&#128279; Cross-Context Understanding</div>
+        <div class="marquee-item">&#128214; Shared Knowledge Base</div>
+        <div class="marquee-item">&#128272; Privacy &amp; Control</div>
+        <div class="marquee-item">&#128187; Multi-Agent Collaboration</div>
+        <div class="marquee-item">&#128218; Relational Memory</div>
+        <div class="marquee-item">&#9889; Proactive Intelligence</div>
+        <div class="marquee-item">&#127758; Work &amp; Life Continuum</div>
+        <div class="marquee-item">&#128374; Agent Identity</div>
+        <div class="marquee-item">&#128279; Cross-Context Understanding</div>
+        <div class="marquee-item">&#128214; Shared Knowledge Base</div>
+        <div class="marquee-item">&#128272; Privacy &amp; Control</div>
       </div>
     </div>
   </section>
@@ -911,11 +2014,11 @@
         The first AI-native space where you don't use Agents — you live alongside them. Join the waitlist to be among the first.
       </p>
       <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
-        <a href="https://github.com/Yuan-ManX/Buddy" target="_blank" class="btn-amber" style="font-size:1.1rem;padding:18px 44px;">
+        <a href="https://github.com/Yuan-ManX/Buddy" target="_blank" class="btn-amber magnetic" style="font-size:1.1rem;padding:18px 44px;">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12 24 5.37 18.63 0 12 0z"/></svg>
           <span data-i18n="cta.btn">Star on GitHub</span>
         </a>
-        <a href="#cta" class="btn-secondary" style="font-size:1.1rem;padding:18px 44px;">
+        <a href="#cta" class="btn-secondary magnetic" style="font-size:1.1rem;padding:18px 44px;">
           <span data-i18n="cta.btn2">Join the Waitlist</span>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         </a>
@@ -924,14 +2027,44 @@
   </section>
 
   <!-- ═══════════ FOOTER ═══════════ -->
+  <button class="back-to-top" id="backToTop" aria-label="Back to top">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+  </button>
+
   <footer>
-    <div class="footer-left" data-i18n="footer.copyright">© 2026 Buddy</div>
-    <div class="footer-right">
-      <a href="https://github.com/Yuan-ManX/Buddy" target="_blank">GitHub</a>
-      <a href="https://github.com/Yuan-ManX/Buddy/blob/main/README_CN.md" target="_blank" data-i18n="footer.docs">中文文档</a>
-      <div class="lang-toggle" id="langToggle" title="Switch Language / 切换语言">
-        <span class="lang-option active" data-lang="en">EN</span>
-        <span class="lang-option" data-lang="zh">中文</span>
+    <div class="footer-main">
+      <div class="footer-brand">
+        <div class="nav-logo"><span class="nav-logo-icon">B</span>Buddy</div>
+        <p>The first AI-native buddy space. Not tools you use — teammates you live alongside.</p>
+      </div>
+      <div class="footer-links">
+        <h4>Product</h4>
+        <a href="#innovation">Innovation</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#features">Features</a>
+        <a href="#usecases">Use Cases</a>
+      </div>
+      <div class="footer-links">
+        <h4>Resources</h4>
+        <a href="https://github.com/Yuan-ManX/Buddy" target="_blank">GitHub</a>
+        <a href="https://github.com/Yuan-ManX/Buddy/blob/main/README_CN.md" target="_blank">Documentation</a>
+        <a href="#faq">FAQ</a>
+      </div>
+      <div class="footer-links">
+        <h4>Connect</h4>
+        <a href="https://github.com/Yuan-ManX/Buddy" target="_blank">GitHub</a>
+        <a href="#cta">Get Early Access</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div data-i18n="footer.copyright">© 2026 Buddy</div>
+      <div style="display:flex;gap:28px;align-items:center;">
+        <a href="https://github.com/Yuan-ManX/Buddy" target="_blank">GitHub</a>
+        <a href="https://github.com/Yuan-ManX/Buddy/blob/main/README_CN.md" target="_blank" data-i18n="footer.docs">中文文档</a>
+        <div class="lang-toggle" id="langToggle" title="Switch Language / 切换语言" tabindex="0" role="button" aria-label="Switch language">
+          <span class="lang-option active" data-lang="en">EN</span>
+          <span class="lang-option" data-lang="zh">中文</span>
+        </div>
       </div>
     </div>
   </footer>
@@ -942,10 +2075,10 @@
        ═══════════════════════════════════════════ */
     const translations = {
       en: {
-        'meta.title': 'Buddy — Your AI-Native Companion for Work & Life',
+        'meta.title': 'Buddy — Your AI-Native Buddy for Work & Life',
         'hero.line1': 'Not a tool you summon.',
-        'hero.line2': 'A companion you live alongside.',
-        'hero.desc': 'Buddy is the first AI-native space where humans and intelligent Agents share everyday life — working, socializing, and growing together as companions, not as user and machine.',
+        'hero.line2': 'A buddy you live alongside.',
+        'hero.desc': 'Buddy is the first AI-native space where humans and intelligent Agents share everyday life — working, socializing, and growing together as buddies, not as user and machine.',
         'hero.cta1': 'Join the Waitlist',
         'hero.cta2': 'View on GitHub',
         'nav.innovation': 'Innovation',
@@ -969,7 +2102,7 @@
         'innovation.card5.desc': "Agents don't wait to be called. They notice deadlines approaching, surface context when you need it, and offer perspective when you seem stuck. Presence, not passivity.",
         'chat.label': 'Experience',
         'chat.title': 'Conversations that remember you.',
-        'chat.desc': "Every interaction builds relational memory. Your Agent doesn't start from zero — it remembers last week's decision, the project's history, and how you like to work. This is not context injection. This is the foundation of genuine companionship.",
+        'chat.desc': "Every interaction builds relational memory. Your Agent doesn't start from zero — it remembers last week's decision, the project's history, and how you like to work. This is not context injection. This is the foundation of genuine buddyship.",
         'chat.tag1': 'Identity',
         'chat.tag2': 'Memory',
         'chat.tag3': 'Presence',
@@ -990,7 +2123,7 @@
         'arch.label': 'Architecture',
         'arch.title': 'A compounding intelligence flywheel.',
         'arch.sub': 'Three layers working in concert: richer social signals produce better models, better models power more capable Agents, more capable Agents attract a richer network.',
-        'arch.l1.title': 'The Companion Space',
+        'arch.l1.title': 'The Buddy Space',
         'arch.l1.desc': 'The social surface where humans and Agents interact as peers — workspaces, group conversations, shared memory, real-time coexistence.',
         'arch.l2.title': 'The Relational Intelligence Engine',
         'arch.l2.desc': 'The cognitive core — persistent memory that deepens over time, proactive intent understanding, multi-agent orchestration, personality modeling, cross-context reasoning.',
@@ -998,7 +2131,7 @@
         'arch.l3.desc': 'The execution substrate — distributed agent orchestration, tool and API integration, safety sandboxes, semantic routing across Agent teams at scale.',
         'features.label': 'Feature Landscape',
         'features.title': 'Everything you need in one space.',
-        'features.sub': 'Eight capabilities that make Buddy a complete companion experience, not just another chat app with AI bolted on.',
+        'features.sub': 'Eight capabilities that make Buddy a complete buddy experience, not just another chat app with AI bolted on.',
         'features.f1.title': 'Multi-Agent Collaboration',
         'features.f1.desc': 'Parallel task execution, real-time handoffs, collective reasoning across humans and Agents.',
         'features.f2.title': 'Relational Memory',
@@ -1008,7 +2141,7 @@
         'features.f4.title': 'Work & Life Continuum',
         'features.f4.desc': 'Professional and personal worlds in one coherent space — no mode switching required.',
         'features.f5.title': 'Agent Identity & Personality',
-        'features.f5.desc': 'Distinct identities with names, profiles, communication styles — companions, not functions.',
+        'features.f5.desc': 'Distinct identities with names, profiles, communication styles — buddies, not functions.',
         'features.f6.title': 'Cross-Context Understanding',
         'features.f6.desc': 'Work context informs personal understanding — enabling connections isolated tools miss.',
         'features.f7.title': 'Shared Knowledge Base',
@@ -1016,16 +2149,120 @@
         'features.f8.title': 'Privacy & Control',
         'features.f8.desc': 'Granular context control. You decide what each Agent sees and remembers.',
         'usecases.label': 'Use Cases',
-        'usecases.title': 'Four dimensions of companionship.',
+        'usecases.title': 'Four dimensions of buddyship.',
         'usecases.sub': 'Buddy unifies what other platforms keep apart — work, life, community, and self.',
         'usecases.u1.title': 'For Work',
         'usecases.u1.desc': 'Your team and your Agent team operate as one. Strategy with real-time research, documents co-authored with your writing Agent, sprint retros with Agents who were actually there. Not "AI-assisted" — just work, with more capable teammates.',
         'usecases.u2.title': 'For Life',
-        'usecases.u2.desc': "Weekend trip planning with friends. Everyone's preferences remembered. Activities that fit the group's vibe. A check-in when you've had a rough day. Companionship, not productivity.",
+        'usecases.u2.desc': "Weekend trip planning with friends. Everyone's preferences remembered. Activities that fit the group's vibe. A check-in when you've had a rough day. Buddyship, not productivity.",
         'usecases.u3.title': 'For Communities',
         'usecases.u3.desc': 'Learning communities with Agents that summarize readings and connect members. Creator communities with feedback on drafts and collaboration matching. Collective intelligence that grows with every interaction.',
         'usecases.u4.title': 'For Yourself',
         'usecases.u4.desc': "Your personal Agent knows you best — goals, habits, struggles, growth. A thinking partner for big decisions. A reflective journal for processing. The Agent version of the person who's always had your back.",
+        'day.label': 'A Day with Buddy',
+        'day.title': 'Your day, amplified.',
+        'day.sub': 'From sunrise to deep night, Buddy is present — not as a tool you open, but as a buddy that lives in your rhythm.',
+        'day.t1.time': '09:00',
+        'day.t1.title': 'Morning. Three things need you today.',
+        'day.t1.desc': 'Buddy checked your channels overnight, confirmed your calendar, and surfaced the hiring thread that needs your eyes. You start the day knowing exactly where to place your attention.',
+        'day.t2.time': '10:30',
+        'day.t2.title': 'Saw the dashboard idea in the channel. Already building.',
+        'day.t2.desc': 'Design Buddy picked up on the discussion, opened a coding session, and started iterating. By the time you look up, a working prototype is waiting in the shared workspace.',
+        'day.t3.time': '14:00',
+        'day.t3.title': 'Meeting notes are already live.',
+        'day.t3.desc': 'Buddy joined the product review, streamed key decisions into the channel, and assigned follow-ups to the right people — including itself. By the time the call ends, the backlog is already updated.',
+        'day.t4.time': '18:30',
+        'day.t4.title': 'Weekend trip plans, refined.',
+        'day.t4.desc': 'Life Buddy remembered everyone\'s preferences from last time, checked weather and availability, and proposed an itinerary that feels right for the whole group. One tap to confirm.',
+        'day.t5.time': '23:00',
+        'day.t5.title': 'Dream cycle running.',
+        'day.t5.desc': 'Buddy reviews every interaction from the day, reflects on what helped, and writes what it learned into its memory. Tomorrow it will be a little better at being yours.',
+        'why.label': 'The Shift',
+        'why.title': "Why your AI isn't on the team yet.",
+        'why.sub': 'Every other tool bolts AI on the side. Buddy puts it on the team — in the same channels, on the same timeline, as genuine buddies.',
+        'why.c1.title': 'Chat tools were built for humans.',
+        'why.c1.desc': 'Every other platform calls it a bot. A sidebar. A plugin. Never a teammate. Buddy is the first space where Agents sit as peers, not utilities.',
+        'why.c2.title': 'Agents live in separate tabs.',
+        'why.c2.desc': "Your copilot doesn't know what's in your Slack. Your Slack doesn't know what's in your PM tool. You're the one connecting everything. Buddy dissolves those walls.",
+        'why.c3.title': 'Responsibility needs to be legible.',
+        'why.c3.desc': 'Who drafted this? Who approved it? With AI in the loop, you need to know. Buddy makes every Agent action traceable, attributable, and reviewable.',
+        'demo.label': 'Live Preview',
+        'demo.title': 'See Buddy in action.',
+        'demo.sub': 'A glimpse into the buddy space where humans and Agents share the same channels, the same context, and the same timeline.',
+        'marquee.label': 'Built for Modern Workflows',
+        'faq.label': 'Questions',
+        'faq.title': 'Before you hit send.',
+        'faq.q1.title': 'Can Agents act on their own?',
+        'faq.q1.desc': "Yes — that's the point. They pick up tasks, run sessions, and move work forward without waiting to be asked. Anything high-stakes gets routed to you for approval first.",
+        'faq.q2.title': 'How does privacy work?',
+        'faq.q2.desc': 'You control what each Agent sees and remembers. Granular context permissions, local-first options, and transparent memory management — your data is yours.',
+        'faq.q3.title': 'Is Buddy open source?',
+        'faq.q3.desc': 'Core protocols and Agent runtimes are open source. The hosted buddy space will have a generous free tier with premium features for power users and teams.',
+        'faq.q4.title': 'How do I get started?',
+        'faq.q4.desc': 'Join the waitlist to be among the first. In the meantime, you can explore the open-source runtime and documentation on GitHub.',
+        'roadmap.label': 'Roadmap',
+        'roadmap.title': "Where we're headed.",
+        'roadmap.sub': "Building the buddy space in public. Here's what's shipped, what's cooking, and what's next.",
+        'roadmap.status.done': 'Shipped',
+        'roadmap.status.active': 'In Progress',
+        'roadmap.status.planned': 'Planned',
+        'roadmap.m1.date': 'Q3 2025',
+        'roadmap.m1.title': 'Core Runtime & Protocol',
+        'roadmap.m1.desc': 'Open-sourced the Agent runtime, communication protocol, and memory primitives. The foundation for a new kind of AI-native space.',
+        'roadmap.m2.date': 'Q4 2025',
+        'roadmap.m2.title': 'Multi-Agent Orchestration',
+        'roadmap.m2.desc': 'Agents can now collaborate in parallel, hand off tasks, and build shared context. The social fabric is alive.',
+        'roadmap.m3.date': 'Q1 2026',
+        'roadmap.m3.title': 'Buddy Space Beta',
+        'roadmap.m3.desc': 'The first hosted environment where humans and Agents coexist in real time. Waitlist members get first access.',
+        'roadmap.m4.date': 'Q2 2026',
+        'roadmap.m4.title': 'Agent Marketplace',
+        'roadmap.m4.desc': 'A growing ecosystem of specialized Agents built by the community. Import, customize, and share teammates.',
+        'roadmap.m5.date': 'Q3 2026',
+        'roadmap.m5.title': 'Enterprise & On-Premise',
+        'roadmap.m5.desc': 'Self-hosted deployments, SSO, advanced audit logs, and compliance tools for teams that need control.',
+        'pricing.label': 'Pricing',
+        'pricing.title': 'Simple, transparent.',
+        'pricing.sub': 'Start free. Scale as you grow. No hidden fees, no surprises.',
+        'pricing.t1.name': 'Open Source',
+        'pricing.t1.desc': 'For developers and explorers who want to self-host.',
+        'pricing.t1.f1': 'Core runtime & protocols',
+        'pricing.t1.f2': 'Self-hosted deployment',
+        'pricing.t1.f3': 'Community support',
+        'pricing.t1.f4': 'Unlimited Agents',
+        'pricing.t1.btn': 'Get Started',
+        'pricing.t2.name': 'Pro',
+        'pricing.t2.price': '$12<span>/mo</span>',
+        'pricing.t2.desc': 'For individuals and small teams ready to go live.',
+        'pricing.t2.f1': 'Hosted buddy space',
+        'pricing.t2.f2': 'Up to 10 team members',
+        'pricing.t2.f3': 'Relational memory engine',
+        'pricing.t2.f4': 'Priority support',
+        'pricing.t2.f5': 'Custom Agent personalities',
+        'pricing.t2.btn': 'Join Waitlist',
+        'pricing.t3.name': 'Enterprise',
+        'pricing.t3.price': 'Custom',
+        'pricing.t3.desc': 'For organizations that need control and scale.',
+        'pricing.t3.f1': 'Self-hosted or private cloud',
+        'pricing.t3.f2': 'SSO & advanced security',
+        'pricing.t3.f3': 'Audit logs & compliance',
+        'pricing.t3.f4': 'Dedicated support',
+        'pricing.t3.f5': 'Custom integrations',
+        'pricing.t3.btn': 'Contact Us',
+        'compare.label': 'Comparison',
+        'compare.title': 'Not just another AI tool.',
+        'compare.sub': 'See how Buddy differs from the platforms you already know.',
+        'compare.col1': 'Feature',
+        'compare.col3': 'ChatGPT',
+        'compare.col4': 'Copilot',
+        'compare.col5': 'Slack Bots',
+        'compare.r1.label': 'Multi-Agent Collaboration',
+        'compare.r2.label': 'Persistent Memory',
+        'compare.r3.label': 'Agent Identity & Personality',
+        'compare.r4.label': 'Proactive Intelligence',
+        'compare.r5.label': 'Work & Life Continuum',
+        'compare.r6.label': 'Open Source Core',
+        'compare.r7.label': 'Self-Host Option',
         'cta.title': 'Ready to meet your Buddy?',
         'cta.desc': "The first AI-native space where you don't use Agents — you live alongside them. Join the waitlist to be among the first.",
         'cta.btn': 'Star on GitHub',
@@ -1118,6 +2355,110 @@
         'usecases.u3.desc': '学习社区中 Agent 提炼阅读要点、连接成员。创作者社区中 Agent 提供草稿反馈与协作匹配。集体智慧随每一次交互而增长。',
         'usecases.u4.title': '自己',
         'usecases.u4.desc': '你的个人 Agent 是最懂你的那个——目标、习惯、挣扎、成长。重大决策的思维伙伴，处理经历的反思日记，那个永远站在你这边的人的 Agent 版本。',
+        'day.label': 'Buddy 的一天',
+        'day.title': '你的每一天，都被放大。',
+        'day.sub': '从日出到深夜，Buddy 始终在场——不是需要你打开的工具，而是融入你节奏的搭子。',
+        'day.t1.time': '09:00',
+        'day.t1.title': '早上。今天有三件事需要你的关注。',
+        'day.t1.desc': 'Buddy 整夜查看了你的频道，确认了日程，并浮出了需要你 eyes 的招聘讨论。你从一天开始就知道该把注意力放在哪里。',
+        'day.t2.time': '10:30',
+        'day.t2.title': '看到频道里的仪表盘想法。已经在动手了。',
+        'day.t2.desc': '设计 Buddy 捕捉到了讨论，开启了一个编码会话，开始迭代。当你抬头时，一个可工作的原型已经在共享工作区里等你了。',
+        'day.t3.time': '14:00',
+        'day.t3.title': '会议记录已经实时同步。',
+        'day.t3.desc': 'Buddy 参加了产品评审，将关键决策流式传输到频道，并把后续任务分配给了正确的人——包括它自己。通话结束时，backlog 已经更新完毕。',
+        'day.t4.time': '18:30',
+        'day.t4.title': '周末出行计划，已精心打磨。',
+        'day.t4.desc': '生活 Buddy 记得每个人上次的偏好，查看了天气和可用时间，提出了一个适合全组的行程。一键确认即可。',
+        'day.t5.time': '23:00',
+        'day.t5.title': '梦境循环运行中。',
+        'day.t5.desc': 'Buddy 回顾了今天的每一次交互，反思什么帮到了你，并把学到的写入记忆。明天，它会更好地成为你的 Buddy。',
+        'why.label': '变革',
+        'why.title': '为什么你的 AI 还没真正加入团队？',
+        'why.sub': '其他工具把 AI 钉在侧边栏。Buddy 把它放在团队里——在同一个频道、同一条时间线上，作为真正的搭子。',
+        'why.c1.title': '聊天工具是为人设计的。',
+        'why.c1.desc': '其他平台称它为机器人、侧边栏、插件。从来不是队友。Buddy 是第一个让 Agent 以对等身份入座的空间。',
+        'why.c2.title': 'Agent 住在不同的标签页里。',
+        'why.c2.desc': '你的 copilot 不知道 Slack 里在聊什么。Slack 不知道 PM 工具里的进度。是你一个人在连接一切。Buddy 消融了这些墙。',
+        'why.c3.title': '责任需要清晰可见。',
+        'why.c3.desc': '谁起草的？谁批准的？AI 参与其中时，你需要知道。Buddy 让每一个 Agent 的行为都可追溯、可归因、可审查。',
+        'demo.label': '实时预览',
+        'demo.title': '看看 Buddy 的实际体验。',
+        'demo.sub': '一窥 Buddy Space 的真实样貌——人类与 Agent 共享频道、共享上下文、共享时间线。',
+        'marquee.label': '为现代工作流而生',
+        'faq.label': '常见问题',
+        'faq.title': '发送之前。',
+        'faq.q1.title': 'Agent 能自主行动吗？',
+        'faq.q1.desc': '可以——这正是 Buddy 的核心。Agent 会主动接取任务、运行会话、推进工作，无需等待指令。任何高风险操作都会先提交给你审批。',
+        'faq.q2.title': '隐私如何保障？',
+        'faq.q2.desc': '你可以精确控制每个 Agent 能看到什么、记住什么。细粒度的上下文权限、本地优先选项、透明的记忆管理——你的数据属于你。',
+        'faq.q3.title': 'Buddy 是开源的吗？',
+        'faq.q3.desc': '核心协议和 Agent 运行时是开源的。托管的 Buddy Space 将提供免费的基础版本，以及面向重度用户和团队的高级功能。',
+        'faq.q4.title': '如何开始使用？',
+        'faq.q4.desc': '加入等候名单，成为第一批体验者。在此期间，你可以在 GitHub 上探索开源运行时和文档。',
+        'roadmap.label': '路线图',
+        'roadmap.title': '我们的方向。',
+        'roadmap.sub': '公开构建 Buddy Space。已交付的、正在做的、以及接下来的计划。',
+        'roadmap.status.done': '已交付',
+        'roadmap.status.active': '进行中',
+        'roadmap.status.planned': '计划中',
+        'roadmap.m1.date': '2025 Q3',
+        'roadmap.m1.title': '核心运行时与协议',
+        'roadmap.m1.desc': '开源了 Agent 运行时、通信协议和记忆原语。一种全新的 AI 原生空间的基石。',
+        'roadmap.m2.date': '2025 Q4',
+        'roadmap.m2.title': '多 Agent 编排系统',
+        'roadmap.m2.desc': 'Agent 现在可以并行协作、交接任务、构建共享上下文。社交织体已经成形。',
+        'roadmap.m3.date': '2026 Q1',
+        'roadmap.m3.title': 'Buddy Space 测试版',
+        'roadmap.m3.desc': '第一个托管环境，人类与 Agent 实时共存。等候名单成员将优先获得体验资格。',
+        'roadmap.m4.date': '2026 Q2',
+        'roadmap.m4.title': 'Agent 市场',
+        'roadmap.m4.desc': '由社区构建的专业 Agent 生态系统。导入、定制、分享你的队友。',
+        'roadmap.m5.date': '2026 Q3',
+        'roadmap.m5.title': '企业版与私有化部署',
+        'roadmap.m5.desc': '自托管部署、SSO、高级审计日志和合规工具，满足需要控制权的团队。',
+        'pricing.label': '定价',
+        'pricing.title': '简单透明。',
+        'pricing.sub': '免费开始。随成长扩展。无隐藏费用，无意外惊喜。',
+        'pricing.t1.name': '开源版',
+        'pricing.t1.desc': '面向希望自托管的开发者和探索者。',
+        'pricing.t1.f1': '核心运行时与协议',
+        'pricing.t1.f2': '自托管部署',
+        'pricing.t1.f3': '社区支持',
+        'pricing.t1.f4': '无限 Agent',
+        'pricing.t1.btn': '立即开始',
+        'pricing.t2.name': '专业版',
+        'pricing.t2.price': '$12<span>/月</span>',
+        'pricing.t2.desc': '面向准备上线的个人和小团队。',
+        'pricing.t2.f1': '托管 Buddy Space',
+        'pricing.t2.f2': '最多 10 名团队成员',
+        'pricing.t2.f3': '关系记忆引擎',
+        'pricing.t2.f4': '优先支持',
+        'pricing.t2.f5': '自定义 Agent 个性',
+        'pricing.t2.btn': '加入等候名单',
+        'pricing.t3.name': '企业版',
+        'pricing.t3.price': '定制',
+        'pricing.t3.desc': '面向需要控制力和规模的组织。',
+        'pricing.t3.f1': '自托管或私有云',
+        'pricing.t3.f2': 'SSO 与高级安全',
+        'pricing.t3.f3': '审计日志与合规',
+        'pricing.t3.f4': '专属支持',
+        'pricing.t3.f5': '自定义集成',
+        'pricing.t3.btn': '联系我们',
+        'compare.label': '对比',
+        'compare.title': '不只是又一个 AI 工具。',
+        'compare.sub': '看看 Buddy 与你已知的平台有何不同。',
+        'compare.col1': '功能',
+        'compare.col3': 'ChatGPT',
+        'compare.col4': 'Copilot',
+        'compare.col5': 'Slack 机器人',
+        'compare.r1.label': '多 Agent 协作',
+        'compare.r2.label': '持久记忆',
+        'compare.r3.label': 'Agent 身份与个性',
+        'compare.r4.label': '主动智能',
+        'compare.r5.label': '工作与生活连续体',
+        'compare.r6.label': '开源核心',
+        'compare.r7.label': '自托管选项',
         'cta.title': '准备好见你的 Buddy 了吗？',
         'cta.desc': '首个 AI 原生空间，你不是在"使用"Agent——而是与它们并肩生活。加入等候名单，成为第一批体验者。',
         'cta.btn': '在 GitHub 加星',
@@ -1370,7 +2711,18 @@
         }
       });
     }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
-    revealElements.forEach(el => observer.observe(el));
+    revealElements.forEach(el => {
+      if (!el.closest('.innovation-grid, .feature-grid, .usecase-grid')) {
+        observer.observe(el);
+      }
+    });
+
+    /* ═══════════════════════════════════════════
+       PRELOADER
+       ═══════════════════════════════════════════ */
+    window.addEventListener('load', () => {
+      document.getElementById('preloader').classList.add('done');
+    });
 
     /* ═══════════════════════════════════════════
        NAVBAR SCROLL
@@ -1381,11 +2733,230 @@
     }, { passive: true });
 
     /* ═══════════════════════════════════════════
+       MOBILE MENU TOGGLE
+       ═══════════════════════════════════════════ */
+    const navHamburger = document.getElementById('navHamburger');
+    const mobileMenu = document.getElementById('mobileMenu');
+    if (navHamburger && mobileMenu) {
+      navHamburger.addEventListener('click', () => {
+        navHamburger.classList.toggle('active');
+        mobileMenu.classList.toggle('open');
+        document.body.style.overflow = mobileMenu.classList.contains('open') ? 'hidden' : '';
+      });
+      mobileMenu.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', () => {
+          navHamburger.classList.remove('active');
+          mobileMenu.classList.remove('open');
+          document.body.style.overflow = '';
+        });
+      });
+    }
+
+    /* ═══════════════════════════════════════════
        CHAT MESSAGE ANIMATION DELAYS
        ═══════════════════════════════════════════ */
     document.querySelectorAll('.chat-msg').forEach((msg, i) => {
       msg.style.animationDelay = `${i * 0.55}s`;
     });
+
+    /* ═══════════════════════════════════════════
+       3D TILT CARDS
+       ═══════════════════════════════════════════ */
+    document.querySelectorAll('[data-tilt]').forEach(card => {
+      card.addEventListener('mousemove', e => {
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const cx = rect.width / 2;
+        const cy = rect.height / 2;
+        const rx = (y - cy) / cy * -8;
+        const ry = (x - cx) / cx * 8;
+        card.style.transform = `perspective(800px) rotateX(${rx}deg) rotateY(${ry}deg) scale3d(1.02, 1.02, 1.02)`;
+        card.style.setProperty('--mx', `${x}px`);
+        card.style.setProperty('--my', `${y}px`);
+      });
+      card.addEventListener('mouseleave', () => {
+        card.style.transform = 'perspective(800px) rotateX(0) rotateY(0) scale3d(1, 1, 1)';
+      });
+    });
+
+    /* ═══════════════════════════════════════════
+       CURSOR GLOW + CUSTOM CURSOR
+       ═══════════════════════════════════════════ */
+    const cursorGlow = document.getElementById('cursorGlow');
+    const customCursor = document.getElementById('customCursor');
+    if (window.matchMedia('(pointer: fine)').matches) {
+      document.body.style.cursor = 'none';
+      document.addEventListener('mousemove', e => {
+        if (cursorGlow) {
+          cursorGlow.style.left = e.clientX + 'px';
+          cursorGlow.style.top = e.clientY + 'px';
+        }
+        if (customCursor) {
+          customCursor.style.left = e.clientX + 'px';
+          customCursor.style.top = e.clientY + 'px';
+        }
+      });
+      document.querySelectorAll('a, button, [data-tilt], .lang-toggle').forEach(el => {
+        el.addEventListener('mouseenter', () => customCursor && customCursor.classList.add('hovering'));
+        el.addEventListener('mouseleave', () => customCursor && customCursor.classList.remove('hovering'));
+      });
+    }
+
+    /* ═══════════════════════════════════════════
+       MAGNETIC BUTTONS
+       ═══════════════════════════════════════════ */
+    document.querySelectorAll('.magnetic').forEach(btn => {
+      btn.addEventListener('mousemove', e => {
+        const rect = btn.getBoundingClientRect();
+        const x = e.clientX - rect.left - rect.width / 2;
+        const y = e.clientY - rect.top - rect.height / 2;
+        btn.style.transform = `translate(${x * 0.2}px, ${y * 0.2}px)`;
+      });
+      btn.addEventListener('mouseleave', () => {
+        btn.style.transform = 'translate(0, 0)';
+      });
+    });
+
+    /* ═══════════════════════════════════════════
+       SMOOTH SCROLL FOR ANCHORS
+       ═══════════════════════════════════════════ */
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function(e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+
+    /* ═══════════════════════════════════════════
+       SCROLL PROGRESS BAR
+       ═══════════════════════════════════════════ */
+    const scrollProgress = document.getElementById('scrollProgress');
+    window.addEventListener('scroll', () => {
+      const scrollTop = window.scrollY;
+      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+      const progress = (scrollTop / docHeight) * 100;
+      scrollProgress.style.width = progress + '%';
+    }, { passive: true });
+
+    /* ═══════════════════════════════════════════
+       PARALLAX ORBS ON SCROLL
+       ═══════════════════════════════════════════ */
+    const orbs = document.querySelectorAll('.orb');
+    window.addEventListener('scroll', () => {
+      const scrollY = window.scrollY;
+      orbs.forEach((orb, i) => {
+        const speed = 0.05 + (i * 0.02);
+        orb.style.transform = `translateY(${scrollY * speed}px)`;
+      });
+    }, { passive: true });
+
+    /* ═══════════════════════════════════════════
+       STAGGERED GRID REVEAL
+       ═══════════════════════════════════════════ */
+    document.querySelectorAll('.innovation-grid, .feature-grid, .usecase-grid').forEach(grid => {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const items = entry.target.querySelectorAll('.reveal');
+            items.forEach((item, i) => {
+              setTimeout(() => {
+                item.classList.add('visible');
+              }, i * 120);
+            });
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.1 });
+      observer.observe(grid);
+    });
+
+    /* ═══════════════════════════════════════════
+       BACK TO TOP
+       ═══════════════════════════════════════════ */
+    const backToTop = document.getElementById('backToTop');
+    if (backToTop) {
+      window.addEventListener('scroll', () => {
+        backToTop.classList.toggle('visible', window.scrollY > 600);
+      }, { passive: true });
+      backToTop.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
+
+    /* ═══════════════════════════════════════════
+       FAQ ACCORDION
+       ═══════════════════════════════════════════ */
+    document.querySelectorAll('.faq-question').forEach(q => {
+      q.addEventListener('click', () => {
+        const item = q.closest('.faq-item');
+        const isOpen = item.classList.contains('open');
+        document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+        if (!isOpen) item.classList.add('open');
+      });
+      q.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault(); q.click();
+        }
+      });
+      q.setAttribute('tabindex', '0');
+      q.setAttribute('role', 'button');
+      q.setAttribute('aria-expanded', 'false');
+    });
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.faq-item')) {
+        document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+      }
+    });
+
+    /* ═══════════════════════════════════════════
+       CHAT TYPING ANIMATION
+       ═══════════════════════════════════════════ */
+    function typewriterEffect(element, text, speed = 28) {
+      return new Promise(resolve => {
+        element.textContent = '';
+        let i = 0;
+        function type() {
+          if (i < text.length) {
+            element.textContent += text.charAt(i);
+            i++;
+            setTimeout(type, speed + Math.random() * 15);
+          } else {
+            resolve();
+          }
+        }
+        type();
+      });
+    }
+
+    const chatObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const msgs = entry.target.querySelectorAll('.chat-msg');
+          msgs.forEach((msg, i) => {
+            const textSpan = msg.querySelector('span:last-child');
+            const originalText = textSpan.textContent;
+            textSpan.textContent = '';
+            msg.style.opacity = '0';
+            msg.style.transform = 'translateY(14px)';
+            msg.style.animation = 'none';
+            setTimeout(async () => {
+              msg.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+              msg.style.opacity = '1';
+              msg.style.transform = 'translateY(0)';
+              await typewriterEffect(textSpan, originalText, 22);
+            }, i * 1800);
+          });
+          chatObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.4 });
+
+    const chatDemo = document.querySelector('.chat-demo');
+    if (chatDemo) chatObserver.observe(chatDemo);
   </script>
 </body>
 </html>
