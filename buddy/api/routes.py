@@ -1,164 +1,263 @@
-"""REST API Routes for Buddy"""
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from database.db import get_db
-from database.models import Agent, Message, Conversation, Memory
-from models.schemas import (
-    AgentCreate, AgentResponse, MessageCreate, MessageResponse,
-    ConversationCreate, ConversationResponse, ChatRequest,
-    SkillExecute,
-)
-from agent.orchestrator import get_or_create_agent, remove_agent
-from agent.memory import get_memory
-from agent.skills import registry
+"""Buddy API Routes — REST endpoints for agent and conversation management"""
+import logging
+import uuid
+from datetime import datetime, timezone
 
-router = APIRouter(prefix="/api", tags=["api"])
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
+
+from database.db import async_session
+from database.models import Agent as AgentModel, Conversation as ConvModel, Message as MsgModel, Memory as MemModel
+from sqlalchemy import select, desc, delete
+from agent.orchestrator import Orchestrator
+from agent.skills import SkillsRegistry
+
+logger = logging.getLogger("buddy.api")
+router = APIRouter(prefix="/api")
+
+orchestrator = Orchestrator()
+skills_registry = SkillsRegistry()
+
+
+class AgentCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    role: str = Field(default="custom", max_length=32)
+    personality: str = Field(default="friendly and helpful", max_length=256)
+    instructions: str = Field(default="", max_length=4096)
+
+
+class ChatRequest(BaseModel):
+    agent_id: str
+    content: str = Field(..., min_length=1)
+    conversation_id: str | None = None
+
+
+class ConvCreate(BaseModel):
+    title: str = Field(..., min_length=1)
+    agent_ids: list[str] = Field(default_factory=list)
+
+
+class SkillExecute(BaseModel):
+    skill_name: str
+    agent_id: str
+    parameters: dict = Field(default_factory=dict)
 
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "service": "Buddy"}
+    return {"status": "ok", "service": "Buddy Platform", "active_agents": orchestrator.active_agents}
 
 
-# ─── Agents ───
-
-@router.post("/agents", response_model=AgentResponse, status_code=201)
-async def create_agent(body: AgentCreate, db: AsyncSession = Depends(get_db)):
-    agent = Agent(name=body.name, role=body.role, personality=body.personality,
-                  instructions=body.instructions, avatar=body.avatar)
-    db.add(agent)
-    await db.commit()
-    await db.refresh(agent)
-    get_or_create_agent(agent.id, agent.name, agent.personality, agent.instructions)
-    return agent
-
-
-@router.get("/agents", response_model=list[AgentResponse])
-async def list_agents(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Agent).where(Agent.is_active == True).order_by(Agent.created_at.desc()))
-    return list(result.scalars().all())
+@router.get("/agents")
+async def list_agents():
+    async with async_session() as session:
+        result = await session.execute(
+            select(AgentModel).where(AgentModel.is_active == True).order_by(desc(AgentModel.created_at))
+        )
+        return [
+            {
+                "id": a.id, "name": a.name, "role": a.role,
+                "personality": a.personality, "instructions": a.instructions,
+                "avatar": a.avatar or a.name[0].upper(), "is_active": a.is_active,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in result.scalars().all()
+        ]
 
 
-@router.get("/agents/{agent_id}", response_model=AgentResponse)
-async def get_agent(agent_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Agent).where(Agent.id == agent_id))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    return agent
+@router.get("/agents/{agent_id}")
+async def get_agent(agent_id: str):
+    async with async_session() as session:
+        result = await session.execute(select(AgentModel).where(AgentModel.id == agent_id))
+        a = result.scalars().first()
+        if not a:
+            raise HTTPException(404, "Agent not found")
+        return {
+            "id": a.id, "name": a.name, "role": a.role,
+            "personality": a.personality, "instructions": a.instructions,
+            "avatar": a.avatar or a.name[0].upper(), "is_active": a.is_active,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        }
+
+
+@router.post("/agents", status_code=201)
+async def create_agent(data: AgentCreate):
+    agent_id = f"agent-{uuid.uuid4().hex[:8]}"
+    async with async_session() as session:
+        agent = AgentModel(
+            id=agent_id, name=data.name, role=data.role,
+            personality=data.personality, instructions=data.instructions,
+            avatar=data.name[0].upper(), is_active=True,
+        )
+        session.add(agent)
+        await session.commit()
+        return {
+            "id": agent.id, "name": agent.name, "role": agent.role,
+            "personality": agent.personality, "instructions": agent.instructions,
+            "avatar": agent.avatar, "is_active": agent.is_active,
+            "created_at": agent.created_at.isoformat() if agent.created_at else None,
+        }
 
 
 @router.delete("/agents/{agent_id}", status_code=204)
-async def delete_agent(agent_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Agent).where(Agent.id == agent_id))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    agent.is_active = False
-    await db.commit()
-    remove_agent(agent_id)
+async def delete_agent(agent_id: str):
+    async with async_session() as session:
+        result = await session.execute(select(AgentModel).where(AgentModel.id == agent_id))
+        agent = result.scalars().first()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        await session.delete(agent)
+        await session.commit()
+        orchestrator.evict_engine(agent_id)
 
 
-# ─── Conversations ───
-
-@router.post("/conversations", response_model=ConversationResponse, status_code=201)
-async def create_conversation(body: ConversationCreate, db: AsyncSession = Depends(get_db)):
-    conv = Conversation(title=body.title, agent_ids=body.agent_ids)
-    db.add(conv)
-    await db.commit()
-    await db.refresh(conv)
-    return conv
-
-
-@router.get("/conversations", response_model=list[ConversationResponse])
-async def list_conversations(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Conversation).order_by(Conversation.updated_at.desc()))
-    return list(result.scalars().all())
-
-
-@router.get("/conversations/{conv_id}", response_model=ConversationResponse)
-async def get_conversation(conv_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Conversation).where(Conversation.id == conv_id))
-    conv = result.scalar_one_or_none()
-    if not conv:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    return conv
+@router.get("/conversations")
+async def list_conversations():
+    async with async_session() as session:
+        result = await session.execute(
+            select(ConvModel).order_by(desc(ConvModel.updated_at))
+        )
+        return [
+            {
+                "id": c.id, "title": c.title, "agent_ids": c.agent_ids or [],
+                "created_at": c.created_at.isoformat() if c.created_at else None,
+                "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+            }
+            for c in result.scalars().all()
+        ]
 
 
-# ─── Messages ───
-
-@router.get("/conversations/{conv_id}/messages", response_model=list[MessageResponse])
-async def list_messages(conv_id: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Message).where(Message.conversation_id == conv_id).order_by(Message.created_at.asc())
-    )
-    return list(result.scalars().all())
-
-
-@router.post("/messages", response_model=MessageResponse, status_code=201)
-async def create_message(body: MessageCreate, db: AsyncSession = Depends(get_db)):
-    msg = Message(agent_id=body.agent_id, conversation_id=None, role=body.role, content=body.content)
-    db.add(msg)
-    await db.commit()
-    await db.refresh(msg)
-    return msg
+@router.get("/conversations/{conv_id}")
+async def get_conversation(conv_id: str):
+    async with async_session() as session:
+        result = await session.execute(select(ConvModel).where(ConvModel.id == conv_id))
+        c = result.scalars().first()
+        if not c:
+            raise HTTPException(404, "Conversation not found")
+        return {
+            "id": c.id, "title": c.title, "agent_ids": c.agent_ids or [],
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+        }
 
 
-# ─── Chat ───
+@router.post("/conversations", status_code=201)
+async def create_conversation(data: ConvCreate):
+    conv_id = f"conv-{uuid.uuid4().hex[:8]}"
+    async with async_session() as session:
+        conv = ConvModel(id=conv_id, title=data.title, agent_ids=data.agent_ids)
+        session.add(conv)
+        await session.commit()
+        return {
+            "id": conv.id, "title": conv.title, "agent_ids": conv.agent_ids or [],
+            "created_at": conv.created_at.isoformat() if conv.created_at else None,
+            "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+        }
+
+
+@router.get("/conversations/{conv_id}/messages")
+async def get_messages(conv_id: str):
+    async with async_session() as session:
+        result = await session.execute(
+            select(MsgModel).where(MsgModel.conversation_id == conv_id).order_by(MsgModel.created_at)
+        )
+        return [
+            {
+                "id": m.id, "agent_id": m.agent_id, "conversation_id": m.conversation_id,
+                "role": m.role, "content": m.content,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in result.scalars().all()
+        ]
+
 
 @router.post("/chat")
-async def chat(body: ChatRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Agent).where(Agent.id == body.agent_id))
-    agent = result.scalar_one_or_none()
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
+async def chat(data: ChatRequest):
+    async with async_session() as session:
+        result = await session.execute(select(AgentModel).where(AgentModel.id == data.agent_id))
+        agent = result.scalars().first()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
 
-    conv_id = body.conversation_id
-    if not conv_id:
-        conv = Conversation(title=f"Chat with {agent.name}", agent_ids=[agent.id])
-        db.add(conv)
-        await db.commit()
-        await db.refresh(conv)
-        conv_id = conv.id
+        conv_id = data.conversation_id
+        if not conv_id:
+            conv_id = f"conv-{uuid.uuid4().hex[:8]}"
+            conv = ConvModel(id=conv_id, title=f"Chat with {agent.name}", agent_ids=[agent.id])
+            session.add(conv)
+            await session.commit()
+        elif data.conversation_id:
+            session.expire_all()
 
-    buddy = get_or_create_agent(agent.id, agent.name, agent.personality, agent.instructions)
-    memory_manager = get_memory(agent.id)
-    memory_context = await memory_manager.recall_context()
+    history_result = None
+    if conv_id:
+        async with async_session() as s2:
+            msgs = await s2.execute(
+                select(MsgModel).where(MsgModel.conversation_id == conv_id).order_by(MsgModel.created_at).limit(20)
+            )
+            history_result = [
+                {"role": m.role, "content": m.content}
+                for m in msgs.scalars().all()
+            ]
 
-    response = await buddy.chat(body.content, memory_context)
+    response = await orchestrator.chat(
+        agent_id=agent.id,
+        agent_name=agent.name,
+        instructions=agent.instructions or f"You are {agent.name}, a {agent.role} agent.",
+        message=data.content,
+        history=history_result,
+    )
 
-    user_msg = Message(agent_id=agent.id, conversation_id=conv_id, role="user", content=body.content)
-    assistant_msg = Message(agent_id=agent.id, conversation_id=conv_id, role="assistant", content=response["content"])
-    db.add_all([user_msg, assistant_msg])
-    await db.commit()
+    async with async_session() as s3:
+        user_msg = MsgModel(
+            id=f"msg-{uuid.uuid4().hex[:8]}",
+            agent_id=agent.id, conversation_id=conv_id,
+            role="user", content=data.content,
+        )
+        assistant_msg = MsgModel(
+            id=f"msg-{uuid.uuid4().hex[:8]}",
+            agent_id=agent.id, conversation_id=conv_id,
+            role="assistant", content=response,
+        )
+        s3.add_all([user_msg, assistant_msg])
+        conv = await s3.execute(select(ConvModel).where(ConvModel.id == conv_id))
+        c = conv.scalars().first()
+        if c:
+            c.updated_at = datetime.now(timezone.utc)
+        await s3.commit()
 
     return {
         "agent_id": agent.id,
-        "content": response["content"],
+        "content": response,
         "conversation_id": conv_id,
-        "tool_calls": response.get("tool_calls", [])
+        "tool_calls": [],
     }
 
 
-# ─── Memories ───
-
 @router.get("/agents/{agent_id}/memories")
-async def list_memories(agent_id: str, query: str = None, top_k: int = 20):
-    memory_manager = get_memory(agent_id)
-    memories = await memory_manager.recall(query=query, top_k=top_k)
-    return [{"id": m.id, "content": m.content, "memory_type": m.memory_type, "importance": m.importance,
-             "created_at": m.created_at.isoformat()} for m in memories]
+async def get_agent_memories(agent_id: str, query: str | None = None, limit: int = 20):
+    async with async_session() as session:
+        stmt = select(MemModel).where(MemModel.agent_id == agent_id)
+        if query:
+            stmt = stmt.where(MemModel.content.contains(query))
+        stmt = stmt.order_by(desc(MemModel.created_at)).limit(limit)
+        result = await session.execute(stmt)
+        return [
+            {
+                "id": m.id, "agent_id": m.agent_id,
+                "content": m.content, "memory_type": m.memory_type,
+                "importance": m.importance,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in result.scalars().all()
+        ]
 
-
-# ─── Skills ───
 
 @router.get("/skills")
 async def list_skills():
-    return registry.list_all()
+    return skills_registry.list()
 
 
 @router.post("/skills/execute")
-async def execute_skill(body: SkillExecute):
-    result = await registry.execute(body.skill_name, **body.parameters)
+async def execute_skill(data: SkillExecute):
+    result = await skills_registry.execute(data.skill_name, data.parameters)
     return {"result": result}
