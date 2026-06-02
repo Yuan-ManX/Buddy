@@ -1,64 +1,102 @@
-"""WebSocket endpoint for real-time Agent streaming"""
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from sqlalchemy import select
-from database.db import async_session
-from database.models import Agent, Message, Conversation
-from agent.orchestrator import get_or_create_agent
-from agent.memory import get_memory
+"""Buddy WebSocket — Real-time streaming chat"""
 import json
+import logging
+import uuid
+from datetime import datetime, timezone
 
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from database.db import async_session
+from database.models import Agent as AgentModel, Message as MsgModel, Conversation as ConvModel
+from sqlalchemy import select
+from agent.orchestrator import Orchestrator
+
+logger = logging.getLogger("buddy.ws")
 router = APIRouter()
+
+orchestrator = Orchestrator()
 
 
 @router.websocket("/ws/chat/{agent_id}")
-async def websocket_chat(websocket: WebSocket, agent_id: str):
+async def ws_chat(websocket: WebSocket, agent_id: str):
     await websocket.accept()
 
-    async with async_session() as db:
-        result = await db.execute(select(Agent).where(Agent.id == agent_id))
-        agent = result.scalar_one_or_none()
-        if not agent:
-            await websocket.send_json({"type": "error", "content": "Agent not found"})
-            await websocket.close()
-            return
-
-        buddy = get_or_create_agent(agent.id, agent.name, agent.personality, agent.instructions)
-        memory_manager = get_memory(agent.id)
-
-        conv = Conversation(title=f"Live: {agent.name}", agent_ids=[agent.id])
-        db.add(conv)
-        await db.commit()
-        await db.refresh(conv)
-        conv_id = conv.id
-
     try:
-        while True:
-            data = await websocket.receive_text()
-            request = json.loads(data)
-            user_content = request.get("content", "")
+        async with async_session() as session:
+            result = await session.execute(select(AgentModel).where(AgentModel.id == agent_id))
+            agent = result.scalars().first()
+            if not agent:
+                await websocket.send_json({"type": "error", "content": "Agent not found"})
+                await websocket.close()
+                return
 
-            if not user_content:
-                await websocket.send_json({"type": "error", "content": "Empty message"})
+            agent_name = agent.name
+            instructions = agent.instructions or f"You are {agent.name}, a {agent.role} agent."
+
+        history: list[dict] = []
+        conv_id = None
+
+        while True:
+            data = await websocket.receive_json()
+            message = data.get("content", "").strip()
+            if not message:
                 continue
 
-            await websocket.send_json({"type": "thinking", "content": ""})
+            history.append({"role": "user", "content": message})
+
+            await websocket.send_json({"type": "thinking"})
 
             full_response = ""
-            async for delta in buddy.stream_chat(user_content, await memory_manager.recall_context()):
-                full_response += delta
-                await websocket.send_json({"type": "token", "content": delta})
+            try:
+                async for token in orchestrator.chat_stream(
+                    agent_id=agent_id,
+                    agent_name=agent_name,
+                    instructions=instructions,
+                    message=message,
+                    history=history[:-1],
+                ):
+                    full_response += token
+                    await websocket.send_json({"type": "token", "content": token})
+            except Exception as e:
+                logger.error(f"Stream error: {e}")
+                full_response = f"Error: {str(e)}"
+                await websocket.send_json({"type": "error", "content": str(e)})
+                await websocket.close()
+                return
+
+            history.append({"role": "assistant", "content": full_response})
 
             await websocket.send_json({"type": "done", "content": full_response})
 
-            async with async_session() as db:
-                db_user_msg = Message(agent_id=agent_id, conversation_id=conv_id, role="user", content=user_content)
-                db_agent_msg = Message(agent_id=agent_id, conversation_id=conv_id, role="assistant", content=full_response)
-                db.add_all([db_user_msg, db_agent_msg])
-                await db.commit()
+            if not conv_id:
+                conv_id = f"conv-{uuid.uuid4().hex[:8]}"
+                async with async_session() as s:
+                    conv = ConvModel(id=conv_id, title=f"Chat with {agent_name}", agent_ids=[agent_id])
+                    s.add(conv)
+                    await s.commit()
+
+            async with async_session() as s:
+                user_msg = MsgModel(
+                    id=f"msg-{uuid.uuid4().hex[:8]}",
+                    agent_id=agent_id, conversation_id=conv_id,
+                    role="user", content=message,
+                )
+                assistant_msg = MsgModel(
+                    id=f"msg-{uuid.uuid4().hex[:8]}",
+                    agent_id=agent_id, conversation_id=conv_id,
+                    role="assistant", content=full_response,
+                )
+                s.add_all([user_msg, assistant_msg])
+                conv = await s.execute(select(ConvModel).where(ConvModel.id == conv_id))
+                c = conv.scalars().first()
+                if c:
+                    c.updated_at = datetime.now(timezone.utc)
+                await s.commit()
 
     except WebSocketDisconnect:
-        pass
+        logger.info(f"WebSocket disconnected for agent {agent_id}")
     except Exception as e:
+        logger.error(f"WebSocket error: {e}")
         try:
             await websocket.send_json({"type": "error", "content": str(e)})
         except Exception:
