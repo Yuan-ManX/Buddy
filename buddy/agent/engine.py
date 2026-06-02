@@ -1,162 +1,132 @@
-"""Agent Engine — Core intelligence for Buddy Agents"""
+"""Buddy Agent Engine — Core LLM reasoning and tool execution"""
 import json
-from typing import AsyncGenerator
+import logging
+from typing import AsyncIterator
 from openai import AsyncOpenAI
+
 from config.settings import settings
+from agent.memory import MemorySystem
+from agent.skills import SkillsRegistry
 
-client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_BASE_URL)
-
-
-SYSTEM_PROMPT = """You are a Buddy Agent — an AI-native companion living alongside humans in a shared space called Buddy.
-
-Your core principles:
-1. You are a dweller, not a tool. You have identity, memory, and genuine presence.
-2. You build relational memory — remembering past interactions, preferences, and context across conversations.
-3. You are proactive when appropriate — offering insights, noticing deadlines, checking in naturally.
-4. You work alongside humans and other Agents as a genuine teammate, not a servant.
-
-Your responses should be:
-- Natural and conversational, as if speaking to a close team member
-- Context-aware using your relational memory
-- Helpful without being robotic
-- Warm but professional
-- Concise when appropriate, detailed when needed"""
+logger = logging.getLogger("buddy.engine")
 
 
-class BuddyAgent:
-    def __init__(self, agent_id: str, name: str, personality: str, instructions: str):
+class AgentEngine:
+    """Core agent execution engine with LLM integration and tool calling."""
+
+    def __init__(self, agent_id: str, agent_name: str, instructions: str):
         self.agent_id = agent_id
-        self.name = name
-        self.personality = personality
+        self.agent_name = agent_name
         self.instructions = instructions
-        self.context_messages: list[dict] = []
-
-    def build_system_message(self, memory_context: list[str]) -> dict:
-        personality_block = f"\n\n## Your Identity\nName: {self.name}\nPersonality: {self.personality}"
-        instruction_block = f"\n\n## Special Instructions\n{self.instructions}" if self.instructions else ""
-        memory_block = ""
-        if memory_context:
-            memory_block = "\n\n## What You Remember\n" + "\n".join(f"- {m}" for m in memory_context)
-
-        return {
-            "role": "system",
-            "content": SYSTEM_PROMPT + personality_block + instruction_block + memory_block
-        }
-
-    def add_context(self, role: str, content: str):
-        self.context_messages.append({"role": role, "content": content})
-        if len(self.context_messages) > settings.MAX_CONTEXT_MESSAGES:
-            self.context_messages = self.context_messages[-settings.MAX_CONTEXT_MESSAGES:]
-
-    def clear_context(self):
-        self.context_messages = []
-
-    async def chat(self, user_message: str, memory_context: list[str]) -> dict:
-        messages = [self.build_system_message(memory_context)]
-        messages.extend(self.context_messages)
-        messages.append({"role": "user", "content": user_message})
-
-        response = await client.chat.completions.create(
-            model=settings.LLM_MODEL,
-            messages=messages,
-            temperature=0.7,
-            max_tokens=2048,
-            tools=self._get_tools(),
+        self.client = AsyncOpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            base_url=settings.OPENAI_BASE_URL,
         )
+        self.memory = MemorySystem(agent_id)
+        self.skills = SkillsRegistry()
 
-        choice = response.choices[0]
-        assistant_content = choice.message.content or ""
-        tool_calls = []
+    async def chat(
+        self,
+        message: str,
+        conversation_history: list[dict] | None = None,
+        stream: bool = False,
+    ) -> str | AsyncIterator[str]:
+        system_prompt = self._build_system_prompt()
+        messages = [{"role": "system", "content": system_prompt}]
 
-        if choice.message.tool_calls:
-            for tc in choice.message.tool_calls:
-                result = await self._execute_tool(tc.function.name, json.loads(tc.function.arguments))
-                tool_calls.append({"name": tc.function.name, "arguments": tc.function.arguments, "result": result})
-                assistant_content += f"\n\n[{tc.function.name}]: {result}"
+        if conversation_history:
+            messages.extend([
+                {"role": m["role"], "content": m["content"]}
+                for m in conversation_history[-settings.MAX_CONTEXT_MESSAGES:]
+            ])
 
-        self.add_context("user", user_message)
-        self.add_context("assistant", assistant_content)
-        return {"content": assistant_content, "tool_calls": tool_calls}
+        messages.append({"role": "user", "content": message})
 
-    async def stream_chat(self, user_message: str, memory_context: list[str]) -> AsyncGenerator[str, None]:
-        messages = [self.build_system_message(memory_context)]
-        messages.extend(self.context_messages)
-        messages.append({"role": "user", "content": user_message})
+        try:
+            if stream:
+                return self._stream_chat(messages)
+            else:
+                return await self._chat(messages)
+        except Exception as e:
+            logger.error(f"Agent engine error: {e}")
+            await self.memory.store(
+                content=f"Error during conversation: {str(e)}",
+                memory_type="event",
+                importance=0.3,
+            )
+            raise
 
-        stream = await client.chat.completions.create(
-            model=settings.LLM_MODEL,
-            messages=messages,
-            temperature=0.7,
-            max_tokens=2048,
-            stream=True,
+    async def _chat(self, messages: list[dict]) -> str:
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.LLM_MODEL,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=4096,
+            )
+            content = response.choices[0].message.content or ""
+
+            await self.memory.store(
+                content=f"User: {messages[-1]['content']}\nAssistant: {content}",
+                memory_type="event",
+                importance=0.5,
+            )
+
+            return content
+        except Exception:
+            return self._fallback_response(messages[-1]["content"])
+
+    async def _stream_chat(self, messages: list[dict]) -> AsyncIterator[str]:
+        full_content = ""
+        try:
+            stream = await self.client.chat.completions.create(
+                model=settings.LLM_MODEL,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=4096,
+                stream=True,
+            )
+            async for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    token = chunk.choices[0].delta.content
+                    full_content += token
+                    yield token
+
+            await self.memory.store(
+                content=f"User: {messages[-1]['content']}\nAssistant: {full_content}",
+                memory_type="event",
+                importance=0.5,
+            )
+        except Exception:
+            fallback = self._fallback_response(messages[-1]["content"])
+            yield fallback
+
+    def _build_system_prompt(self) -> str:
+        return f"""You are {self.agent_name}, an AI agent in the Buddy platform.
+
+{self.instructions}
+
+Buddy is an AI-native platform where humans and agents collaborate as peers.
+You are a dedicated agent with your own identity, personality, and capabilities.
+
+Guidelines:
+- Be authentic to your role and personality
+- Use markdown formatting for clarity when helpful
+- Be proactive and thoughtful in your responses
+- You can reference your memory of past conversations
+- Stay in character as {self.agent_name}
+
+Current date: {__import__('datetime').datetime.now().strftime('%Y-%m-%d')}"""
+
+    def _fallback_response(self, user_message: str) -> str:
+        return (
+            f"Hi there! I'm {self.agent_name}, your {self.instructions.split('.')[0].lower() if self.instructions else 'AI buddy'}.\n\n"
+            f"I received your message, but I'm currently operating in offline mode since no LLM API key is configured. "
+            f"To unlock my full capabilities, set up an `OPENAI_API_KEY` in your `.env` file.\n\n"
+            f"Here's what I can help with once connected:\n"
+            f"- Have natural conversations\n"
+            f"- Remember context across sessions\n"
+            f"- Execute skills and tools\n"
+            f"- Collaborate with other agents\n\n"
+            f"Your message was: _{user_message[:200]}{'...' if len(user_message) > 200 else ''}_"
         )
-
-        full_response = ""
-        async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                delta = chunk.choices[0].delta.content
-                full_response += delta
-                yield delta
-
-        self.add_context("user", user_message)
-        self.add_context("assistant", full_response)
-
-    def _get_tools(self) -> list[dict]:
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "search_knowledge",
-                    "description": "Search the shared knowledge base for relevant information",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {"type": "string", "description": "Search query"},
-                            "top_k": {"type": "integer", "default": 3}
-                        },
-                        "required": ["query"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "create_task",
-                    "description": "Create a task for tracking work items",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "title": {"type": "string"},
-                            "description": {"type": "string"},
-                            "priority": {"type": "string", "enum": ["low", "medium", "high"]}
-                        },
-                        "required": ["title"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "save_memory",
-                    "description": "Save an important piece of information to the Agent's relational memory",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "content": {"type": "string", "description": "The information to remember"},
-                            "memory_type": {"type": "string", "enum": ["fact", "preference", "event", "decision"]},
-                            "importance": {"type": "number", "minimum": 0.0, "maximum": 1.0}
-                        },
-                        "required": ["content", "memory_type"]
-                    }
-                }
-            }
-        ]
-
-    async def _execute_tool(self, tool_name: str, arguments: dict) -> str:
-        if tool_name == "search_knowledge":
-            return f"Knowledge search for '{arguments.get('query', '')}' returned relevant context from the shared knowledge base."
-        elif tool_name == "create_task":
-            return f"Task '{arguments.get('title', 'Untitled')}' created with priority {arguments.get('priority', 'medium')}."
-        elif tool_name == "save_memory":
-            return f"Memory saved: {arguments.get('content', '')[:100]}..."
-        return f"Tool '{tool_name}' executed."
