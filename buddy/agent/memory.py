@@ -1,68 +1,109 @@
-"""Relational Memory System for Buddy Agents"""
-from sqlalchemy import select, delete, text
-from database.db import get_db
-from database.models import Memory
+"""Buddy Memory System — Relational memory for agents"""
+import json
+import logging
+from datetime import datetime
+from database.db import async_session
+from database.models import Memory as MemoryModel
+from sqlalchemy import select, func, desc
+
+logger = logging.getLogger("buddy.memory")
 
 
-class MemoryManager:
+class MemorySystem:
+    """Relational memory system for storing and retrieving agent memories."""
+
     def __init__(self, agent_id: str):
         self.agent_id = agent_id
 
-    async def store(self, content: str, memory_type: str = "fact",
-                    importance: float = 0.5, conversation_id: str = None) -> Memory:
-        async for session in get_db():
-            memory = Memory(
+    async def store(
+        self,
+        content: str,
+        memory_type: str = "event",
+        importance: float = 0.5,
+        conversation_id: str | None = None,
+    ) -> str:
+        async with async_session() as session:
+            memory = MemoryModel(
                 agent_id=self.agent_id,
                 conversation_id=conversation_id,
                 content=content,
                 memory_type=memory_type,
-                importance=importance,
+                importance=min(max(importance, 0.0), 1.0),
             )
             session.add(memory)
             await session.commit()
             await session.refresh(memory)
-            return memory
+            return memory.id
 
-    async def recall(self, query: str = None, top_k: int = 5,
-                     memory_type: str = None, min_importance: float = 0.0) -> list[Memory]:
-        async for session in get_db():
-            stmt = select(Memory).where(
-                Memory.agent_id == self.agent_id,
-                Memory.importance >= min_importance
+    async def recall(
+        self,
+        query: str | None = None,
+        memory_type: str | None = None,
+        limit: int = 10,
+    ) -> list[dict]:
+        async with async_session() as session:
+            stmt = select(MemoryModel).where(
+                MemoryModel.agent_id == self.agent_id
             )
+
             if memory_type:
-                stmt = stmt.where(Memory.memory_type == memory_type)
+                stmt = stmt.where(MemoryModel.memory_type == memory_type)
 
             if query:
-                stmt = stmt.where(Memory.content.ilike(f"%{query}%"))
+                stmt = stmt.where(MemoryModel.content.contains(query))
 
-            stmt = stmt.order_by(Memory.importance.desc(), Memory.created_at.desc()).limit(top_k)
+            stmt = stmt.order_by(desc(MemoryModel.importance), desc(MemoryModel.created_at)).limit(limit)
             result = await session.execute(stmt)
-            return list(result.scalars().all())
+            memories = result.scalars().all()
 
-    async def recall_context(self, top_k: int = 5) -> list[str]:
-        memories = await self.recall(top_k=top_k, min_importance=0.3)
-        return [m.content for m in memories]
+            return [
+                {
+                    "id": m.id,
+                    "content": m.content,
+                    "memory_type": m.memory_type,
+                    "importance": m.importance,
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                }
+                for m in memories
+            ]
 
-    async def forget(self, memory_id: str):
-        async for session in get_db():
-            stmt = delete(Memory).where(Memory.id == memory_id, Memory.agent_id == self.agent_id)
-            await session.execute(stmt)
+    async def summarize(self) -> str:
+        memories = await self.recall(limit=20)
+        if not memories:
+            return "No memories stored yet."
+
+        summary_parts = ["## Agent Memory Summary\n"]
+        for m in memories:
+            dt = m.get("created_at", "unknown")
+            content_preview = m["content"][:120]
+            summary_parts.append(
+                f"- [{m['memory_type']}] ({m['importance']:.2f}) {content_preview}..."
+            )
+        return "\n".join(summary_parts)
+
+    async def forget(self, memory_id: str) -> bool:
+        async with async_session() as session:
+            result = await session.execute(
+                select(MemoryModel).where(
+                    MemoryModel.id == memory_id,
+                    MemoryModel.agent_id == self.agent_id,
+                )
+            )
+            memory = result.scalars().first()
+            if memory:
+                await session.delete(memory)
+                await session.commit()
+                return True
+            return False
+
+    async def clear(self) -> int:
+        async with async_session() as session:
+            result = await session.execute(
+                select(MemoryModel).where(MemoryModel.agent_id == self.agent_id)
+            )
+            memories = result.scalars().all()
+            count = len(memories)
+            for m in memories:
+                await session.delete(m)
             await session.commit()
-
-    async def consolidate(self, conversation_id: str, summary: str):
-        await self.store(
-            content=summary,
-            memory_type="event",
-            importance=0.7,
-            conversation_id=conversation_id
-        )
-
-
-AGENT_MEMORIES: dict[str, MemoryManager] = {}
-
-
-def get_memory(agent_id: str) -> MemoryManager:
-    if agent_id not in AGENT_MEMORIES:
-        AGENT_MEMORIES[agent_id] = MemoryManager(agent_id)
-    return AGENT_MEMORIES[agent_id]
+            return count
