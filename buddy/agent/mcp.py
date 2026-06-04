@@ -270,6 +270,16 @@ class MCPRegistry:
             for s in self._servers.values()
         ]
 
+    def get_tool_count(self, server_id: str) -> int:
+        """Get the number of tools discovered from a server."""
+        state = self._servers.get(server_id)
+        return len(state.tools) if state else 0
+
+    def get_resource_count(self, server_id: str) -> int:
+        """Get the number of resources discovered from a server."""
+        state = self._servers.get(server_id)
+        return len(state.resources) if state else 0
+
     def disconnect_server(self, server_id: str) -> bool:
         """Disconnect from an MCP server."""
         state = self._servers.get(server_id)
