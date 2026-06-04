@@ -173,11 +173,29 @@ If issues found, provide a corrected response. Otherwise, confirm the answer."""
         tool_executor: Any = None,
         model: str = "gpt-4o-mini",
     ) -> AsyncIterator[dict]:
-        """Execute reasoning with streaming token output."""
+        """Execute reasoning with streaming phase output."""
+        start = time.time()
+
+        # Yield phase markers before executing
+        yield {"type": "phase", "phase": "observe", "content": "Analyzing request..."}
+        yield {"type": "phase", "phase": "think", "content": "Planning approach..."}
+
+        # Execute full reasoning cycle
         trace = await self.execute(system_prompt, user_message, tool_schemas, tool_executor, model)
 
-        # Simulate streaming by yielding tokens from final answer
-        for i, char in enumerate(trace.final_answer):
+        # Yield intermediate steps
+        for step in trace.steps:
+            yield {
+                "type": "step",
+                "phase": step.phase.value,
+                "content": step.content,
+                "confidence": step.confidence,
+                "elapsed_ms": step.elapsed_ms,
+            }
+
+        # Yield final answer as tokens
+        yield {"type": "phase", "phase": "act", "content": "Generating response..."}
+        for char in trace.final_answer:
             yield {
                 "type": "token",
                 "content": char,
