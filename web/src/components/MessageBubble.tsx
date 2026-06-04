@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Message as MsgType } from '../types';
-import ReactMarkdown from 'react-markdown';
+import MarkdownMessage from './MarkdownMessage';
 
 interface MessageBubbleProps {
   message: MsgType;
@@ -23,7 +23,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, agentName
       <div className={`msg-bubble ${isUser ? 'bubble-user' : 'bubble-assistant'}`}>
         <div className="msg-sender">{isUser ? 'You' : agentName}</div>
         <div className="msg-content">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
+          {isUser ? (
+            <p>{message.content}</p>
+          ) : (
+            <MarkdownMessage content={message.content} />
+          )}
         </div>
       </div>
       {isUser && (
