@@ -1,5 +1,9 @@
 import { useRef, useCallback, useState } from 'react';
-import type { WSMessage } from '../types';
+
+interface WSMessage {
+  type: 'token' | 'done' | 'error' | 'thinking';
+  content: string;
+}
 
 export function useWebSocket(agentId: string | null) {
   const wsRef = useRef<WebSocket | null>(null);
