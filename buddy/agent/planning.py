@@ -315,16 +315,32 @@ Return a JSON plan with this structure:
         executor: Any,
         model: str,
     ):
-        """Execute a single plan step."""
+        """Execute a single plan step, passing dependency results."""
         step.status = StepStatus.IN_PROGRESS
         step.started_at = datetime.now(timezone.utc).isoformat()
+
+        # Collect results from dependency steps
+        dep_results = []
+        for dep_id in step.depends_on:
+            for plan in self._plans.values():
+                for s in plan.steps:
+                    if s.id == dep_id and s.result:
+                        dep_results.append({"step": s.title, "result": s.result[:500]})
+
+        # Build context from dependency results
+        dep_context = ""
+        if dep_results:
+            dep_context = "\n\nPrevious step results:\n" + "\n".join(
+                f"- {d['step']}: {d['result']}" for d in dep_results
+            )
 
         try:
             prompt = (
                 f"Goal: {goal}\n\n"
                 f"Current step: {step.title}\n"
-                f"Description: {step.description}\n\n"
-                f"Execute this step. Provide the result concisely."
+                f"Description: {step.description}"
+                f"{dep_context}\n\n"
+                f"Execute this step using the context from previous steps. Provide the result concisely."
             )
             result = await executor(prompt, model)
             step.result = result
