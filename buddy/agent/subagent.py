@@ -4,6 +4,7 @@ Spawns lightweight sub-agents for parallel workstreams, enabling
 concurrent task execution without context pollution.
 """
 from __future__ import annotations
+import json
 import logging
 import uuid
 import asyncio
@@ -37,14 +38,16 @@ class SubAgentResult:
 
 
 class SubAgent:
-    """Lightweight worker agent for parallel task execution."""
+    """Lightweight worker agent for parallel task execution with tool access."""
 
-    def __init__(self, name: str, instructions: str, parent_agent_id: str):
+    def __init__(self, name: str, instructions: str, parent_agent_id: str, tools: list[dict] | None = None, tool_executor: Any = None):
         self.id = f"sub-{uuid.uuid4().hex[:8]}"
         self.name = name
         self.instructions = instructions
         self.parent_agent_id = parent_agent_id
         self.status = SubAgentStatus.IDLE
+        self.tools = tools or []
+        self.tool_executor = tool_executor
         self._client = AsyncOpenAI(
             api_key=settings.OPENAI_API_KEY,
             base_url=settings.OPENAI_BASE_URL,
@@ -53,23 +56,77 @@ class SubAgent:
     async def execute(self, task: str, model: str = "gpt-4o-mini") -> SubAgentResult:
         self.status = SubAgentStatus.RUNNING
         started_at = datetime.now(timezone.utc).isoformat()
+        tokens = 0
 
         try:
-            response = await self._client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": f"You are {self.name}, a sub-agent. {self.instructions}\nExecute the assigned task concisely and return results."},
-                    {"role": "user", "content": task},
-                ],
-                temperature=0.5,
-                max_tokens=2048,
-            )
+            messages: list[dict] = [
+                {"role": "system", "content": f"You are {self.name}, a sub-agent. {self.instructions}\nExecute the assigned task concisely and return results."},
+                {"role": "user", "content": task},
+            ]
 
-            content = response.choices[0].message.content or ""
-            tokens = response.usage.total_tokens if response.usage else 0
+            # Tool calling loop (up to 5 rounds)
+            for _ in range(5):
+                kwargs: dict = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.5,
+                    "max_tokens": 2048,
+                }
+                if self.tools and self.tool_executor:
+                    kwargs["tools"] = self.tools
+                    kwargs["tool_choice"] = "auto"
 
+                response = await self._client.chat.completions.create(**kwargs)
+                choice = response.choices[0]
+                if response.usage:
+                    tokens += response.usage.total_tokens
+
+                # Handle tool calls
+                if choice.message.tool_calls and self.tool_executor:
+                    messages.append({
+                        "role": "assistant",
+                        "content": choice.message.content or "",
+                        "tool_calls": [
+                            {
+                                "id": tc.id,
+                                "type": "function",
+                                "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                            }
+                            for tc in choice.message.tool_calls
+                        ],
+                    })
+                    for tc in choice.message.tool_calls:
+                        try:
+                            args = json.loads(tc.function.arguments)
+                        except json.JSONDecodeError:
+                            args = {}
+                        result = await self.tool_executor(tc.function.name, args)
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "content": result.output if hasattr(result, 'output') else str(result),
+                        })
+                    continue
+
+                # No tool calls — final answer
+                content = choice.message.content or ""
+                self.status = SubAgentStatus.COMPLETED
+                result = SubAgentResult(
+                    agent_id=self.id,
+                    task=task,
+                    result=content,
+                    status=SubAgentStatus.COMPLETED,
+                    tokens_used=tokens,
+                    started_at=started_at,
+                    completed_at=datetime.now(timezone.utc).isoformat(),
+                )
+                logger.info(f"SubAgent {self.name} completed: {tokens} tokens")
+                return result
+
+            # Max tool rounds reached
+            content = messages[-1].get("content", "Task completed after tool interactions.")
             self.status = SubAgentStatus.COMPLETED
-            result = SubAgentResult(
+            return SubAgentResult(
                 agent_id=self.id,
                 task=task,
                 result=content,
@@ -78,8 +135,6 @@ class SubAgent:
                 started_at=started_at,
                 completed_at=datetime.now(timezone.utc).isoformat(),
             )
-            logger.info(f"SubAgent {self.name} completed: {tokens} tokens")
-            return result
 
         except Exception as e:
             self.status = SubAgentStatus.FAILED
@@ -125,7 +180,7 @@ class SubAgentOrchestrator:
         logger.info(f"Spawning {len(workers)} sub-agents for parallel execution")
         results = await asyncio.gather(
             *[w.execute(task.get("task", ""), model) for w, task in zip(workers, tasks)],
-            return_exceptions=False,
+            return_exceptions=True,
         )
 
         successful = sum(1 for r in results if r.status == SubAgentStatus.COMPLETED)
