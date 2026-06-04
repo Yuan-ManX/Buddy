@@ -74,20 +74,6 @@ class DreamEngine:
         self._dream_task = asyncio.create_task(self._dream_loop())
         logger.info(f"Dream engine started for agent {self.agent_id} (interval: {interval}s)")
 
-    def get_insights(self, limit: int = 20) -> list[dict]:
-        """Get stored dream insights."""
-        return [
-            {
-                "id": i.id,
-                "phase": i.phase.value,
-                "content": i.content,
-                "source_memories": i.source_memories,
-                "confidence": i.confidence,
-                "created_at": i.created_at,
-            }
-            for i in self._insights[-limit:]
-        ]
-
     def get_status(self) -> dict:
         """Get dream engine status."""
         return {
@@ -372,12 +358,13 @@ class DreamEngine:
         return None
 
     def get_insights(self, limit: int = 20) -> list[dict]:
-        """Get recent dream insights."""
+        """Get recent dream insights with source memories."""
         return [
             {
                 "id": i.id,
                 "phase": i.phase.value,
                 "content": i.content,
+                "source_memories": i.source_memories,
                 "confidence": i.confidence,
                 "created_at": i.created_at,
             }
