@@ -45,17 +45,22 @@ class HierarchicalMemory:
         self._embedding_client = None
         self._embedding_model = settings.EMBEDDING_MODEL
         self._semantic_enabled = settings.SEMANTIC_MEMORY_ENABLED
+        self._db_loaded = False
         if load_from_db:
-            asyncio.create_task(self._load_recent_memories())
+            self._load_from_db_flag = True
+        else:
+            self._load_from_db_flag = False
 
-    async def _load_recent_memories(self):
-        """Load recent memories from database into short-term buffer."""
-        try:
-            memories = await self.recall_recent(limit=20)
-            self._short_term_buffer.extend(memories)
-            logger.debug(f"Loaded {len(memories)} recent memories for agent {self.agent_id}")
-        except Exception as e:
-            logger.debug(f"Failed to load memories from DB: {e}")
+    async def _ensure_db_loaded(self):
+        """Lazily load memories from database on first access."""
+        if self._load_from_db_flag and not self._db_loaded:
+            self._db_loaded = True
+            try:
+                memories = await self.recall_recent(limit=20)
+                self._short_term_buffer.extend(memories)
+                logger.debug(f"Loaded {len(memories)} recent memories for agent {self.agent_id}")
+            except Exception as e:
+                logger.debug(f"Failed to load memories from DB: {e}")
 
     async def _get_embedding(self, text: str) -> list[float] | None:
         """Get embedding vector for text using the configured embedding model."""
@@ -191,6 +196,7 @@ class HierarchicalMemory:
         conversation_id: str | None = None,
         metadata: dict | None = None,
     ) -> str:
+        await self._ensure_db_loaded()
         async with async_session() as session:
             memory = MemoryModel(
                 agent_id=self.agent_id,
