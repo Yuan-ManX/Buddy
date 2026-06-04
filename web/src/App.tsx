@@ -1,16 +1,36 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
+import { TaskDashboard } from './components/TaskDashboard';
+import { SkillPanel } from './components/SkillPanel';
+import { MemoryViewer } from './components/MemoryViewer';
+import { AutopilotPanel } from './components/AutopilotPanel';
+import { SubAgentPanel } from './components/SubAgentPanel';
+import { ToolPanel } from './components/ToolPanel';
+import { PlanView } from './components/PlanView';
+import { WorkspaceViewer } from './components/WorkspaceViewer';
+import { DreamPanel } from './components/DreamPanel';
+import { MCPServerPanel } from './components/MCPServerPanel';
+import { CollaborationPanel } from './components/CollaborationPanel';
+import { SystemOverview } from './components/SystemOverview';
+import ApprovalPanel from './components/ApprovalPanel';
+import EventMonitor from './components/EventMonitor';
+import ErrorBoundary from './components/ErrorBoundary';
+import { ToastProvider } from './components/Toast';
 import { api } from './api/client';
-import type { Agent, Conversation, Message as MsgType } from './types';
+import type { Agent, Conversation, Message as MsgType, Task } from './types';
 import './App.css';
+
+type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview';
 
 export default function App() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<MsgType[]>([]);
+  const [activeTab, setActiveTab] = useState<TabView>('chat');
   const [showNewAgent, setShowNewAgent] = useState(false);
   const [newAgentForm, setNewAgentForm] = useState({
     name: '',
@@ -25,14 +45,16 @@ export default function App() {
     try {
       setLoading(true);
       setError(null);
-      const [agentList, convList] = await Promise.all([
+      const [agentRes, convRes, taskRes] = await Promise.all([
         api.agents.list(),
         api.conversations.list(),
+        api.tasks.list({ page_size: 50 }),
       ]);
-      setAgents(agentList);
-      setConversations(convList);
-      if (agentList.length > 0 && !selectedAgent) {
-        setSelectedAgent(agentList[0]);
+      setAgents(agentRes.items);
+      setConversations(convRes.items);
+      setTasks(taskRes.items);
+      if (agentRes.items.length > 0 && !selectedAgent) {
+        setSelectedAgent(agentRes.items[0]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -47,7 +69,7 @@ export default function App() {
 
   useEffect(() => {
     if (selectedConv) {
-      api.conversations.messages(selectedConv.id).then(setMessages).catch(console.error);
+      api.conversations.messages(selectedConv.id).then((res) => setMessages(res.items)).catch(console.error);
     } else if (selectedAgent) {
       setMessages([]);
     }
@@ -59,6 +81,7 @@ export default function App() {
       const agent = await api.agents.create(newAgentForm);
       setAgents((prev) => [agent, ...prev]);
       setSelectedAgent(agent);
+      setSelectedConv(null);
       setShowNewAgent(false);
       setNewAgentForm({ name: '', role: 'custom', personality: 'friendly and helpful', instructions: '' });
     } catch (err) {
@@ -70,11 +93,28 @@ export default function App() {
     try {
       await api.agents.delete(agentId);
       setAgents((prev) => prev.filter((a) => a.id !== agentId));
+      setConversations((prev) => prev.filter((c) => !c.agent_ids.includes(agentId)));
       if (selectedAgent?.id === agentId) {
-        setSelectedAgent(agents.length > 1 ? agents.find((a) => a.id !== agentId) || null : null);
+        const remaining = agents.filter((a) => a.id !== agentId);
+        setSelectedAgent(remaining.length > 0 ? remaining[0] : null);
+        setSelectedConv(null);
+        setMessages([]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete agent');
+    }
+  };
+
+  const handleDeleteConv = async (convId: string) => {
+    try {
+      await api.conversations.delete(convId);
+      setConversations((prev) => prev.filter((c) => c.id !== convId));
+      if (selectedConv?.id === convId) {
+        setSelectedConv(null);
+        setMessages([]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete conversation');
     }
   };
 
@@ -91,6 +131,33 @@ export default function App() {
     }
   };
 
+  const handleConversationCreated = useCallback(async (convId: string) => {
+    try {
+      const convList = await api.conversations.list();
+      setConversations(convList.items);
+      const newConv = convList.items.find((c) => c.id === convId);
+      if (newConv) {
+        setSelectedConv(newConv);
+      }
+    } catch {
+      // silently fail
+    }
+  }, []);
+
+  const handleTaskCreated = useCallback(async () => {
+    try {
+      const taskRes = await api.tasks.list({ page_size: 50 });
+      setTasks(taskRes.items);
+    } catch {}
+  }, []);
+
+  const handleSelectAgent = useCallback((agent: Agent) => {
+    setSelectedAgent(agent);
+    setSelectedConv(null);
+    setMessages([]);
+    setActiveTab('chat');
+  }, []);
+
   if (loading) {
     return (
       <div className="app-loading">
@@ -101,16 +168,22 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <ErrorBoundary>
+      <ToastProvider>
+        <div className="app">
       <Sidebar
         agents={agents}
         conversations={conversations}
         selectedAgent={selectedAgent}
         selectedConv={selectedConv}
-        onSelectAgent={(a) => { setSelectedAgent(a); setSelectedConv(null); }}
-        onSelectConv={(c) => { setSelectedConv(c); }}
+        activeTab={activeTab}
+        onSelectAgent={handleSelectAgent}
+        onSelectConv={(c) => { setSelectedConv(c); setActiveTab('chat'); }}
         onNewAgent={() => setShowNewAgent(true)}
         onNewConv={handleCreateConv}
+        onDeleteAgent={handleDeleteAgent}
+        onDeleteConv={handleDeleteConv}
+        onSelectTab={setActiveTab}
       />
 
       <main className="main">
@@ -181,13 +254,63 @@ export default function App() {
         )}
 
         {selectedAgent ? (
-          <ChatArea
-            key={selectedAgent.id + (selectedConv?.id || '')}
-            agent={selectedAgent}
-            conversationId={selectedConv?.id || null}
-            messages={messages}
-            onMessagesUpdate={setMessages}
-          />
+          <>
+            {activeTab === 'chat' && (
+              <ChatArea
+                key={`${selectedAgent.id}-${selectedConv?.id || 'new'}`}
+                agent={selectedAgent}
+                conversationId={selectedConv?.id || null}
+                messages={messages}
+                onMessagesUpdate={setMessages}
+                onConversationCreated={handleConversationCreated}
+              />
+            )}
+            {activeTab === 'tasks' && (
+              <TaskDashboard
+                agent={selectedAgent}
+                tasks={tasks.filter((t) => t.agent_id === selectedAgent.id)}
+                onTaskCreated={handleTaskCreated}
+              />
+            )}
+            {activeTab === 'skills' && (
+              <SkillPanel agent={selectedAgent} />
+            )}
+            {activeTab === 'memory' && (
+              <MemoryViewer agent={selectedAgent} />
+            )}
+            {activeTab === 'autopilot' && (
+              <AutopilotPanel agent={selectedAgent} />
+            )}
+            {activeTab === 'subagents' && (
+              <SubAgentPanel agent={selectedAgent} />
+            )}
+            {activeTab === 'tools' && (
+              <ToolPanel />
+            )}
+            {activeTab === 'plans' && (
+              <PlanView />
+            )}
+            {activeTab === 'workspace' && (
+              <WorkspaceViewer />
+            )}
+            {activeTab === 'dream' && (
+              <DreamPanel />
+            )}
+            {activeTab === 'mcp' && (
+              <MCPServerPanel />
+            )}
+            {activeTab === 'collaboration' && (
+              <CollaborationPanel />
+            )}
+            {activeTab === 'approval' && (
+              <ApprovalPanel />
+            )}
+            {activeTab === 'events' && (
+              <EventMonitor />
+            )}
+          </>
+        ) : activeTab === 'overview' ? (
+          <SystemOverview />
         ) : (
           <div className="main-empty">
             <div className="main-empty-icon">B</div>
@@ -200,5 +323,7 @@ export default function App() {
         )}
       </main>
     </div>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }
