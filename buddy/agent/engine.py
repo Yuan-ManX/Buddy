@@ -25,6 +25,7 @@ from agent.workspace import AgentWorkspace
 from agent.subagent import SubAgentOrchestrator
 from agent.dream import DreamEngine, DreamCycleResult
 from agent.approval import approval_engine
+from agent.events import event_bus, Event, EventType
 
 logger = logging.getLogger("buddy.engine")
 
@@ -228,7 +229,7 @@ class AgentEngine:
         # Context compaction
         if context_depth > self.context.config.max_messages:
             system_prompt = messages[0]["content"] if messages[0]["role"] == "system" else ""
-            messages = self.context.compact(messages, system_prompt)
+            messages = await self.context.compact(messages, system_prompt)
 
         # Model routing
         routing = model_router.route(user_message, context_depth)
@@ -257,6 +258,18 @@ class AgentEngine:
             memory_type="event",
             importance=0.5,
         )
+
+        # Publish events
+        event_bus.publish(Event(
+            type=EventType.MESSAGE_SENT,
+            source=self.agent_id,
+            data={"agent_id": self.agent_id, "content": user_message[:200], "role": "user"},
+        ))
+        event_bus.publish(Event(
+            type=EventType.MESSAGE_RECEIVED,
+            source=self.agent_id,
+            data={"agent_id": self.agent_id, "content": content[:200], "role": "assistant"},
+        ))
 
         return content
 
@@ -313,25 +326,108 @@ class AgentEngine:
 
         if context_depth > self.context.config.max_messages:
             system_prompt = messages[0]["content"] if messages[0]["role"] == "system" else ""
-            messages = self.context.compact(messages, system_prompt)
+            messages = await self.context.compact(messages, system_prompt)
 
         routing = model_router.route(user_message, context_depth)
 
         try:
+            create_kwargs: dict = {
+                "model": routing.model,
+                "messages": messages,
+                "temperature": routing.temperature,
+                "max_tokens": routing.max_tokens,
+                "stream": True,
+            }
+            if enable_tools:
+                create_kwargs["tools"] = tool_registry.get_openai_schemas()
+                create_kwargs["tool_choice"] = "auto"
+
             stream = await self._retry_with_backoff(
-                self.client.chat.completions.create,
-                model=routing.model,
-                messages=messages,
-                temperature=routing.temperature,
-                max_tokens=routing.max_tokens,
-                stream=True,
+                self.client.chat.completions.create, **create_kwargs
             )
+
+            # Collect tool call deltas while streaming text content
+            tool_call_deltas: dict[int, dict] = {}
             async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    token = chunk.choices[0].delta.content
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    token = delta.content
                     full_content += token
                     yield token
-            self._total_tokens_used += 1  # approximate: streaming doesn't give usage per-chunk
+                if delta.tool_calls:
+                    for tc_delta in delta.tool_calls:
+                        idx = tc_delta.index
+                        if idx not in tool_call_deltas:
+                            tool_call_deltas[idx] = {
+                                "id": tc_delta.id or "",
+                                "name": tc_delta.function.name if tc_delta.function else "",
+                                "arguments": "",
+                            }
+                        if tc_delta.id:
+                            tool_call_deltas[idx]["id"] = tc_delta.id
+                        if tc_delta.function and tc_delta.function.name:
+                            tool_call_deltas[idx]["name"] = tc_delta.function.name
+                        if tc_delta.function and tc_delta.function.arguments:
+                            tool_call_deltas[idx]["arguments"] += tc_delta.function.arguments
+
+            # If tool calls were requested, execute them and get final response
+            if tool_call_deltas:
+                self._iteration_budget.consume()
+                yield "\n\n"  # visual separator
+
+                # Build assistant tool call message for context
+                tool_call_entries = []
+                for idx in sorted(tool_call_deltas.keys()):
+                    tc = tool_call_deltas[idx]
+                    try:
+                        args = json.loads(tc["arguments"]) if tc["arguments"] else {}
+                    except json.JSONDecodeError:
+                        args = {}
+                    tool_call_entries.append({"id": tc["id"], "name": tc["name"], "arguments": args})
+
+                # Append assistant message with tool calls to message history
+                messages.append({
+                    "role": "assistant",
+                    "content": full_content or "",
+                    "tool_calls": [
+                        {
+                            "id": e["id"],
+                            "type": "function",
+                            "function": {"name": e["name"], "arguments": json.dumps(e["arguments"])},
+                        }
+                        for e in tool_call_entries
+                    ],
+                })
+
+                # Execute tools and yield results, appending to message history
+                for entry in tool_call_entries:
+                    result = await self._execute_tool_safe(entry["name"], entry["arguments"])
+                    yield f"\n[Tool: {entry['name']}]\n"
+                    yield result.output if result.success else f"Error: {result.error}"
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": entry["id"],
+                        "content": result.output if result.success else f"Error: {result.error}",
+                    })
+
+                # Get final response with tool results in context
+                final_text = ""
+                final_stream = await self._retry_with_backoff(
+                    self.client.chat.completions.create,
+                    model=routing.model,
+                    messages=messages,
+                    temperature=routing.temperature,
+                    max_tokens=routing.max_tokens,
+                    stream=True,
+                )
+                async for chunk in final_stream:
+                    if chunk.choices[0].delta.content:
+                        token = chunk.choices[0].delta.content
+                        final_text += token
+                        yield token
+                full_content = final_text
+
+            self._total_tokens_used += 1  # approximate
 
         except Exception as e:
             logger.warning(f"Streaming LLM call failed, using fallback: {e}")
@@ -343,11 +439,33 @@ class AgentEngine:
             memory_type="event",
             importance=0.5,
         )
+        event_bus.publish(Event(
+            type=EventType.MESSAGE_RECEIVED,
+            source=self.agent_id,
+            data={"agent_id": self.agent_id, "content": full_content[:200], "role": "assistant"},
+        ))
 
     # ── Tool Calling ────────────────────────────────────────
 
     async def _execute_tool(self, name: str, arguments: dict) -> ToolResult:
-        """Execute a tool from the registry."""
+        """Execute a tool from the registry with unified approval check."""
+        event_bus.publish(Event(
+            type=EventType.TOOL_CALLED,
+            source=self.agent_id,
+            data={"agent_id": self.agent_id, "tool_name": name, "args": {k: str(v)[:80] for k, v in arguments.items()}},
+        ))
+
+        # Unified approval check for all tool execution paths
+        if settings.TOOL_APPROVAL_ENABLED:
+            approved = await approval_engine.check(name, arguments)
+            if not approved:
+                event_bus.publish(Event(
+                    type=EventType.TOOL_DENIED,
+                    source=self.agent_id,
+                    data={"agent_id": self.agent_id, "tool_name": name},
+                ))
+                return ToolResult(name=name, success=False, error="Tool execution denied by safety policy")
+
         # Check if it's a skill
         skill = self.skills.get(name)
         if skill:
@@ -358,8 +476,11 @@ class AgentEngine:
             except Exception as e:
                 return ToolResult(name=name, success=False, error=str(e))
 
-        # Delegate to tool registry
         return await tool_registry.execute(name, arguments)
+
+    async def _execute_tool_safe(self, name: str, arguments: dict) -> ToolResult:
+        """Execute a tool with safety check (delegates to unified _execute_tool)."""
+        return await self._execute_tool(name, arguments)
 
     async def _handle_tool_calls(self, messages: list[dict], choice, routing) -> str:
         """Process tool calls from LLM response with approval gating."""
@@ -381,25 +502,13 @@ class AgentEngine:
             "tool_calls": tool_call_messages,
         })
 
-        # Execute each tool call with approval check
+        # Execute each tool call (approval is handled by _execute_tool)
         for tc in choice.message.tool_calls:
             try:
                 args = json.loads(tc.function.arguments)
             except json.JSONDecodeError:
                 args = {}
 
-            # Check approval for tool execution
-            if settings.TOOL_APPROVAL_ENABLED:
-                approved = await approval_engine.check(tc.function.name, args)
-                if not approved:
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc.id,
-                        "content": f"Tool execution denied by safety policy: {tc.function.name}",
-                    })
-                    continue
-
-            # Delegate to subagent orchestrator for parallel work if needed
             result = await self._execute_tool(tc.function.name, args)
             messages.append({
                 "role": "tool",
