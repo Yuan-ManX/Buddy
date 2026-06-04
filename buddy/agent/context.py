@@ -65,12 +65,12 @@ class ContextManager:
             total += 4  # role overhead
         return total
 
-    def compact(
+    async def compact(
         self,
         messages: list[dict],
         system_prompt: str = "",
     ) -> list[dict]:
-        """Compact messages to fit within token budget."""
+        """Compact messages to fit within token budget, using LLM summarization when available."""
         if not messages:
             return []
 
@@ -98,7 +98,7 @@ class ContextManager:
 
         # Summarize older messages if needed
         if older and len(non_system) > self.config.summarize_threshold:
-            summary = self._generate_summary(older)
+            summary = await self._generate_summary(older)
             self._summary_cache = summary[:500]
             token_budget -= self.estimate_tokens(summary)
 
@@ -115,22 +115,15 @@ class ContextManager:
         other_msgs = [m for m in result if m.get("role") != "system"]
         return system_msgs + other_msgs
 
-    def _generate_summary(self, messages: list[dict]) -> str:
-        """Generate a concise summary of older messages, using LLM if available."""
+    async def _generate_summary(self, messages: list[dict]) -> str:
+        """Generate a summary using LLM when available, with heuristic fallback."""
         if not messages:
             return ""
-
-        # Try LLM-powered summarization first
+        # Try LLM summarization first
         if self._client:
-            try:
-                import asyncio
-                return asyncio.get_event_loop().run_until_complete(
-                    self._generate_summary_llm(messages)
-                )
-            except Exception as e:
-                logger.debug(f"LLM summarization unavailable, using heuristic: {e}")
-
-        # Fallback: keyword-based heuristic summary
+            llm_summary = await self._generate_summary_llm(messages)
+            if llm_summary:
+                return llm_summary
         return self._generate_summary_heuristic(messages)
 
     async def _generate_summary_llm(self, messages: list[dict]) -> str:
