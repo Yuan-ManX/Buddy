@@ -3,7 +3,23 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.orm import DeclarativeBase
 from config.settings import settings
 
-engine = create_async_engine(settings.DATABASE_URL, echo=False)
+# SQLite with aiosqlite uses NullPool; pool params only apply to server-based DBs
+_db_url = settings.DATABASE_URL
+if "sqlite" in _db_url or "aiosqlite" in _db_url:
+    engine = create_async_engine(
+        _db_url,
+        echo=False,
+        pool_pre_ping=True,
+    )
+else:
+    engine = create_async_engine(
+        _db_url,
+        echo=False,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+        pool_recycle=3600,
+    )
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
