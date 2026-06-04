@@ -185,7 +185,6 @@ class AutopilotEngine:
         """Gracefully stop all autopilot tasks."""
         for ap_id in list(self._autopilots.keys()):
             self.cancel(ap_id)
-        self._scheduler_tasks.clear()
         logger.info("Autopilot engine shut down")
 
 
