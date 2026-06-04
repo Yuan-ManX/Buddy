@@ -3,6 +3,7 @@ import type { Agent, Message as MsgType } from '../types';
 import { MessageBubble } from './MessageBubble';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { api } from '../api/client';
+import { getRoleColor, getRoleColorSecondary } from '../utils/colors';
 
 interface ChatAreaProps {
   agent: Agent;
@@ -282,29 +283,3 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     </div>
   );
 };
-
-function getRoleColor(role: string): string {
-  const colors: Record<string, string> = {
-    strategy: '#3b82f6',
-    engineering: '#f59e0b',
-    design: '#8b5cf6',
-    research: '#06b6d4',
-    writing: '#10b981',
-    companion: '#ec4899',
-    custom: '#6366f1',
-  };
-  return colors[role] || '#6366f1';
-}
-
-function getRoleColorSecondary(role: string): string {
-  const colors: Record<string, string> = {
-    strategy: '#6366f1',
-    engineering: '#f97316',
-    design: '#a78bfa',
-    research: '#0891b2',
-    writing: '#059669',
-    companion: '#f472b6',
-    custom: '#818cf8',
-  };
-  return colors[role] || '#818cf8';
-}
