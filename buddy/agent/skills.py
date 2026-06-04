@@ -133,10 +133,15 @@ class SkillPipeline:
         context = initial_input or {}
 
         for i, (skill_name, params) in enumerate(self._steps):
-            merged_params = {**context, **params}
-            result = await self.registry.execute(skill_name, merged_params)
-            results.append(f"[Step {i+1}: {skill_name}]\n{result}")
-            context["_previous_result"] = result
+            try:
+                merged_params = {**context, **params}
+                result = await self.registry.execute(skill_name, merged_params)
+                results.append(f"[Step {i+1}: {skill_name}]\n{result}")
+                context["_previous_result"] = result
+            except Exception as e:
+                results.append(f"[Step {i+1}: {skill_name}]\nError: {str(e)}")
+                logger.error(f"Pipeline step {i+1} ({skill_name}) failed: {e}")
+                # Continue with remaining steps
 
         return "\n\n".join(results)
 
@@ -144,8 +149,9 @@ class SkillPipeline:
 class SkillsRegistry:
     """Registry of LLM-powered composable skills with pipeline support."""
 
-    def __init__(self, client: AsyncOpenAI | None = None):
+    def __init__(self, client: AsyncOpenAI | None = None, model: str = "gpt-4o-mini"):
         self._client = client
+        self._model = model
         self._skills: dict[str, dict] = {
             "summarize": {
                 "name": "summarize",
@@ -287,7 +293,7 @@ class SkillsRegistry:
             return None
         try:
             response = await self._client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=self._model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=max_tokens,
                 temperature=temperature,
