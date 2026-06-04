@@ -9,12 +9,10 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from database.db import async_session
 from database.models import Agent as AgentModel, Message as MsgModel, Conversation as ConvModel
 from sqlalchemy import select
-from agent.orchestrator import Orchestrator
+from agent.shared import orchestrator
 
 logger = logging.getLogger("buddy.ws")
 router = APIRouter()
-
-orchestrator = Orchestrator()
 
 
 @router.websocket("/ws/chat/{agent_id}")
