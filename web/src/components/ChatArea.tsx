@@ -8,7 +8,8 @@ interface ChatAreaProps {
   agent: Agent;
   conversationId: string | null;
   messages: MsgType[];
-  onMessagesUpdate: (msgs: MsgType[]) => void;
+  onMessagesUpdate: (msgs: MsgType[] | ((prev: MsgType[]) => MsgType[])) => void;
+  onConversationCreated: (convId: string) => void;
 }
 
 export const ChatArea: React.FC<ChatAreaProps> = ({
@@ -16,23 +17,24 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   conversationId,
   messages,
   onMessagesUpdate,
+  onConversationCreated,
 }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [currentConvId, setCurrentConvId] = useState<string | null>(conversationId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { connect, send, disconnect, streaming } = useWebSocket(agent.id);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingContent]);
+    setCurrentConvId(conversationId);
+  }, [conversationId]);
 
   useEffect(() => {
-    if (streamingContent) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [streamingContent]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamingContent]);
 
   const handleSendRest = async () => {
     if (!input.trim() || loading) return;
@@ -41,40 +43,47 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setLoading(true);
 
     const userMsg: MsgType = {
-      id: Date.now().toString(),
+      id: `u-${Date.now()}`,
       agent_id: agent.id,
       role: 'user',
       content,
       created_at: new Date().toISOString(),
     };
-    onMessagesUpdate([...messages, userMsg]);
+
+    onMessagesUpdate((prev) => [...prev, userMsg]);
 
     try {
       const res = await api.chat({
         agent_id: agent.id,
         content,
-        conversation_id: conversationId || undefined,
+        conversation_id: currentConvId || undefined,
       });
 
+      if (res.conversation_id && !currentConvId) {
+        setCurrentConvId(res.conversation_id);
+        onConversationCreated(res.conversation_id);
+      }
+
       const assistantMsg: MsgType = {
-        id: (Date.now() + 1).toString(),
+        id: `a-${Date.now()}`,
         agent_id: agent.id,
         role: 'assistant',
         content: res.content,
         created_at: new Date().toISOString(),
       };
-      onMessagesUpdate([...messages, userMsg, assistantMsg]);
+      onMessagesUpdate((prev) => [...prev, assistantMsg]);
     } catch (err) {
       const errMsg: MsgType = {
-        id: (Date.now() + 1).toString(),
+        id: `e-${Date.now()}`,
         agent_id: agent.id,
         role: 'assistant',
-        content: `Error: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        content: `Error: ${err instanceof Error ? err.message : 'Unknown error occurred'}`,
         created_at: new Date().toISOString(),
       };
-      onMessagesUpdate([...messages, userMsg, errMsg]);
+      onMessagesUpdate((prev) => [...prev, errMsg]);
     } finally {
       setLoading(false);
+      setTimeout(() => inputRef.current?.focus(), 50);
     }
   };
 
@@ -85,12 +94,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setStreamingContent('');
 
     const userMsg: MsgType = {
-      id: Date.now().toString(),
+      id: `u-${Date.now()}`,
       agent_id: agent.id,
       role: 'user',
       content,
       created_at: new Date().toISOString(),
     };
+
+    onMessagesUpdate((prev) => [...prev, userMsg]);
 
     let fullContent = '';
 
@@ -100,33 +111,39 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         setStreamingContent(fullContent);
       },
       (full) => {
+        if (!currentConvId) {
+          const newConvId = `conv-${Date.now().toString(36)}`;
+          setCurrentConvId(newConvId);
+          onConversationCreated(newConvId);
+        }
+
         const assistantMsg: MsgType = {
-          id: (Date.now() + 1).toString(),
+          id: `a-${Date.now()}`,
           agent_id: agent.id,
           role: 'assistant',
           content: full,
           created_at: new Date().toISOString(),
         };
-        onMessagesUpdate([...messages, userMsg, assistantMsg]);
+        onMessagesUpdate((prev) => [...prev, assistantMsg]);
         setStreamingContent('');
         disconnect();
       },
       (err) => {
         const errMsg: MsgType = {
-          id: (Date.now() + 1).toString(),
+          id: `e-${Date.now()}`,
           agent_id: agent.id,
           role: 'assistant',
           content: `Error: ${err}`,
           created_at: new Date().toISOString(),
         };
-        onMessagesUpdate([...messages, userMsg, errMsg]);
+        onMessagesUpdate((prev) => [...prev, errMsg]);
         setStreamingContent('');
         disconnect();
       }
     );
 
     send(content);
-    setInput('');
+    setTimeout(() => inputRef.current?.focus(), 50);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -136,11 +153,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
+  const suggestionPrompts: Record<string, string[]> = {
+    strategy: ['Help me plan a product launch', 'Analyze the risks of this approach', 'Create a decision framework'],
+    engineering: ['Review this code for improvements', 'Help me debug an issue', 'Explain how async works'],
+    research: ['What are the latest trends in AI?', 'Summarize recent developments', 'Compare these two technologies'],
+    companion: ['How can I improve my daily routine?', 'Give me some life advice', "What's a good habit to build?"],
+  };
+
+  const suggestions = suggestionPrompts[agent.role] || suggestionPrompts.companion || [];
+
   return (
     <div className="chat-area">
       <div className="chat-header">
         <div className="chat-header-info">
-          <div className="chat-header-avatar" style={{ background: '#3b82f6' }}>
+          <div
+            className="chat-header-avatar"
+            style={{
+              background: `linear-gradient(135deg, ${getRoleColor(agent.role)}, ${getRoleColorSecondary(agent.role)})`,
+            }}
+          >
             {agent.name.charAt(0).toUpperCase()}
           </div>
           <div>
@@ -152,7 +183,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
         <div className="chat-header-actions">
           <button className="chat-mode-btn" onClick={handleSendWS} disabled={streaming}>
-            {streaming ? 'Streaming...' : 'Live Mode'}
+            {streaming ? 'Streaming...' : 'Live Stream'}
           </button>
         </div>
       </div>
@@ -160,14 +191,28 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       <div className="chat-messages">
         {messages.length === 0 && !streamingContent && (
           <div className="chat-welcome">
-            <div className="chat-welcome-icon">B</div>
+            <div
+              className="chat-welcome-icon"
+              style={{
+                background: `linear-gradient(135deg, ${getRoleColor(agent.role)}, ${getRoleColorSecondary(agent.role)})`,
+              }}
+            >
+              {agent.name.charAt(0).toUpperCase()}
+            </div>
             <h2>Start a conversation with {agent.name}</h2>
             <p>
               {agent.name} is a {agent.role} Agent. {agent.personality}
             </p>
             <div className="chat-suggestions">
-              {['What can you help me with?', 'Tell me about yourself.', 'Let\'s brainstorm some ideas.'].map((s) => (
-                <button key={s} className="chat-suggestion" onClick={() => { setInput(s); }}>
+              {suggestions.map((s) => (
+                <button
+                  key={s}
+                  className="chat-suggestion"
+                  onClick={() => {
+                    setInput(s);
+                    inputRef.current?.focus();
+                  }}
+                >
                   {s}
                 </button>
               ))}
@@ -179,7 +224,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         ))}
         {streamingContent && (
           <div className="msg-row msg-assistant">
-            <div className="msg-avatar">{agent.name.charAt(0).toUpperCase()}</div>
+            <div
+              className="msg-avatar"
+              style={{
+                background: `linear-gradient(135deg, ${getRoleColor(agent.role)}, ${getRoleColorSecondary(agent.role)})`,
+              }}
+            >
+              {agent.name.charAt(0).toUpperCase()}
+            </div>
             <div className="msg-bubble bubble-assistant">
               <div className="msg-sender">{agent.name}</div>
               <div className="msg-content streaming">{streamingContent}</div>
@@ -188,7 +240,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         )}
         {loading && (
           <div className="msg-row msg-assistant">
-            <div className="msg-avatar">{agent.name.charAt(0).toUpperCase()}</div>
+            <div
+              className="msg-avatar"
+              style={{
+                background: `linear-gradient(135deg, ${getRoleColor(agent.role)}, ${getRoleColorSecondary(agent.role)})`,
+              }}
+            >
+              {agent.name.charAt(0).toUpperCase()}
+            </div>
             <div className="msg-bubble bubble-assistant">
               <div className="typing-indicator">
                 <span className="typing-dot" />
@@ -203,6 +262,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       <div className="chat-input-area">
         <textarea
+          ref={inputRef}
           className="chat-input"
           placeholder={`Message ${agent.name}...`}
           value={input}
@@ -216,9 +276,35 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           onClick={handleSendRest}
           disabled={!input.trim() || loading || streaming}
         >
-          Send
+          {loading ? '...' : 'Send'}
         </button>
       </div>
     </div>
   );
 };
+
+function getRoleColor(role: string): string {
+  const colors: Record<string, string> = {
+    strategy: '#3b82f6',
+    engineering: '#f59e0b',
+    design: '#8b5cf6',
+    research: '#06b6d4',
+    writing: '#10b981',
+    companion: '#ec4899',
+    custom: '#6366f1',
+  };
+  return colors[role] || '#6366f1';
+}
+
+function getRoleColorSecondary(role: string): string {
+  const colors: Record<string, string> = {
+    strategy: '#6366f1',
+    engineering: '#f97316',
+    design: '#a78bfa',
+    research: '#0891b2',
+    writing: '#059669',
+    companion: '#f472b6',
+    custom: '#818cf8',
+  };
+  return colors[role] || '#818cf8';
+}
