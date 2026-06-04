@@ -5,9 +5,13 @@ validation, streaming execution, parallel safe execution, and automatic
 result aggregation with trust-level classification.
 """
 from __future__ import annotations
+import ast
 import json
 import logging
 import asyncio
+import operator
+import tempfile
+import os
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from enum import Enum
@@ -266,28 +270,69 @@ async def _tool_web_search(args: dict) -> str:
     })
 
 
+# Safe math evaluator using AST — avoids eval() security risks
+_SAFE_OPERATORS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Pow: operator.pow,
+    ast.USub: operator.neg,
+    ast.Mod: operator.mod,
+}
+
+
+def _safe_eval(expr: str) -> float:
+    """Safely evaluate a simple math expression using AST parsing."""
+    tree = ast.parse(expr.strip(), mode="eval")
+    return _safe_eval_node(tree.body)  # type: ignore[arg-type]
+
+
+def _safe_eval_node(node: ast.AST) -> float:
+    """Recursively evaluate a safe AST node."""
+    if isinstance(node, ast.Constant):
+        return float(node.value)
+    if isinstance(node, ast.BinOp):
+        op = _SAFE_OPERATORS.get(type(node.op))
+        if op is None:
+            raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
+        return op(_safe_eval_node(node.left), _safe_eval_node(node.right))
+    if isinstance(node, ast.UnaryOp):
+        op = _SAFE_OPERATORS.get(type(node.op))
+        if op is None:
+            raise ValueError(f"Unsupported unary operator: {type(node.op).__name__}")
+        return op(_safe_eval_node(node.operand))
+    raise ValueError(f"Unsupported expression type: {type(node).__name__}")
+
+
 async def _tool_calculate(args: dict) -> str:
-    """Safely evaluate mathematical expressions."""
+    """Safely evaluate mathematical expressions using AST parsing."""
     expression = args.get("expression", "")
     if not expression:
         return "Error: expression is required"
-    allowed = set("0123456789+-*/().,%^ ")
-    sanitized = "".join(c for c in expression if c in allowed)
     try:
-        result = eval(sanitized, {"__builtins__": {}}, {})
+        result = _safe_eval(expression)
         return json.dumps({"expression": expression, "result": result})
     except Exception as e:
         return json.dumps({"expression": expression, "error": str(e)})
 
 
 async def _tool_read_file(args: dict) -> str:
-    """Read a file from the filesystem."""
+    """Read a file from the workspace filesystem."""
     import os
     path = args.get("path", "")
     if not path:
         return "Error: path is required"
+
+    # Restrict to workspace directory or a safe temp directory
+    from config.settings import settings
+    workspace_root = os.path.join(os.path.expanduser("~"), ".buddy_workspaces")
+    expanded = os.path.realpath(os.path.expanduser(path))
+    if not expanded.startswith(workspace_root) and not expanded.startswith(tempfile.gettempdir()):
+        return json.dumps({"path": path, "error": "Access denied: path outside workspace"})
+
     try:
-        with open(os.path.expanduser(path), "r", encoding="utf-8") as f:
+        with open(expanded, "r", encoding="utf-8") as f:
             content = f.read()
         return json.dumps({"path": path, "content": content[:10000], "truncated": len(content) > 10000})
     except FileNotFoundError:
@@ -297,15 +342,22 @@ async def _tool_read_file(args: dict) -> str:
 
 
 async def _tool_write_file(args: dict) -> str:
-    """Write content to a file."""
+    """Write content to a file in the workspace filesystem."""
     import os
     path = args.get("path", "")
     content = args.get("content", "")
     if not path:
         return "Error: path is required"
+
+    # Restrict to workspace directory
+    workspace_root = os.path.join(os.path.expanduser("~"), ".buddy_workspaces")
+    expanded = os.path.realpath(os.path.expanduser(path))
+    if not expanded.startswith(workspace_root):
+        return json.dumps({"path": path, "error": "Access denied: path outside workspace"})
+
     try:
-        os.makedirs(os.path.dirname(os.path.expanduser(path)) or ".", exist_ok=True)
-        with open(os.path.expanduser(path), "w", encoding="utf-8") as f:
+        os.makedirs(os.path.dirname(expanded) or ".", exist_ok=True)
+        with open(expanded, "w", encoding="utf-8") as f:
             f.write(content)
         return json.dumps({"path": path, "written": len(content), "success": True})
     except Exception as e:
