@@ -2,8 +2,8 @@ const BASE_URL = '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
     ...options,
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
   });
   if (!res.ok) {
     const body = await res.text();
@@ -30,7 +30,7 @@ export const api = {
     create: (data: { name: string; role: string; personality: string; instructions: string }) =>
       request<import('../types').Agent>('/agents', { method: 'POST', body: JSON.stringify(data) }),
     delete: (id: string) => request<void>(`/agents/${id}`, { method: 'DELETE' }),
-    update: (id: string, data: { name?: string; personality?: string; instructions?: string }) =>
+    update: (id: string, data: { name?: string; role?: string; personality?: string; instructions?: string }) =>
       request<import('../types').Agent>(`/agents/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -46,6 +46,11 @@ export const api = {
     create: (data: { title: string; agent_ids: string[] }) =>
       request<import('../types').Conversation>('/conversations', {
         method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (convId: string, data: { title?: string; agent_ids?: string[] }) =>
+      request<import('../types').Conversation>(`/conversations/${convId}`, {
+        method: 'PUT',
         body: JSON.stringify(data),
       }),
     delete: (convId: string) =>
@@ -320,7 +325,6 @@ export const api = {
   },
 
   chatStream: (data: { agent_id: string; content: string; conversation_id?: string; enable_tools?: boolean; enable_reasoning?: boolean }) => {
-    const qs = new URLSearchParams();
     // SSE streaming via fetch
     return fetch(`${BASE_URL}/chat/stream`, {
       method: 'POST',
