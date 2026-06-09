@@ -42,96 +42,153 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span className="sidebar-logo-icon">B</span>
           <span className="sidebar-logo-text">Buddy</span>
         </div>
+        <button
+          className={`sidebar-tab dashboard-nav ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => onSelectTab('dashboard')}
+          title="System Dashboard"
+        >
+          📊
+        </button>
       </div>
 
-      {selectedAgent && (
-        <div className="sidebar-tabs">
-          <button
-            className={`sidebar-tab ${activeTab === 'chat' ? 'active' : ''}`}
-            onClick={() => onSelectTab('chat')}
-          >
-            Chat
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === 'tasks' ? 'active' : ''}`}
-            onClick={() => onSelectTab('tasks')}
-          >
-            Tasks
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === 'skills' ? 'active' : ''}`}
-            onClick={() => onSelectTab('skills')}
-          >
-            Skills
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === 'memory' ? 'active' : ''}`}
-            onClick={() => onSelectTab('memory')}
-          >
-            Memory
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === 'autopilot' ? 'active' : ''}`}
-            onClick={() => onSelectTab('autopilot')}
-          >
-            Auto
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === 'subagents' ? 'active' : ''}`}
-            onClick={() => onSelectTab('subagents')}
-          >
-            Workers
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === 'tools' ? 'active' : ''}`}
-            onClick={() => onSelectTab('tools')}
-          >
-            Tools
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === 'plans' ? 'active' : ''}`}
-            onClick={() => onSelectTab('plans')}
-          >
-            Plans
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === 'workspace' ? 'active' : ''}`}
-            onClick={() => onSelectTab('workspace')}
-          >
-            Workspace
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === 'dream' ? 'active' : ''}`}
-            onClick={() => onSelectTab('dream')}
-          >
-            Dream
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === 'mcp' ? 'active' : ''}`}
-            onClick={() => onSelectTab('mcp')}
-          >
-            MCP
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === 'collaboration' ? 'active' : ''}`}
-            onClick={() => onSelectTab('collaboration')}
-          >
-            Collab
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === 'approval' ? 'active' : ''}`}
-            onClick={() => onSelectTab('approval')}
-          >
-            Approval
-          </button>
-          <button
-            className={`sidebar-tab ${activeTab === 'events' ? 'active' : ''}`}
-            onClick={() => onSelectTab('events')}
-          >
-            Events
-          </button>
+      {/* Global tabs */}
+      <div className="sidebar-tabs">
+        <button
+          className={`sidebar-tab ${activeTab === 'nexus' ? 'active' : ''}`}
+          onClick={() => onSelectTab('nexus')}
+        >
+          Nexus
+        </button>
+        <button
+          className={`sidebar-tab ${activeTab === 'forge' ? 'active' : ''}`}
+          onClick={() => onSelectTab('forge')}
+        >
+          Forge
+        </button>
+        <button
+          className={`sidebar-tab ${activeTab === 'guard' ? 'active' : ''}`}
+          onClick={() => onSelectTab('guard')}
+        >
+          Guard
+        </button>
+        <button
+          className={`sidebar-tab ${activeTab === 'pulse' ? 'active' : ''}`}
+          onClick={() => onSelectTab('pulse')}
+        >
+          Pulse
+        </button>
+      </div>
+
+      {/* Agent-specific tabs */}
+      {selectedAgent ? (
+        <div>
+          <div className="sidebar-tabs-divider" />
+          <div className="sidebar-tabs">
+            <button
+              className={`sidebar-tab ${activeTab === 'chat' ? 'active' : ''}`}
+              onClick={() => onSelectTab('chat')}
+            >
+              Chat
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'tasks' ? 'active' : ''}`}
+              onClick={() => onSelectTab('tasks')}
+            >
+              Tasks
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'skills' ? 'active' : ''}`}
+              onClick={() => onSelectTab('skills')}
+            >
+              Skills
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'memory' ? 'active' : ''}`}
+              onClick={() => onSelectTab('memory')}
+            >
+              Memory
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'identity' ? 'active' : ''}`}
+              onClick={() => onSelectTab('identity')}
+            >
+              Identity
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'autopilot' ? 'active' : ''}`}
+              onClick={() => onSelectTab('autopilot')}
+            >
+              Auto
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'subagents' ? 'active' : ''}`}
+              onClick={() => onSelectTab('subagents')}
+            >
+              Workers
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'tools' ? 'active' : ''}`}
+              onClick={() => onSelectTab('tools')}
+            >
+              Tools
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'plans' ? 'active' : ''}`}
+              onClick={() => onSelectTab('plans')}
+            >
+              Plans
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'workspace' ? 'active' : ''}`}
+              onClick={() => onSelectTab('workspace')}
+            >
+              Workspace
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'dream' ? 'active' : ''}`}
+              onClick={() => onSelectTab('dream')}
+            >
+              Dream
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'mcp' ? 'active' : ''}`}
+              onClick={() => onSelectTab('mcp')}
+            >
+              MCP
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'collaboration' ? 'active' : ''}`}
+              onClick={() => onSelectTab('collaboration')}
+            >
+              Collab
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'squads' ? 'active' : ''}`}
+              onClick={() => onSelectTab('squads')}
+            >
+              Squads
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'trajectory' ? 'active' : ''}`}
+              onClick={() => onSelectTab('trajectory')}
+            >
+              Trace
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'approval' ? 'active' : ''}`}
+              onClick={() => onSelectTab('approval')}
+            >
+              Approval
+            </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'events' ? 'active' : ''}`}
+              onClick={() => onSelectTab('events')}
+            >
+              Events
+            </button>
+          </div>
         </div>
-      )}
+      ) : null}
 
       <div className="sidebar-section">
         <div className="sidebar-section-header">
