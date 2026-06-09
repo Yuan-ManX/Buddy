@@ -1,4 +1,4 @@
-export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview';
+export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse';
 
 export interface Agent {
   id: string;
@@ -141,6 +141,8 @@ export interface SystemOverview {
   autopilots: { total: number };
   plans: { total: number };
   mcp_servers: { total: number };
+  templates: { total: number };
+  costs: { total_cost: number; total_tokens: number; total_tasks: number; agent_count: number; estimated_monthly: number };
   routing: {
     total_requests: number;
     tier_distribution: Record<string, number>;
@@ -148,6 +150,190 @@ export interface SystemOverview {
   };
   tools: { total_executions: number; successful: number; failed: number; success_rate: string };
   orchestrator: { active_agents: number; trust_relationships: number; collaboration_threads: number };
+  nexus: { total_runtimes: number; connected_platforms: number; monitor_running: boolean; total_requests: number; total_errors: number };
+  forge: { total_skills: number; total_patterns: number; patterns_ready_for_promotion: number; total_executions: number; avg_success_rate: number };
+  squads: { total_squads: number; total_members: number; total_tasks_processed: number; avg_trust_score: number };
+  trajectory: { total_compressed: number; active_traces: number; successful: number; failed: number; success_rate: number; avg_quality_score: number };
+}
+
+// ── Nexus Types ──
+
+export interface RuntimeInfo {
+  runtime_id: string;
+  platform: string;
+  status: string;
+  agent_id: string;
+  capabilities: string[];
+  connected_at: string;
+  last_heartbeat: string;
+  request_count: number;
+  error_count: number;
+}
+
+export interface NexusSummary {
+  total_runtimes: number;
+  connected_platforms: number;
+  platform_distribution: Record<string, number>;
+  status_distribution: Record<string, number>;
+  monitor_running: boolean;
+  total_requests: number;
+  total_errors: number;
+}
+
+// ── Forge Types ──
+
+export interface ForgedSkill {
+  skill_id: string;
+  name: string;
+  description: string;
+  category: string;
+  status: string;
+  tags: string[];
+  versions: Array<{
+    version: number;
+    prompt_template: string;
+    parameters: Array<{ name: string; type: string; description: string; required: boolean }>;
+    created_at: string;
+    success_rate: number;
+    execution_count: number;
+    avg_tokens: number;
+    avg_latency_ms: number;
+  }>;
+  parent_skill_id: string;
+  author_agent_id: string;
+  created_at: string;
+  updated_at: string;
+  total_executions: number;
+  average_rating: number;
+  latest_success_rate: number;
+}
+
+export interface InteractionPattern {
+  pattern_id: string;
+  description: string;
+  trigger_phrases: string[];
+  action_sequence: string[];
+  frequency: number;
+  confidence: number;
+  suggested_category: string;
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface ForgeStats {
+  total_skills: number;
+  total_patterns: number;
+  patterns_ready_for_promotion: number;
+  by_category: Record<string, number>;
+  by_status: Record<string, number>;
+  total_executions: number;
+  avg_success_rate: number;
+}
+
+// ── Identity Types ──
+
+export interface IdentityProfile {
+  profile_id: string;
+  agent_id: string;
+  user_id: string;
+  display_name: string;
+  attributes: Record<string, {
+    key: string;
+    value: unknown;
+    category: string;
+    confidence: number;
+    source: string;
+    evidence_count: number;
+    first_observed: string;
+    last_updated: string;
+    is_locked: boolean;
+  }>;
+  attributes_count: number;
+  personas: Array<{
+    name: string;
+    type: string;
+    description: string;
+    tone: string;
+    verbosity: string;
+    expertise_areas: string[];
+    is_active: boolean;
+    created_at: string;
+  }>;
+  active_persona: string;
+  total_interactions: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Trajectory Types ──
+
+export interface ExecutionTrace {
+  trace_id: string;
+  agent_id: string;
+  task_id: string;
+  step_count: number;
+  status: string;
+  started_at: string;
+  completed_at: string;
+  total_tokens: number;
+  total_latency_ms: number;
+  quality_score: number;
+}
+
+export interface CompressedTrajectory {
+  original_trace_id: string;
+  agent_id: string;
+  summary: string;
+  key_decisions: string[];
+  tools_used: string[];
+  success: boolean;
+  quality_score: number;
+  num_steps_original: number;
+  num_steps_compressed: number;
+  tokens_saved: number;
+  patterns_extracted: string[];
+  compressed_at: string;
+}
+
+// ── Squad Types ──
+
+export interface SquadMember {
+  agent_id: string;
+  agent_name: string;
+  role: string;
+  trust_score: number;
+  tasks_completed: number;
+  tasks_failed: number;
+  success_rate: number;
+  expertise: string[];
+  joined_at: string;
+}
+
+export interface DiscussionThread {
+  thread_id: string;
+  squad_id: string;
+  task_id: string;
+  topic: string;
+  status: string;
+  message_count: number;
+  created_by: string;
+  created_at: string;
+  resolved_at: string;
+  resolution: string;
+}
+
+export interface Squad {
+  squad_id: string;
+  name: string;
+  description: string;
+  status: string;
+  member_count: number;
+  members: SquadMember[];
+  leader_id: string;
+  discussions: DiscussionThread[];
+  total_tasks: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface RoutingAnalysis {
@@ -314,6 +500,31 @@ export interface DreamCycleResult {
   memories_processed: number;
   memories_consolidated: number;
   duration_seconds: number;
+}
+
+// ── Nudge System ──
+
+export interface NudgeSuggestion {
+  id: string;
+  agent_id: string;
+  type: 'consolidate' | 'cleanup' | 'reorganize' | 'summarize';
+  title: string;
+  description: string;
+  affected_memory_ids: string[];
+  priority: number;
+  auto_apply: boolean;
+  status: 'pending' | 'applied' | 'reverted' | 'dismissed';
+  created_at: string;
+  applied_at: string | null;
+  reverted_at: string | null;
+}
+
+export interface NudgeStats {
+  agent_id: string;
+  total_suggestions: number;
+  by_status: Record<string, number>;
+  active_snapshots: number;
+  last_analysis: string | null;
 }
 
 // ── Engine Stats ──
