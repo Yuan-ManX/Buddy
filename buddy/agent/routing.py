@@ -160,9 +160,17 @@ class ModelRouter:
 
     def get_usage_stats(self) -> dict:
         total = sum(self._usage_stats.values())
+        total_cost = sum(
+            self._usage_stats[t] * self.tiers[t].cost_multiplier
+            for t in ModelTier
+        )
+        avg_cost = f"${total_cost / total:.4f}" if total > 0 else "$0.0000"
         return {
             "tiers": {t.value: c for t, c in self._usage_stats.items()},
             "total": total,
+            "total_requests": total,
+            "tier_distribution": {t.value: c for t, c in self._usage_stats.items()},
+            "average_cost": avg_cost,
             "estimated_savings": f"{self._estimate_savings():.0f}%",
         }
 
