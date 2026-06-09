@@ -1,7 +1,6 @@
 import React from 'react';
-import type { Agent, Conversation } from '../types';
-
-type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview';
+import type { Agent, Conversation, TabView } from '../types';
+import { getRoleColor } from '../utils/colors';
 
 interface SidebarProps {
   agents: Agent[];
@@ -14,7 +13,9 @@ interface SidebarProps {
   onNewAgent: () => void;
   onNewConv: () => void;
   onDeleteAgent: (agentId: string) => void;
+  onEditAgent?: (agent: Agent) => void;
   onDeleteConv: (convId: string) => void;
+  onRenameConv?: (convId: string, title: string) => void;
   onSelectTab: (tab: TabView) => void;
 }
 
@@ -29,7 +30,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNewAgent,
   onNewConv,
   onDeleteAgent,
+  onEditAgent,
   onDeleteConv,
+  onRenameConv,
   onSelectTab,
 }) => {
   return (
@@ -151,6 +154,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="sidebar-item-name">{agent.name}</div>
                 <div className="sidebar-item-role">{agent.role}</div>
               </div>
+              {onEditAgent && (
+                <button
+                  className="sidebar-item-edit"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditAgent(agent);
+                  }}
+                  title="Edit Agent"
+                >
+                  &#9998;
+                </button>
+              )}
               <button
                 className="sidebar-item-delete"
                 onClick={(e) => {
@@ -193,6 +208,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {new Date(conv.updated_at).toLocaleDateString()}
                 </div>
               </div>
+              {onRenameConv && (
+                <button
+                  className="sidebar-item-edit"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const newTitle = prompt('Rename conversation:', conv.title);
+                    if (newTitle && newTitle.trim()) {
+                      onRenameConv(conv.id, newTitle.trim());
+                    }
+                  }}
+                  title="Rename"
+                >
+                  &#9998;
+                </button>
+              )}
               <button
                 className="sidebar-item-delete"
                 onClick={(e) => {
@@ -222,16 +252,3 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </aside>
   );
 };
-
-function getRoleColor(role: string): string {
-  const colors: Record<string, string> = {
-    strategy: '#3b82f6',
-    engineering: '#f59e0b',
-    design: '#8b5cf6',
-    research: '#06b6d4',
-    writing: '#10b981',
-    companion: '#ec4899',
-    custom: '#6366f1',
-  };
-  return colors[role] || '#6366f1';
-}
