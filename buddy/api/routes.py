@@ -66,6 +66,11 @@ class ConvCreate(BaseModel):
     agent_ids: list[str] = Field(default_factory=list)
 
 
+class ConvUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=256)
+    agent_ids: list[str] | None = None
+
+
 class SkillExecute(BaseModel):
     skill_name: str
     agent_id: str
@@ -387,6 +392,27 @@ async def create_conversation(data: ConvCreate):
     async with async_session() as session:
         conv = ConvModel(id=conv_id, title=data.title, agent_ids=data.agent_ids)
         session.add(conv)
+        await session.commit()
+        return {
+            "id": conv.id, "title": conv.title, "agent_ids": conv.agent_ids or [],
+            "created_at": conv.created_at.isoformat() if conv.created_at else None,
+            "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+        }
+
+
+@router.put("/conversations/{conv_id}")
+async def update_conversation(conv_id: str, data: ConvUpdate):
+    async with async_session() as session:
+        result = await session.execute(select(ConvModel).where(ConvModel.id == conv_id))
+        conv = result.scalars().first()
+        if not conv:
+            raise HTTPException(404, "Conversation not found")
+
+        if data.title is not None:
+            conv.title = data.title
+        if data.agent_ids is not None:
+            conv.agent_ids = data.agent_ids
+
         await session.commit()
         return {
             "id": conv.id, "title": conv.title, "agent_ids": conv.agent_ids or [],
@@ -1282,6 +1308,25 @@ async def get_agent_trust(agent_id: str):
 @router.get("/mcp/servers")
 async def list_mcp_servers():
     return mcp_registry.get_server_states()
+
+
+@router.get("/mcp/servers/{server_id}")
+async def get_mcp_server(server_id: str):
+    state = mcp_registry._servers.get(server_id)
+    if not state:
+        raise HTTPException(404, "MCP server not found")
+    return {
+        "id": state.config.id,
+        "name": state.config.name,
+        "transport": state.config.transport.value,
+        "endpoint": state.config.endpoint,
+        "command": state.config.command,
+        "env": state.config.env,
+        "status": state.status.value,
+        "last_error": state.last_error,
+        "tool_count": mcp_registry.get_tool_count(server_id),
+        "resource_count": mcp_registry.get_resource_count(server_id),
+    }
 
 
 @router.get("/mcp/tools")
