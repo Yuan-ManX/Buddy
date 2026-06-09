@@ -399,4 +399,227 @@ export const api = {
       return new WebSocket(`${protocol}//${host}/api/ws`);
     },
   },
+
+  nudge: {
+    analyze: (agentId: string) =>
+      request<Array<import('../types').NudgeSuggestion>>(`/agents/${agentId}/nudge/analyze`, { method: 'POST' }),
+    suggestions: (agentId: string, status?: string) => {
+      const qs = status ? `?status=${status}` : '';
+      return request<Array<import('../types').NudgeSuggestion>>(`/agents/${agentId}/nudge/suggestions${qs}`);
+    },
+    stats: (agentId: string) =>
+      request<import('../types').NudgeStats>(`/agents/${agentId}/nudge/stats`),
+    apply: (agentId: string, nudgeId: string) =>
+      request<{ success: boolean; nudge_id: string; type: string; actions: Array<Record<string, unknown>> }>(
+        `/agents/${agentId}/nudge/${nudgeId}/apply`,
+        { method: 'POST' }
+      ),
+    revert: (agentId: string, nudgeId: string) =>
+      request<{ success: boolean; nudge_id: string; action: string; restored_memory_ids: string[] }>(
+        `/agents/${agentId}/nudge/${nudgeId}/revert`,
+        { method: 'POST' }
+      ),
+    dismiss: (agentId: string, nudgeId: string) =>
+      request<{ success: boolean }>(`/agents/${agentId}/nudge/${nudgeId}/dismiss`, { method: 'POST' }),
+  },
+
+  // ── Nexus ──
+  nexus: {
+    summary: () => request<import('../types').NexusSummary>('/nexus/summary'),
+    runtimes: (platform?: string, status?: string) => {
+      const params = new URLSearchParams();
+      if (platform) params.set('platform', platform);
+      if (status) params.set('status', status);
+      return request<Array<import('../types').RuntimeInfo>>(`/nexus/runtimes?${params}`);
+    },
+    runtime: (id: string) => request<import('../types').RuntimeInfo>(`/nexus/runtimes/${id}`),
+    heartbeat: (id: string) => request<{ status: string }>(`/nexus/runtimes/${id}/heartbeat`, { method: 'POST' }),
+  },
+
+  // ── Forge ──
+  forge: {
+    skills: (category?: string, status?: string) => {
+      const params = new URLSearchParams();
+      if (category) params.set('category', category);
+      if (status) params.set('status', status);
+      return request<Array<import('../types').ForgedSkill>>(`/forge/skills?${params}`);
+    },
+    skill: (id: string) => request<import('../types').ForgedSkill>(`/forge/skills/${id}`),
+    create: (data: { name: string; description: string; category: string; prompt_template: string; parameters?: Array<Record<string, unknown>>; author_agent_id?: string; tags?: string[] }) =>
+      request<import('../types').ForgedSkill>('/forge/skills', { method: 'POST', body: JSON.stringify(data) }),
+    evolve: (skillId: string, newPromptTemplate: string, reason?: string) => {
+      const params = new URLSearchParams({ new_prompt_template: newPromptTemplate });
+      if (reason) params.set('reason', reason);
+      return request(`/forge/skills/${skillId}/evolve?${params}`, { method: 'POST' });
+    },
+    deprecate: (skillId: string) => request<{ success: boolean }>(`/forge/skills/${skillId}/deprecate`, { method: 'POST' }),
+    archive: (skillId: string) => request<{ success: boolean }>(`/forge/skills/${skillId}/archive`, { method: 'POST' }),
+    patterns: () => request<{ patterns: Array<import('../types').InteractionPattern>; promotable: Array<import('../types').InteractionPattern> }>('/forge/patterns'),
+    promote: (patternId: string, name: string, description: string, promptTemplate: string) => {
+      const params = new URLSearchParams({ name, description, prompt_template: promptTemplate });
+      return request<import('../types').ForgedSkill>(`/forge/patterns/${patternId}/promote?${params}`, { method: 'POST' });
+    },
+    stats: () => request<import('../types').ForgeStats>('/forge/stats'),
+    observe: (userMessage: string, actions: string, agentId?: string) => {
+      const params = new URLSearchParams({ user_message: userMessage, actions });
+      if (agentId) params.set('agent_id', agentId);
+      return request<{ observed: boolean }>(`/forge/observe?${params}`, { method: 'POST' });
+    },
+    recordExecution: (skillId: string, version: number, success: boolean, tokens?: number, latencyMs?: number) => {
+      const params = new URLSearchParams({ version: String(version), success: String(success) });
+      if (tokens) params.set('tokens', String(tokens));
+      if (latencyMs) params.set('latency_ms', String(latencyMs));
+      return request<{ recorded: boolean }>(`/forge/skills/${skillId}/record?${params}`, { method: 'POST' });
+    },
+  },
+
+  // ── Identity ──
+  identity: {
+    profile: (agentId: string, userId?: string) => {
+      const params = userId ? `?user_id=${userId}` : '';
+      return request<import('../types').IdentityProfile>(`/identity/profiles/${agentId}${params}`);
+    },
+    summary: (agentId: string, userId?: string) => {
+      const params = userId ? `?user_id=${userId}` : '';
+      return request(`/identity/profiles/${agentId}/summary${params}`);
+    },
+    setAttribute: (agentId: string, key: string, value: string, category?: string, confidence?: number) => {
+      const params = new URLSearchParams({ key, value, category: category || 'preference', confidence: String(confidence || 0.7) });
+      return request<{ success: boolean }>(`/identity/profiles/${agentId}/attributes?${params}`, { method: 'POST' });
+    },
+    getAttribute: (agentId: string, key: string) =>
+      request(`/identity/profiles/${agentId}/attributes/${key}`),
+    deleteAttribute: (agentId: string, key: string) =>
+      request<{ success: boolean }>(`/identity/profiles/${agentId}/attributes/${key}`, { method: 'DELETE' }),
+    lockAttribute: (agentId: string, key: string) =>
+      request<{ success: boolean }>(`/identity/profiles/${agentId}/attributes/${key}/lock`, { method: 'POST' }),
+    unlockAttribute: (agentId: string, key: string) =>
+      request<{ success: boolean }>(`/identity/profiles/${agentId}/attributes/${key}/unlock`, { method: 'POST' }),
+    addPersona: (agentId: string, data: { name: string; persona_type: string; description: string; tone: string; verbosity: string; expertise_areas: string[] }) =>
+      request(`/identity/profiles/${agentId}/personas`, { method: 'POST', body: JSON.stringify(data) }),
+    activatePersona: (agentId: string, personaName: string) =>
+      request<{ success: boolean; active_persona: string }>(`/identity/profiles/${agentId}/personas/${personaName}/activate`, { method: 'POST' }),
+    learn: (agentId: string, userMessage: string, insights: string) => {
+      const params = new URLSearchParams({ user_message: userMessage, insights });
+      return request<{ success: boolean }>(`/identity/profiles/${agentId}/learn?${params}`, { method: 'POST' });
+    },
+  },
+
+  // ── Trajectory ──
+  trajectory: {
+    start: (agentId: string, taskId?: string) => {
+      const params = new URLSearchParams({ agent_id: agentId });
+      if (taskId) params.set('task_id', taskId);
+      return request<import('../types').ExecutionTrace>(`/trajectory/start?${params}`, { method: 'POST' });
+    },
+    step: (traceId: string, action: string, content: string, tokens?: number, toolName?: string) => {
+      const params = new URLSearchParams({ action, content, tokens: String(tokens || 0), tool_name: toolName || '' });
+      return request<{ recorded: boolean }>(`/trajectory/${traceId}/step?${params}`, { method: 'POST' });
+    },
+    complete: (traceId: string, success: boolean, qualityScore?: number) => {
+      const params = new URLSearchParams({ success: String(success), quality_score: String(qualityScore || 1.0) });
+      return request<import('../types').CompressedTrajectory>(`/trajectory/${traceId}/complete?${params}`, { method: 'POST' });
+    },
+    cancel: (traceId: string) =>
+      request<{ cancelled: boolean }>(`/trajectory/${traceId}/cancel`, { method: 'POST' }),
+    get: (traceId: string) => request<import('../types').ExecutionTrace>(`/trajectory/${traceId}`),
+    recent: (limit?: number) => request<Array<import('../types').CompressedTrajectory>>(`/trajectory/recent?limit=${limit || 20}`),
+    successful: (limit?: number) => request<Array<import('../types').CompressedTrajectory>>(`/trajectory/successful?limit=${limit || 50}`),
+    failed: (limit?: number) => request<Array<import('../types').CompressedTrajectory>>(`/trajectory/failed?limit=${limit || 20}`),
+    byAgent: (agentId: string, limit?: number) => request<Array<import('../types').CompressedTrajectory>>(`/trajectory/by-agent/${agentId}?limit=${limit || 50}`),
+    stats: () => request('/trajectory/stats'),
+  },
+
+  // ── Guard ──
+  guard: {
+    stats: () => request('/guard/stats'),
+    alerts: (agentId?: string, minSeverity?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (minSeverity) params.set('min_severity', minSeverity);
+      return request<Array<any>>(`/guard/alerts?${params}`);
+    },
+    checkContent: (agentId: string, content: string) => {
+      const params = new URLSearchParams({ agent_id: agentId, content });
+      return request<any>(`/guard/check/content?${params}`, { method: 'POST' });
+    },
+    checkRateLimit: (agentId: string, windowSeconds?: number, maxRequests?: number) => {
+      const params = new URLSearchParams({ agent_id: agentId });
+      if (windowSeconds) params.set('window_seconds', String(windowSeconds));
+      if (maxRequests) params.set('max_requests', String(maxRequests));
+      return request<any>(`/guard/check/rate-limit?${params}`, { method: 'POST' });
+    },
+    checkQuota: (agentId: string, tokensUsed: number, maxTokens?: number) => {
+      const params = new URLSearchParams({ agent_id: agentId, tokens_used: String(tokensUsed) });
+      if (maxTokens) params.set('max_tokens', String(maxTokens));
+      return request<any>(`/guard/check/quota?${params}`, { method: 'POST' });
+    },
+    audit: (agentId: string, actionName: string, details?: string) => {
+      const params = new URLSearchParams({ agent_id: agentId, action_name: actionName, details: details || '{}' });
+      return request<{ audited: boolean }>(`/guard/audit?${params}`, { method: 'POST' });
+    },
+    clearAlerts: (agentId?: string) => {
+      const params = agentId ? `?agent_id=${agentId}` : '';
+      return request<{ cleared: number }>(`/guard/alerts/clear${params}`, { method: 'POST' });
+    },
+  },
+
+  // ── Pulse ──
+  pulse: {
+    health: () => request<any>('/pulse/health'),
+    component: (componentId: string) => request<any>(`/pulse/components/${componentId}`),
+    heartbeat: (componentId: string) =>
+      request<{ status: string }>(`/pulse/components/${componentId}/heartbeat`, { method: 'POST' }),
+    latency: (componentId: string) => request<any>(`/pulse/components/${componentId}/latency`),
+    errors: (componentId: string) => request<any>(`/pulse/components/${componentId}/errors`),
+    recordMetric: (componentId: string, name: string, value: number, unit?: string) => {
+      const params = new URLSearchParams({ component_id: componentId, name, value: String(value), unit: unit || 'count' });
+      return request<{ recorded: boolean }>(`/pulse/record?${params}`, { method: 'POST' });
+    },
+    anomalies: () => request<{ alerts: any[]; count: number }>('/pulse/anomalies'),
+  },
+
+  // ── Squads ──
+  squads: {
+    form: (data: { name: string; description?: string; leader_id?: string }) =>
+      request<import('../types').Squad>('/squads', { method: 'POST', body: JSON.stringify(data) }),
+    list: (status?: string) => {
+      const params = status ? `?status=${status}` : '';
+      return request<Array<import('../types').Squad>>(`/squads${params}`);
+    },
+    get: (id: string) => request<import('../types').Squad>(`/squads/${id}`),
+    activate: (id: string) => request<{ success: boolean }>(`/squads/${id}/activate`, { method: 'POST' }),
+    pause: (id: string) => request<{ success: boolean }>(`/squads/${id}/pause`, { method: 'POST' }),
+    dissolve: (id: string) => request<{ success: boolean }>(`/squads/${id}/dissolve`, { method: 'POST' }),
+    addMember: (squadId: string, agentId: string, agentName?: string, role?: string, expertise?: string) => {
+      const params = new URLSearchParams({ agent_id: agentId, agent_name: agentName || '', role: role || 'generalist', expertise: expertise || '' });
+      return request<{ success: boolean }>(`/squads/${squadId}/members?${params}`, { method: 'POST' });
+    },
+    removeMember: (squadId: string, agentId: string) =>
+      request<{ success: boolean }>(`/squads/${squadId}/members/${agentId}`, { method: 'DELETE' }),
+    setLeader: (squadId: string, agentId: string) =>
+      request<{ success: boolean }>(`/squads/${squadId}/leader/${agentId}`, { method: 'POST' }),
+    delegate: (squadId: string, taskDescription: string, expertise?: string) => {
+      const params = new URLSearchParams({ task_description: taskDescription, expertise: expertise || '' });
+      return request(`/squads/${squadId}/delegate?${params}`, { method: 'POST' });
+    },
+    recordOutcome: (squadId: string, agentId: string, success: boolean) => {
+      const params = new URLSearchParams({ agent_id: agentId, success: String(success) });
+      return request<{ recorded: boolean }>(`/squads/${squadId}/record-outcome?${params}`, { method: 'POST' });
+    },
+    startDiscussion: (squadId: string, topic: string, createdBy: string, taskId?: string) => {
+      const params = new URLSearchParams({ topic, created_by: createdBy, task_id: taskId || '' });
+      return request<import('../types').DiscussionThread>(`/squads/${squadId}/discussions?${params}`, { method: 'POST' });
+    },
+    postToDiscussion: (squadId: string, threadId: string, agentId: string, content: string) => {
+      const params = new URLSearchParams({ agent_id: agentId, content });
+      return request<{ posted: boolean }>(`/squads/${squadId}/discussions/${threadId}/post?${params}`, { method: 'POST' });
+    },
+    resolveDiscussion: (squadId: string, threadId: string, resolution?: string) => {
+      const params = new URLSearchParams({ resolution: resolution || '' });
+      return request<{ resolved: boolean }>(`/squads/${squadId}/discussions/${threadId}/resolve?${params}`, { method: 'POST' });
+    },
+    stats: () => request('/squads/stats'),
+    byAgent: (agentId: string) => request<Array<import('../types').Squad>>(`/squads/by-agent/${agentId}`),
+  },
 };
