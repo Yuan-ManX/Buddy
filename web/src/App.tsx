@@ -18,10 +18,8 @@ import EventMonitor from './components/EventMonitor';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { api } from './api/client';
-import type { Agent, Conversation, Message as MsgType, Task } from './types';
+import type { Agent, Conversation, Message as MsgType, Task, TabView } from './types';
 import './App.css';
-
-type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview';
 
 export default function App() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -40,6 +38,9 @@ export default function App() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', role: '', personality: '', instructions: '' });
 
   const loadData = useCallback(async () => {
     try {
@@ -92,16 +93,61 @@ export default function App() {
   const handleDeleteAgent = async (agentId: string) => {
     try {
       await api.agents.delete(agentId);
-      setAgents((prev) => prev.filter((a) => a.id !== agentId));
+      setAgents((prev) => {
+        const filtered = prev.filter((a) => a.id !== agentId);
+        if (selectedAgent?.id === agentId) {
+          setSelectedAgent(filtered.length > 0 ? filtered[0] : null);
+          setSelectedConv(null);
+          setMessages([]);
+        }
+        return filtered;
+      });
       setConversations((prev) => prev.filter((c) => !c.agent_ids.includes(agentId)));
-      if (selectedAgent?.id === agentId) {
-        const remaining = agents.filter((a) => a.id !== agentId);
-        setSelectedAgent(remaining.length > 0 ? remaining[0] : null);
-        setSelectedConv(null);
-        setMessages([]);
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete agent');
+    }
+  };
+
+  const handleOpenEdit = useCallback((agent: Agent) => {
+    setEditingAgent(agent);
+    setEditForm({
+      name: agent.name,
+      role: agent.role,
+      personality: agent.personality,
+      instructions: agent.instructions,
+    });
+    setShowEditModal(true);
+  }, []);
+
+  const handleUpdateAgent = async () => {
+    if (!editingAgent || !editForm.name.trim()) return;
+    try {
+      const updated = await api.agents.update(editingAgent.id, {
+        name: editForm.name,
+        role: editForm.role,
+        personality: editForm.personality,
+        instructions: editForm.instructions,
+      });
+      setAgents((prev) => prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a)));
+      if (selectedAgent?.id === updated.id) {
+        setSelectedAgent((prev) => prev ? { ...prev, ...updated } : null);
+      }
+      setShowEditModal(false);
+      setEditingAgent(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update agent');
+    }
+  };
+
+  const handleRenameConv = async (convId: string, title: string) => {
+    try {
+      await api.conversations.update(convId, { title });
+      setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, title } : c)));
+      if (selectedConv?.id === convId) {
+        setSelectedConv((prev) => prev ? { ...prev, title } : null);
+      }
+    } catch {
+      // silently fail
     }
   };
 
@@ -182,7 +228,9 @@ export default function App() {
         onNewAgent={() => setShowNewAgent(true)}
         onNewConv={handleCreateConv}
         onDeleteAgent={handleDeleteAgent}
+        onEditAgent={handleOpenEdit}
         onDeleteConv={handleDeleteConv}
+        onRenameConv={handleRenameConv}
         onSelectTab={setActiveTab}
       />
 
@@ -247,6 +295,65 @@ export default function App() {
                 </button>
                 <button className="btn-primary" onClick={handleCreateAgent}>
                   Create Agent
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showEditModal && editingAgent && (
+          <div className="modal-overlay" onClick={() => { setShowEditModal(false); setEditingAgent(null); }}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <h2>Edit Agent</h2>
+              <div className="form-group">
+                <label>Name</label>
+                <input
+                  type="text"
+                  placeholder="Agent name"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  autoFocus
+                />
+              </div>
+              <div className="form-group">
+                <label>Role</label>
+                <select
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                >
+                  <option value="strategy">Strategy</option>
+                  <option value="engineering">Engineering</option>
+                  <option value="design">Design</option>
+                  <option value="research">Research</option>
+                  <option value="writing">Writing</option>
+                  <option value="companion">Companion</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Personality</label>
+                <input
+                  type="text"
+                  placeholder="e.g., friendly and helpful"
+                  value={editForm.personality}
+                  onChange={(e) => setEditForm({ ...editForm, personality: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Instructions</label>
+                <textarea
+                  placeholder="Special instructions for this agent..."
+                  value={editForm.instructions}
+                  onChange={(e) => setEditForm({ ...editForm, instructions: e.target.value })}
+                  rows={3}
+                />
+              </div>
+              <div className="modal-actions">
+                <button className="btn-secondary" onClick={() => { setShowEditModal(false); setEditingAgent(null); }}>
+                  Cancel
+                </button>
+                <button className="btn-primary" onClick={handleUpdateAgent}>
+                  Save Changes
                 </button>
               </div>
             </div>
