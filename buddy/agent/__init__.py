@@ -12,6 +12,13 @@ Core components:
 - ContextManager: Intelligent context window management
 - AgentWorkspace: Sandboxed file operations and code execution
 - DreamEngine: Background memory consolidation and creative synthesis
+- BuddyNexus: Central coordination hub for runtime management
+- BuddyForge: Self-improving skill creation and pattern detection
+- BuddyIdentity: Personal AI identity with hierarchical memory
+- BuddyTrajectory: Execution trace capture and compression
+- BuddySquads: Collaborative agent teams with trust scoring
+- BuddyGuard: Safety monitoring, rate limiting, and audit system
+- BuddyPulse: Health monitoring and metrics collection
 """
 from agent.engine import AgentEngine
 from agent.memory import HierarchicalMemory, MemorySystem, MemoryLayer
@@ -25,6 +32,8 @@ from agent.context import ContextManager, ContextConfig, context_manager
 from agent.workspace import AgentWorkspace, WorkspaceFile, ExecutionResult
 from agent.dream import DreamEngine, DreamPhase, DreamInsight, DreamCycleResult
 from agent.shared import orchestrator, skills_registry
+from agent.guard import BuddyGuard, guard_system
+from agent.pulse import BuddyPulse, pulse_system, HealthStatus
 
 __all__ = [
     "AgentEngine",
@@ -38,5 +47,7 @@ __all__ = [
     "ContextManager", "ContextConfig", "context_manager",
     "AgentWorkspace", "WorkspaceFile", "ExecutionResult",
     "DreamEngine", "DreamPhase", "DreamInsight", "DreamCycleResult",
+    "BuddyGuard", "guard_system",
+    "BuddyPulse", "pulse_system", "HealthStatus",
     "orchestrator", "skills_registry",
 ]
