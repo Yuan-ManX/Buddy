@@ -12,6 +12,10 @@
   --blue-bg: rgba(59, 130, 246, 0.06);
   --radius: 12px;
   --sidebar-width: 280px;
+  --toast-success: #10b981;
+  --toast-error: #ef4444;
+  --toast-warning: #f59e0b;
+  --toast-info: #3b82f6;
 }
 
 * {
@@ -196,6 +200,31 @@ body {
 .sidebar-item-delete:hover {
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
+}
+
+.sidebar-item-edit {
+  display: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.sidebar-item:hover .sidebar-item-edit {
+  display: flex;
+}
+
+.sidebar-item-edit:hover {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--blue);
 }
 
 .sidebar-empty {
@@ -1832,4 +1861,200 @@ body {
   height: 100%;
   color: var(--text-muted);
   font-size: 0.95rem;
+}
+
+/* ─── Markdown Message Styles ─── */
+.markdown-body {
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.markdown-body .md-paragraph {
+  margin: 0.5em 0;
+}
+
+.markdown-body .md-paragraph:first-child {
+  margin-top: 0;
+}
+
+.markdown-body .md-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body .inline-code {
+  background: var(--blue-bg);
+  color: var(--blue);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+}
+
+.markdown-body .code-block-wrapper {
+  margin: 0.75em 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #1e293b;
+}
+
+.markdown-body .code-block-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: #334155;
+  border-bottom: 1px solid #475569;
+}
+
+.markdown-body .code-lang {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+}
+
+.markdown-body .code-block {
+  margin: 0;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #e2e8f0;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+}
+
+.markdown-body .md-list {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.markdown-body .md-list-item {
+  margin: 0.25em 0;
+}
+
+.markdown-body .md-link {
+  color: var(--blue);
+  text-decoration: underline;
+}
+
+.markdown-body .md-link:hover {
+  color: var(--blue-hover);
+}
+
+.markdown-body .md-blockquote {
+  margin: 0.5em 0;
+  padding: 8px 16px;
+  border-left: 3px solid var(--blue);
+  background: var(--blue-bg);
+  border-radius: 0 6px 6px 0;
+  color: var(--text-secondary);
+}
+
+.markdown-body .md-heading {
+  margin: 1em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.markdown-body .md-h1 { font-size: 1.4rem; }
+.markdown-body .md-h2 { font-size: 1.2rem; }
+.markdown-body .md-h3 { font-size: 1.05rem; }
+
+.markdown-body .md-table-wrapper {
+  overflow-x: auto;
+  margin: 0.75em 0;
+}
+
+.markdown-body .md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.markdown-body .md-th {
+  padding: 8px 12px;
+  text-align: left;
+  background: var(--bg-elevated);
+  border-bottom: 2px solid var(--border);
+  font-weight: 600;
+}
+
+.markdown-body .md-td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+/* ─── Responsive Design ─── */
+@media (max-width: 768px) {
+  .app {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    height: auto;
+    max-height: 40vh;
+  }
+
+  .sidebar-tabs {
+    flex-wrap: wrap;
+  }
+
+  .main {
+    width: 100%;
+  }
+
+  .modal {
+    width: 95%;
+    margin: 1rem;
+  }
+
+  .chat-area {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --sidebar-width: 100%;
+    --radius: 8px;
+  }
+
+  .sidebar-tabs {
+    gap: 2px;
+  }
+
+  .sidebar-tabs button {
+    padding: 6px 8px;
+    font-size: 0.7rem;
+  }
+
+  .chat-input-area {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .chat-input-actions {
+    justify-content: flex-end;
+  }
+}
+
+/* ─── Reduced Motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  .app-loading-logo {
+    animation: none;
+  }
+
+  .typing-dot {
+    animation: none;
+  }
+
+  .toast-item {
+    animation: none;
+  }
+
+  .streaming-cursor {
+    animation: none;
+  }
 }
