@@ -1,6 +1,8 @@
 """SQLAlchemy ORM models for Buddy"""
+from __future__ import annotations
 import uuid
 from datetime import datetime
+from typing import Any
 from sqlalchemy import String, Text, Float, Boolean, DateTime, ForeignKey, JSON, Integer, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database.db import Base
@@ -31,6 +33,8 @@ class Agent(TimestampMixin, Base):
     messages = relationship("Message", back_populates="agent", cascade="all, delete-orphan")
     memories = relationship("Memory", back_populates="agent", cascade="all, delete-orphan")
     tasks = relationship("Task", back_populates="agent", cascade="all, delete-orphan")
+    plans = relationship("Plan", back_populates="agent", cascade="all, delete-orphan")
+    autopilots = relationship("AutopilotConfig", back_populates="agent", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("idx_agents_active_role", "is_active", "role"),
@@ -59,7 +63,7 @@ class Conversation(TimestampMixin, Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_id)
     title: Mapped[str] = mapped_column(String(256), default="New Conversation")
-    agent_ids: Mapped[dict] = mapped_column(JSON, default=list)
+    agent_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
 
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
 
@@ -73,7 +77,7 @@ class Memory(TimestampMixin, Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     memory_type: Mapped[str] = mapped_column(String(32), default="fact")
     importance: Mapped[float] = mapped_column(Float, default=0.5)
-    meta: Mapped[dict] = mapped_column(JSON, default=dict)
+    meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     agent = relationship("Agent", back_populates="memories")
 
@@ -91,15 +95,15 @@ class Task(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="queued")
     kind: Mapped[str] = mapped_column(String(32), default="direct")
-    payload: Mapped[dict] = mapped_column(JSON, default=dict)
-    result: Mapped[dict] = mapped_column(JSON, nullable=True)
-    error: Mapped[str] = mapped_column(Text, nullable=True)
-    conversation_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    conversation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     attempt: Mapped[int] = mapped_column(Integer, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, default=3)
-    parent_task_id: Mapped[str] = mapped_column(String(36), nullable=True)
-    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    parent_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     agent = relationship("Agent", back_populates="tasks")
 
@@ -107,4 +111,65 @@ class Task(TimestampMixin, Base):
         Index("idx_tasks_agent_status", "agent_id", "status"),
         Index("idx_tasks_status", "status"),
         Index("idx_tasks_parent", "parent_task_id"),
+    )
+
+
+class Plan(TimestampMixin, Base):
+    """Persistent execution plan for multi-step agent workflows."""
+    __tablename__ = "plans"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_id)
+    agent_id: Mapped[str] = mapped_column(String(36), ForeignKey("agents.id"), nullable=False)
+    goal: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    steps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    current_step: Mapped[int] = mapped_column(Integer, default=0)
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+    agent = relationship("Agent", back_populates="plans")
+
+    __table_args__ = (
+        Index("idx_plans_agent_status", "agent_id", "status"),
+    )
+
+
+class AutopilotConfig(TimestampMixin, Base):
+    """Persistent autopilot configuration for scheduled agent tasks."""
+    __tablename__ = "autopilots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_id)
+    agent_id: Mapped[str] = mapped_column(String(36), ForeignKey("agents.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    task_template: Mapped[str] = mapped_column(Text, nullable=False)
+    trigger: Mapped[str] = mapped_column(String(32), default="interval")
+    schedule: Mapped[str] = mapped_column(String(64), default="3600")
+    status: Mapped[str] = mapped_column(String(32), default="active")
+    max_runs: Mapped[int] = mapped_column(Integer, default=0)
+    runs_completed: Mapped[int] = mapped_column(Integer, default=0)
+    description: Mapped[str] = mapped_column(String(512), default="")
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    agent = relationship("Agent", back_populates="autopilots")
+
+    __table_args__ = (
+        Index("idx_autopilots_agent_status", "agent_id", "status"),
+    )
+
+
+class MCPServer(TimestampMixin, Base):
+    """Persistent MCP server configuration for external tool integration."""
+    __tablename__ = "mcp_servers"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_id)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    transport: Mapped[str] = mapped_column(String(32), default="http")
+    endpoint: Mapped[str] = mapped_column(String(512), default="")
+    command: Mapped[str] = mapped_column(Text, default="")
+    env: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(32), default="disconnected")
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("idx_mcp_servers_status", "status"),
     )
