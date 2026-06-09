@@ -15,6 +15,14 @@ import { CollaborationPanel } from './components/CollaborationPanel';
 import { SystemOverview } from './components/SystemOverview';
 import ApprovalPanel from './components/ApprovalPanel';
 import EventMonitor from './components/EventMonitor';
+import Dashboard from './components/Dashboard';
+import { NexusPanel } from './components/NexusPanel';
+import { ForgePanel } from './components/ForgePanel';
+import { IdentityPanel } from './components/IdentityPanel';
+import { TrajectoryPanel } from './components/TrajectoryPanel';
+import { SquadsPanel } from './components/SquadsPanel';
+import { GuardPanel } from './components/GuardPanel';
+import { PulsePanel } from './components/PulsePanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { api } from './api/client';
@@ -360,7 +368,16 @@ export default function App() {
           </div>
         )}
 
-        {selectedAgent ? (
+        {/* Global panels — no agent required */}
+        {activeTab === 'overview' && <SystemOverview />}
+        {activeTab === 'dashboard' && <Dashboard />}
+        {activeTab === 'nexus' && <NexusPanel />}
+        {activeTab === 'forge' && <ForgePanel />}
+        {activeTab === 'guard' && <GuardPanel />}
+        {activeTab === 'pulse' && <PulsePanel />}
+
+        {/* Agent-specific panels */}
+        {selectedAgent && (
           <>
             {activeTab === 'chat' && (
               <ChatArea
@@ -415,10 +432,20 @@ export default function App() {
             {activeTab === 'events' && (
               <EventMonitor />
             )}
+            {activeTab === 'identity' && (
+              <IdentityPanel agent={selectedAgent} />
+            )}
+            {activeTab === 'trajectory' && (
+              <TrajectoryPanel agent={selectedAgent} />
+            )}
+            {activeTab === 'squads' && (
+              <SquadsPanel agent={selectedAgent} />
+            )}
           </>
-        ) : activeTab === 'overview' ? (
-          <SystemOverview />
-        ) : (
+        )}
+
+        {/* Empty state — no agent and no global panel selected */}
+        {!selectedAgent && !['overview', 'dashboard', 'nexus', 'forge', 'guard', 'pulse'].includes(activeTab) && (
           <div className="main-empty">
             <div className="main-empty-icon">B</div>
             <h2>Welcome to Buddy</h2>
