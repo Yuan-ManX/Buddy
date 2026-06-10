@@ -8,6 +8,7 @@ from __future__ import annotations
 import ast
 import json
 import logging
+import sqlite3
 import asyncio
 import operator
 import tempfile
@@ -393,6 +394,146 @@ async def _tool_summarize_text(args: dict) -> str:
     })
 
 
+async def _tool_list_directory(args: dict) -> str:
+    """List files and directories in a given path."""
+    import os
+    path = args.get("path", ".")
+    show_hidden = args.get("show_hidden", False)
+    try:
+        workspace_root = os.path.join(os.path.expanduser("~"), ".buddy_workspaces")
+        expanded = os.path.realpath(os.path.expanduser(path))
+        if not expanded.startswith(workspace_root):
+            return json.dumps({"path": path, "error": "Access denied: path outside workspace"})
+
+        entries = []
+        for entry in os.listdir(expanded):
+            if not show_hidden and entry.startswith("."):
+                continue
+            full = os.path.join(expanded, entry)
+            entries.append({
+                "name": entry,
+                "type": "directory" if os.path.isdir(full) else "file",
+                "size": os.path.getsize(full) if os.path.isfile(full) else 0,
+            })
+        entries.sort(key=lambda e: (e["type"], e["name"]))
+        return json.dumps({"path": path, "entries": entries, "count": len(entries)})
+    except FileNotFoundError:
+        return json.dumps({"path": path, "error": "Directory not found"})
+    except Exception as e:
+        return json.dumps({"path": path, "error": str(e)})
+
+
+async def _tool_execute_code(args: dict) -> str:
+    """Execute code in a sandboxed environment."""
+    import subprocess
+    import os
+    language = args.get("language", "python")
+    code = args.get("code", "")
+    timeout = args.get("timeout", 30)
+
+    if not code:
+        return "Error: code is required"
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=f".{language}" if language != "shell" else ".sh",
+            delete=False,
+        ) as f:
+            f.write(code)
+            tmp_path = f.name
+
+        try:
+            if language == "python":
+                cmd = ["python3", tmp_path]
+            elif language == "shell":
+                cmd = ["bash", tmp_path]
+            elif language == "javascript":
+                cmd = ["node", tmp_path]
+            else:
+                return json.dumps({"error": f"Unsupported language: {language}"})
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                cwd=tempfile.gettempdir(),
+            )
+            return json.dumps({
+                "success": result.returncode == 0,
+                "stdout": result.stdout[:5000],
+                "stderr": result.stderr[:2000],
+                "exit_code": result.returncode,
+            })
+        finally:
+            os.unlink(tmp_path)
+    except subprocess.TimeoutExpired:
+        return json.dumps({"success": False, "error": f"Execution timed out after {timeout}s"})
+    except FileNotFoundError:
+        return json.dumps({"success": False, "error": f"Runtime for {language} not found"})
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+async def _tool_fetch_url(args: dict) -> str:
+    """Fetch content from a URL."""
+    import urllib.request
+    url = args.get("url", "")
+    if not url:
+        return "Error: url is required"
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Buddy-Agent/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as response:
+            content = response.read().decode("utf-8", errors="replace")
+            # Extract text content (simple approach)
+            text = content[:10000]
+            return json.dumps({
+                "url": url,
+                "status": response.status,
+                "content": text,
+                "content_type": response.headers.get("Content-Type", ""),
+                "truncated": len(content) > 10000,
+            })
+    except Exception as e:
+        return json.dumps({"url": url, "error": str(e)})
+
+
+async def _tool_json_query(args: dict) -> str:
+    """Query and transform JSON data."""
+    data_str = args.get("data", "{}")
+    query = args.get("query", "")
+    try:
+        data = json.loads(data_str)
+    except json.JSONDecodeError:
+        return json.dumps({"error": "Invalid JSON data"})
+
+    if not query:
+        return json.dumps({"data": data})
+
+    # Simple dot-notation path query: e.g., "users.0.name"
+    parts = query.split(".")
+    current = data
+    for part in parts:
+        if isinstance(current, list):
+            try:
+                idx = int(part)
+                current = current[idx]
+            except (ValueError, IndexError):
+                return json.dumps({"error": f"Invalid array index: {part}"})
+        elif isinstance(current, dict):
+            current = current.get(part)
+            if current is None:
+                return json.dumps({"error": f"Key not found: {part}"})
+        else:
+            return json.dumps({"error": f"Cannot navigate into {type(current).__name__}"})
+
+    return json.dumps({"result": current})
+
+
 # Register built-in tools
 tool_registry.register(ToolDefinition(
     name="web_search",
@@ -469,4 +610,278 @@ tool_registry.register(ToolDefinition(
     handler=_tool_summarize_text,
     timeout=20.0,
     safety=ExecutionSafety.READ_ONLY,
+))
+
+tool_registry.register(ToolDefinition(
+    name="list_directory",
+    description="List files and directories at a given path in the workspace",
+    category=ToolCategory.SYSTEM,
+    parameters=[
+        ToolParameter("path", "string", "Directory path to list (default: workspace root)", required=False, default="."),
+        ToolParameter("show_hidden", "boolean", "Show hidden files (dotfiles)", required=False, default=False),
+    ],
+    handler=_tool_list_directory,
+    timeout=10.0,
+    safety=ExecutionSafety.READ_ONLY,
+    path_param="path",
+))
+
+tool_registry.register(ToolDefinition(
+    name="execute_code",
+    description="Execute code in a sandboxed environment (python, shell, javascript)",
+    category=ToolCategory.CODE,
+    parameters=[
+        ToolParameter("code", "string", "The code to execute"),
+        ToolParameter("language", "string", "Programming language: python, shell, or javascript", required=False, default="python"),
+        ToolParameter("timeout", "integer", "Maximum execution time in seconds", required=False, default=30),
+    ],
+    handler=_tool_execute_code,
+    timeout=35.0,
+    safety=ExecutionSafety.DESTRUCTIVE,
+))
+
+tool_registry.register(ToolDefinition(
+    name="fetch_url",
+    description="Fetch and read content from a URL",
+    category=ToolCategory.KNOWLEDGE,
+    parameters=[
+        ToolParameter("url", "string", "The URL to fetch content from"),
+    ],
+    handler=_tool_fetch_url,
+    timeout=20.0,
+    safety=ExecutionSafety.READ_ONLY,
+))
+
+tool_registry.register(ToolDefinition(
+    name="json_query",
+    description="Query and transform JSON data using dot-notation paths",
+    category=ToolCategory.DATA,
+    parameters=[
+        ToolParameter("data", "string", "JSON string to query"),
+        ToolParameter("query", "string", "Dot-notation query path (e.g., 'users.0.name')", required=False, default=""),
+    ],
+    handler=_tool_json_query,
+    timeout=5.0,
+    safety=ExecutionSafety.READ_ONLY,
+))
+
+
+# ── Communication Tools ──────────────────────────────────
+
+async def _tool_send_email(args: dict) -> str:
+    """Send an email (placeholder — requires SMTP configuration)."""
+    to = args.get("to", "")
+    subject = args.get("subject", "")
+    body = args.get("body", "")
+    if not to or not subject or not body:
+        return "Error: to, subject, and body are all required"
+    return json.dumps({
+        "to": to,
+        "subject": subject,
+        "body_preview": body[:200],
+        "status": "not_sent",
+        "note": "Email sending requires SMTP configuration. Set SMTP_HOST, SMTP_PORT, SMTP_USER, and SMTP_PASSWORD in .env.",
+    })
+
+
+# ── Knowledge Tools ──────────────────────────────────────
+
+async def _tool_translate_text(args: dict) -> str:
+    """Translate text between languages (placeholder — requires translation API)."""
+    text = args.get("text", "")
+    source_lang = args.get("source_lang", "auto")
+    target_lang = args.get("target_lang", "")
+    if not text:
+        return "Error: text is required"
+    if not target_lang:
+        return "Error: target_lang is required"
+    return json.dumps({
+        "text_preview": text[:200],
+        "source_lang": source_lang,
+        "target_lang": target_lang,
+        "status": "not_translated",
+        "note": "Translation requires integration with a translation API (e.g., Google Translate, DeepL). Configure TRANSLATION_API_KEY in .env.",
+    })
+
+
+# ── Data Tools ───────────────────────────────────────────
+
+async def _tool_database_query(args: dict) -> str:
+    """Execute a SQL query on project data using SQLite."""
+    query = args.get("query", "")
+    database_url = args.get("database_url", "")
+
+    if not query:
+        return "Error: query is required"
+
+    # Only allow SELECT queries for safety
+    normalized = query.strip().upper()
+    if not normalized.startswith("SELECT"):
+        return json.dumps({
+            "error": "Only SELECT queries are allowed for safety",
+            "query": query,
+        })
+
+    db_path = database_url or ":memory:"
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        columns = [desc[0] for desc in cursor.description] if cursor.description else []
+        conn.close()
+
+        result = [dict(zip(columns, row)) for row in rows]
+        return json.dumps({
+            "query": query,
+            "columns": columns,
+            "row_count": len(result),
+            "rows": result,
+        })
+    except Exception as e:
+        return json.dumps({
+            "query": query,
+            "error": str(e),
+        })
+
+
+# ── Creative Tools ───────────────────────────────────────
+
+async def _tool_generate_image(args: dict) -> str:
+    """Generate an image from a text prompt (placeholder — requires image generation API)."""
+    prompt = args.get("prompt", "")
+    size = args.get("size", "1024x1024")
+    style = args.get("style", "")
+
+    if not prompt:
+        return "Error: prompt is required"
+
+    result: dict = {
+        "prompt": prompt,
+        "size": size,
+        "status": "not_generated",
+        "note": "Image generation requires integration with an image generation API (e.g., DALL·E, Stable Diffusion). Configure IMAGE_GEN_API_KEY in .env.",
+    }
+    if style:
+        result["style"] = style
+    return json.dumps(result)
+
+
+# ── System Tools ─────────────────────────────────────────
+
+async def _tool_remember(args: dict) -> str:
+    """Store important information in agent memory."""
+    content = args.get("content", "")
+    tags = args.get("tags", "")
+
+    if not content:
+        return "Error: content is required"
+
+    from database.db import async_session
+    from database.models import Memory as MemoryModel
+    import uuid
+
+    memory_id = str(uuid.uuid4())
+    meta: dict = {}
+    if tags:
+        meta["tags"] = [t.strip() for t in tags.split(",") if t.strip()]
+
+    try:
+        async with async_session() as session:
+            memory = MemoryModel(
+                id=memory_id,
+                agent_id="default",
+                content=content,
+                memory_type="long_term:fact",
+                importance=0.5,
+                meta=meta,
+            )
+            session.add(memory)
+            await session.commit()
+
+        return json.dumps({
+            "id": memory_id,
+            "content_preview": content[:200],
+            "tags": meta.get("tags", []),
+            "stored": True,
+            "note": "Memory stored in long-term layer.",
+        })
+    except Exception as e:
+        logger.error(f"Failed to store memory: {e}")
+        return json.dumps({
+            "error": f"Failed to store memory: {str(e)}",
+        })
+
+
+# Register additional built-in tools
+
+tool_registry.register(ToolDefinition(
+    name="send_email",
+    description="Send an email to a recipient (placeholder — configure SMTP settings to enable)",
+    category=ToolCategory.COMMUNICATION,
+    parameters=[
+        ToolParameter("to", "string", "Recipient email address"),
+        ToolParameter("subject", "string", "Email subject line"),
+        ToolParameter("body", "string", "Email body content"),
+    ],
+    handler=_tool_send_email,
+    timeout=10.0,
+    safety=ExecutionSafety.SCOPED,
+    path_param="to",
+))
+
+tool_registry.register(ToolDefinition(
+    name="translate_text",
+    description="Translate text from one language to another (placeholder — configure translation API to enable)",
+    category=ToolCategory.KNOWLEDGE,
+    parameters=[
+        ToolParameter("text", "string", "The text to translate"),
+        ToolParameter("source_lang", "string", "Source language code (default: auto-detect)", required=False, default="auto"),
+        ToolParameter("target_lang", "string", "Target language code"),
+    ],
+    handler=_tool_translate_text,
+    timeout=15.0,
+    safety=ExecutionSafety.READ_ONLY,
+))
+
+tool_registry.register(ToolDefinition(
+    name="database_query",
+    description="Execute a read-only SQL query on project data via SQLite",
+    category=ToolCategory.DATA,
+    parameters=[
+        ToolParameter("query", "string", "The SQL SELECT query to execute"),
+        ToolParameter("database_url", "string", "Path to SQLite database file (default: in-memory)", required=False, default=""),
+    ],
+    handler=_tool_database_query,
+    timeout=10.0,
+    safety=ExecutionSafety.READ_ONLY,
+))
+
+tool_registry.register(ToolDefinition(
+    name="generate_image",
+    description="Generate an image from a text prompt (placeholder — configure image generation API to enable)",
+    category=ToolCategory.CREATIVE,
+    parameters=[
+        ToolParameter("prompt", "string", "Text description of the image to generate"),
+        ToolParameter("size", "string", "Image dimensions (e.g., 1024x1024)", required=False, default="1024x1024"),
+        ToolParameter("style", "string", "Artistic style for the image", required=False, default=""),
+    ],
+    handler=_tool_generate_image,
+    timeout=30.0,
+    safety=ExecutionSafety.SCOPED,
+    path_param="prompt",
+))
+
+tool_registry.register(ToolDefinition(
+    name="remember",
+    description="Store important information in the agent's long-term memory",
+    category=ToolCategory.SYSTEM,
+    parameters=[
+        ToolParameter("content", "string", "The information to remember"),
+        ToolParameter("tags", "string", "Comma-separated tags for categorization", required=False, default=""),
+    ],
+    handler=_tool_remember,
+    timeout=10.0,
+    safety=ExecutionSafety.MUTATING,
 ))
