@@ -1,4 +1,4 @@
-export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse';
+export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse' | 'persona' | 'learning' | 'gateway' | 'daemon';
 
 export interface Agent {
   id: string;
@@ -539,4 +539,112 @@ export interface EngineStats {
   memory: { total: number; stats: Record<string, unknown> | null };
   workspace: { total_files: number; total_size: number; languages: string[] };
   dream: { agent_id: string; is_running: boolean; interval_seconds: number; total_insights: number; latest_insight: string };
+}
+
+// ── Persona Types ──
+
+export interface Persona {
+  id: string;
+  name: string;
+  tone: string;
+  verbosity: string;
+  description: string;
+  expertise_areas: string[];
+  communication_style: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface PersonaPreset {
+  key: string;
+  name: string;
+  description: string;
+  tone: string;
+}
+
+// ── Learning (Self-Improvement) Types ──
+
+export interface LearningStats {
+  agent_id: string;
+  total_interactions: number;
+  detected_patterns: number;
+  generated_candidates: number;
+  promoted_skills: number;
+  cycle_count: number;
+  last_cycle_at: string | null;
+}
+
+export interface InteractionPattern {
+  pattern_id: string;
+  frequency: number;
+  success_rate: number;
+  typical_actions: string[];
+  average_tokens: number;
+  last_seen: string;
+  promotable: boolean;
+}
+
+export interface CandidateSkill {
+  candidate_id: string;
+  name: string;
+  description: string;
+  prompt_template: string;
+  confidence: number;
+  source_patterns: string[];
+  created_at: string;
+}
+
+export interface LearningCycleResult {
+  agent_id: string;
+  patterns_detected: number;
+  candidates_generated: number;
+  skills_promoted: number;
+  cycle_duration_ms: number;
+}
+
+// ── Gateway Types ──
+
+export interface GatewayStats {
+  platforms: Record<string, string>;
+  active_sessions: number;
+  total_messages: number;
+  running: boolean;
+}
+
+export interface GatewaySession {
+  id: string;
+  platform: string;
+  platform_user_id: string;
+  agent_id: string;
+  conversation_id: string | null;
+  message_count: number;
+  created_at: string;
+  last_active: string;
+}
+
+// ── Daemon Types ──
+
+export interface DaemonRuntime {
+  agent_id: string;
+  agent_name: string;
+  status: string;
+  uptime_seconds: number;
+  total_runtime: number;
+  tasks_completed: number;
+  tasks_failed: number;
+  success_rate: number;
+  restart_count: number;
+  concurrency: { current: number; max: number };
+  started_at: string;
+  last_active: string;
+  auto_restart: boolean;
+}
+
+export interface DaemonStats {
+  total_agents: number;
+  active_agents: number;
+  status_distribution: Record<string, number>;
+  total_concurrency: number;
+  max_total_concurrency: number;
+  runtimes: DaemonRuntime[];
 }
