@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import type { Agent, Conversation, TabView } from '../types';
 import { getRoleColor } from '../utils/colors';
 
@@ -19,6 +19,39 @@ interface SidebarProps {
   onSelectTab: (tab: TabView) => void;
 }
 
+// Tab categories with grouping
+const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+  { id: 'nexus', label: 'Nexus', icon: '🔗' },
+  { id: 'forge', label: 'Forge', icon: '⚒️' },
+  { id: 'guard', label: 'Guard', icon: '🛡️' },
+  { id: 'pulse', label: 'Pulse', icon: '💓' },
+  { id: 'gateway', label: 'Gateway', icon: '🌐' },
+  { id: 'daemon', label: 'Daemon', icon: '👾' },
+];
+
+const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
+  { id: 'chat', label: 'Chat', icon: '💬' },
+  { id: 'tasks', label: 'Tasks', icon: '📋' },
+  { id: 'skills', label: 'Skills', icon: '🧩' },
+  { id: 'memory', label: 'Memory', icon: '🧠' },
+  { id: 'identity', label: 'Identity', icon: '🪪' },
+  { id: 'autopilot', label: 'Auto', icon: '🤖' },
+  { id: 'subagents', label: 'Workers', icon: '👥' },
+  { id: 'tools', label: 'Tools', icon: '🔧' },
+  { id: 'plans', label: 'Plans', icon: '📐' },
+  { id: 'workspace', label: 'Workspace', icon: '📁' },
+  { id: 'dream', label: 'Dream', icon: '🌙' },
+  { id: 'mcp', label: 'MCP', icon: '🔌' },
+  { id: 'collaboration', label: 'Collab', icon: '🤝' },
+  { id: 'squads', label: 'Squads', icon: '⚔️' },
+  { id: 'trajectory', label: 'Trace', icon: '📍' },
+  { id: 'approval', label: 'Approval', icon: '✅' },
+  { id: 'events', label: 'Events', icon: '📡' },
+  { id: 'persona', label: 'Persona', icon: '🎭' },
+  { id: 'learning', label: 'Learn', icon: '📚' },
+];
+
 export const Sidebar: React.FC<SidebarProps> = ({
   agents,
   conversations,
@@ -35,161 +68,98 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onRenameConv,
   onSelectTab,
 }) => {
+  const [agentSearch, setAgentSearch] = useState('');
+  const [convSearch, setConvSearch] = useState('');
+  const [tabsExpanded, setTabsExpanded] = useState(true);
+  const [agentTabsExpanded, setAgentTabsExpanded] = useState(true);
+
+  const filteredAgents = useMemo(
+    () =>
+      agentSearch.trim()
+        ? agents.filter(
+            (a) =>
+              a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
+              a.role.toLowerCase().includes(agentSearch.toLowerCase())
+          )
+        : agents,
+    [agents, agentSearch]
+  );
+
+  const filteredConvs = useMemo(
+    () =>
+      convSearch.trim()
+        ? conversations.filter((c) =>
+            c.title.toLowerCase().includes(convSearch.toLowerCase())
+          )
+        : conversations,
+    [conversations, convSearch]
+  );
+
   return (
     <aside className="sidebar">
+      {/* Header */}
       <div className="sidebar-header">
-        <div className="sidebar-logo">
+        <div className="sidebar-logo" onClick={() => onSelectTab('dashboard')} style={{ cursor: 'pointer' }}>
           <span className="sidebar-logo-icon">B</span>
           <span className="sidebar-logo-text">Buddy</span>
         </div>
-        <button
-          className={`sidebar-tab dashboard-nav ${activeTab === 'dashboard' ? 'active' : ''}`}
-          onClick={() => onSelectTab('dashboard')}
-          title="System Dashboard"
-        >
-          📊
-        </button>
       </div>
 
-      {/* Global tabs */}
-      <div className="sidebar-tabs">
+      {/* Global Tabs */}
+      <div className="sidebar-section">
         <button
-          className={`sidebar-tab ${activeTab === 'nexus' ? 'active' : ''}`}
-          onClick={() => onSelectTab('nexus')}
+          className="sidebar-collapse-header"
+          onClick={() => setTabsExpanded(!tabsExpanded)}
         >
-          Nexus
+          <span className={`sidebar-collapse-arrow ${tabsExpanded ? 'expanded' : ''}`}>▾</span>
+          <span className="sidebar-section-title">System</span>
         </button>
-        <button
-          className={`sidebar-tab ${activeTab === 'forge' ? 'active' : ''}`}
-          onClick={() => onSelectTab('forge')}
-        >
-          Forge
-        </button>
-        <button
-          className={`sidebar-tab ${activeTab === 'guard' ? 'active' : ''}`}
-          onClick={() => onSelectTab('guard')}
-        >
-          Guard
-        </button>
-        <button
-          className={`sidebar-tab ${activeTab === 'pulse' ? 'active' : ''}`}
-          onClick={() => onSelectTab('pulse')}
-        >
-          Pulse
-        </button>
+        {tabsExpanded && (
+          <div className="sidebar-tabs-grid">
+            {GLOBAL_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                className={`sidebar-tab-icon ${activeTab === tab.id ? 'active' : ''}`}
+                onClick={() => onSelectTab(tab.id)}
+                title={tab.label}
+              >
+                <span className="sidebar-tab-emoji">{tab.icon}</span>
+                <span className="sidebar-tab-label">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Agent-specific tabs */}
-      {selectedAgent ? (
-        <div>
-          <div className="sidebar-tabs-divider" />
-          <div className="sidebar-tabs">
-            <button
-              className={`sidebar-tab ${activeTab === 'chat' ? 'active' : ''}`}
-              onClick={() => onSelectTab('chat')}
-            >
-              Chat
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'tasks' ? 'active' : ''}`}
-              onClick={() => onSelectTab('tasks')}
-            >
-              Tasks
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'skills' ? 'active' : ''}`}
-              onClick={() => onSelectTab('skills')}
-            >
-              Skills
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'memory' ? 'active' : ''}`}
-              onClick={() => onSelectTab('memory')}
-            >
-              Memory
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'identity' ? 'active' : ''}`}
-              onClick={() => onSelectTab('identity')}
-            >
-              Identity
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'autopilot' ? 'active' : ''}`}
-              onClick={() => onSelectTab('autopilot')}
-            >
-              Auto
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'subagents' ? 'active' : ''}`}
-              onClick={() => onSelectTab('subagents')}
-            >
-              Workers
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'tools' ? 'active' : ''}`}
-              onClick={() => onSelectTab('tools')}
-            >
-              Tools
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'plans' ? 'active' : ''}`}
-              onClick={() => onSelectTab('plans')}
-            >
-              Plans
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'workspace' ? 'active' : ''}`}
-              onClick={() => onSelectTab('workspace')}
-            >
-              Workspace
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'dream' ? 'active' : ''}`}
-              onClick={() => onSelectTab('dream')}
-            >
-              Dream
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'mcp' ? 'active' : ''}`}
-              onClick={() => onSelectTab('mcp')}
-            >
-              MCP
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'collaboration' ? 'active' : ''}`}
-              onClick={() => onSelectTab('collaboration')}
-            >
-              Collab
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'squads' ? 'active' : ''}`}
-              onClick={() => onSelectTab('squads')}
-            >
-              Squads
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'trajectory' ? 'active' : ''}`}
-              onClick={() => onSelectTab('trajectory')}
-            >
-              Trace
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'approval' ? 'active' : ''}`}
-              onClick={() => onSelectTab('approval')}
-            >
-              Approval
-            </button>
-            <button
-              className={`sidebar-tab ${activeTab === 'events' ? 'active' : ''}`}
-              onClick={() => onSelectTab('events')}
-            >
-              Events
-            </button>
-          </div>
+      {selectedAgent && (
+        <div className="sidebar-section">
+          <button
+            className="sidebar-collapse-header"
+            onClick={() => setAgentTabsExpanded(!agentTabsExpanded)}
+          >
+            <span className={`sidebar-collapse-arrow ${agentTabsExpanded ? 'expanded' : ''}`}>▾</span>
+            <span className="sidebar-section-title">Agent Tools</span>
+          </button>
+          {agentTabsExpanded && (
+            <div className="sidebar-tabs-grid">
+              {AGENT_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  className={`sidebar-tab-icon ${activeTab === tab.id ? 'active' : ''}`}
+                  onClick={() => onSelectTab(tab.id)}
+                  title={tab.label}
+                >
+                  <span className="sidebar-tab-emoji">{tab.icon}</span>
+                  <span className="sidebar-tab-label">{tab.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-      ) : null}
+      )}
 
+      {/* Agents section */}
       <div className="sidebar-section">
         <div className="sidebar-section-header">
           <span className="sidebar-section-title">Agents</span>
@@ -197,8 +167,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             +
           </button>
         </div>
+        <div className="sidebar-search-wrapper">
+          <input
+            className="sidebar-search-input"
+            type="text"
+            placeholder="Search agents..."
+            value={agentSearch}
+            onChange={(e) => setAgentSearch(e.target.value)}
+          />
+        </div>
         <div className="sidebar-list">
-          {agents.map((agent) => (
+          {filteredAgents.map((agent) => (
             <div
               key={agent.id}
               className={`sidebar-item ${selectedAgent?.id === agent.id && !selectedConv ? 'active' : ''}`}
@@ -209,7 +188,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               <div className="sidebar-item-info">
                 <div className="sidebar-item-name">{agent.name}</div>
-                <div className="sidebar-item-role">{agent.role}</div>
+                <div className="sidebar-item-role">
+                  <span className={`agent-status-dot ${agent.is_active ? 'active' : 'inactive'}`} />
+                  {agent.role}
+                </div>
               </div>
               {onEditAgent && (
                 <button
@@ -245,15 +227,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <div className="sidebar-divider" />
 
-      <div className="sidebar-section">
+      {/* Conversations section */}
+      <div className="sidebar-section sidebar-convs">
         <div className="sidebar-section-header">
           <span className="sidebar-section-title">Conversations</span>
           <button className="sidebar-add-btn" onClick={onNewConv} title="New Conversation">
             +
           </button>
         </div>
-        <div className="sidebar-list">
-          {conversations.map((conv) => (
+        <div className="sidebar-search-wrapper">
+          <input
+            className="sidebar-search-input"
+            type="text"
+            placeholder="Search conversations..."
+            value={convSearch}
+            onChange={(e) => setConvSearch(e.target.value)}
+          />
+        </div>
+        <div className="sidebar-list sidebar-conv-list">
+          {filteredConvs.map((conv) => (
             <div
               key={conv.id}
               className={`sidebar-item ${selectedConv?.id === conv.id ? 'active' : ''}`}
@@ -300,10 +292,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
+      {/* Footer */}
       <div className="sidebar-footer">
         <div className="sidebar-status">
           <span className="sidebar-status-dot" />
-          <span>Backend Connected</span>
+          <span>System Online</span>
+          <span className="sidebar-shortcut-hint">⌘K</span>
         </div>
       </div>
     </aside>
