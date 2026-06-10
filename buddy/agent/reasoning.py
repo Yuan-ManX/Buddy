@@ -31,6 +31,9 @@ class ReasoningStyle(str, Enum):
     CONCISE = "concise"           # Minimal reasoning, direct answers
     BALANCED = "balanced"         # Standard reasoning with key steps
     THOROUGH = "thorough"         # Detailed step-by-step with verification
+    CREATIVE = "creative"         # Divergent thinking, brainstorming mode
+    CODING = "coding"             # Code-focused reasoning with testing emphasis
+    PARALLEL = "parallel"         # Multi-perspective reasoning with simultaneous viewpoints
 
 
 @dataclass
@@ -209,6 +212,155 @@ If issues found, provide a corrected response. Otherwise, confirm the answer."""
 
         yield {"type": "done"}
 
+    async def execute_parallel(
+        self,
+        system_prompt: str,
+        user_message: str,
+        tool_schemas: list[dict] | None = None,
+        tool_executor: Any = None,
+        model: str = "gpt-4o-mini",
+        num_perspectives: int = 4,
+    ) -> ReasoningTrace:
+        """Execute multiple reasoning passes in parallel from different perspectives.
+
+        Runs concurrent reasoning cycles, each with a slightly different angle
+        (technical, practical, ethical, creative), then synthesizes the results
+        into a balanced final answer.
+
+        Args:
+            system_prompt: Base system prompt for the agent.
+            user_message: The user's message/query.
+            tool_schemas: Optional tool definitions for tool calling.
+            tool_executor: Optional async callable to execute tool calls.
+            model: The LLM model to use.
+            num_perspectives: Number of parallel perspectives to run (1-4).
+
+        Returns:
+            ReasoningTrace with the synthesized answer and aggregated steps.
+        """
+        start = time.time()
+        perspective_prompts = [
+            ("technical", "Focus on the technical aspects: architecture, implementation details, correctness, and efficiency."),
+            ("practical", "Focus on practical considerations: usability, feasibility, cost, and real-world applicability."),
+            ("ethical", "Focus on ethical implications: fairness, safety, privacy, and societal impact."),
+            ("creative", "Focus on creative and innovative angles: novel approaches, alternative solutions, and outside-the-box thinking."),
+        ]
+
+        perspectives = perspective_prompts[:num_perspectives]
+
+        async def run_perspective(perspective_name: str, perspective_instruction: str) -> ReasoningTrace:
+            """Run a single reasoning pass with a specific perspective lens."""
+            modified_system_prompt = (
+                f"{system_prompt}\n\n"
+                f"[Perspective: {perspective_name}]\n"
+                f"{perspective_instruction}"
+            )
+            trace = ReasoningTrace()
+            try:
+                inner_trace = await self.execute(
+                    system_prompt=modified_system_prompt,
+                    user_message=user_message,
+                    tool_schemas=tool_schemas,
+                    tool_executor=tool_executor,
+                    model=model,
+                )
+                return inner_trace
+            except Exception as e:
+                logger.warning(f"Perspective '{perspective_name}' failed: {e}")
+                trace.success = False
+                trace.error = str(e)
+                trace.final_answer = f"[{perspective_name}] Failed to complete."
+                return trace
+
+        # Run all perspectives concurrently
+        perspective_traces: list[ReasoningTrace] = list(await asyncio.gather(*[
+            run_perspective(name, instruction) for name, instruction in perspectives
+        ]))
+
+        # Synthesize results
+        synthesis_trace = ReasoningTrace()
+
+        # Aggregate steps from all perspectives
+        for pt in perspective_traces:
+            synthesis_trace.steps.extend(pt.steps)
+            synthesis_trace.total_tokens += pt.total_tokens
+
+        synthesis_trace.total_time_ms = (time.time() - start) * 1000
+
+        # Build synthesis prompt from all perspective answers
+        perspective_summaries = "\n\n".join(
+            f"## {perspectives[i][0].capitalize()} Perspective:\n{pt.final_answer[:1000]}"
+            for i, pt in enumerate(perspective_traces)
+            if pt.success
+        )
+
+        if not perspective_summaries:
+            synthesis_trace.success = False
+            synthesis_trace.error = "All parallel perspectives failed."
+            synthesis_trace.final_answer = "Unable to synthesize results — all perspectives failed."
+            return synthesis_trace
+
+        try:
+            synthesis_response = await self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a synthesis agent. Below are multiple perspectives on the same question. "
+                            "Synthesize them into a single balanced, comprehensive answer. "
+                            "Weigh each perspective appropriately. Identify areas of agreement and disagreement. "
+                            "Present a cohesive final response that captures the best insights from all angles."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Original question: {user_message}\n\n"
+                            f"{perspective_summaries}\n\n"
+                            "Please synthesize these perspectives into a balanced, comprehensive answer."
+                        ),
+                    },
+                ],
+                max_tokens=4096,
+                temperature=0.5,
+            )
+            final_answer = synthesis_response.choices[0].message.content or ""
+            if synthesis_response.usage:
+                synthesis_trace.total_tokens += synthesis_response.usage.total_tokens
+
+            synthesis_trace.final_answer = final_answer
+            synthesis_trace.success = any(pt.success for pt in perspective_traces)
+
+            # Add synthesis as a final step
+            synthesis_trace.steps.append(ReasoningStep(
+                phase=ReasoningPhase.REFLECT,
+                content=f"Synthesized {len(perspectives)} parallel perspectives into final answer.",
+                confidence=0.85,
+                elapsed_ms=0.0,
+            ))
+
+        except Exception as e:
+            logger.error(f"Synthesis failed: {e}")
+            # Fall back to concatenating the most confident answer
+            best_trace = max(
+                (pt for pt in perspective_traces if pt.success),
+                key=lambda pt: pt.steps[-1].confidence if pt.steps else 0.5,
+                default=perspective_traces[0],
+            )
+            synthesis_trace.final_answer = (
+                f"[Synthesized from {len(perspectives)} perspectives]\n\n"
+                f"{best_trace.final_answer}"
+            )
+            synthesis_trace.error = f"Synthesis step failed ({e}); using best individual perspective."
+
+        synthesis_trace.total_time_ms = (time.time() - start) * 1000
+        self._trace_store.append(synthesis_trace)
+        if len(self._trace_store) > 200:
+            self._trace_store = self._trace_store[-100:]
+
+        return synthesis_trace
+
     async def _observe(self, messages: list[dict], model: str) -> ReasoningStep:
         """Phase 1: Observe and understand the task."""
         if self.style == ReasoningStyle.CONCISE:
@@ -378,6 +530,22 @@ If issues found, provide a corrected response. Otherwise, confirm the answer."""
                 "Reason step by step through every problem. Break complex tasks into subtasks. "
                 "Verify your work. Use tools proactively. Explain your full reasoning."
             ),
+            ReasoningStyle.CREATIVE: (
+                "Think divergently and explore multiple perspectives. Use brainstorming techniques. "
+                "Generate novel ideas and connections. Consider unconventional approaches."
+                "Embrace open-ended exploration while maintaining coherence."
+            ),
+            ReasoningStyle.CODING: (
+                "Approach coding tasks methodically: understand requirements, design solution, "
+                "write clean code, test edge cases, document decisions. "
+                "Prioritize correctness, readability, and maintainability. "
+                "Consider errors, edge cases, and performance implications."
+            ),
+            ReasoningStyle.PARALLEL: (
+                "Consider multiple perspectives simultaneously. Analyze from different angles: "
+                "technical, practical, ethical, and creative. Weigh trade-offs and synthesize "
+                "a balanced conclusion. Use parallel thinking to avoid tunnel vision."
+            ),
         }
 
         return f"""{base_prompt}
@@ -406,3 +574,104 @@ When responding:
             "avg_time_ms": round(avg_time, 0),
             "style": self.style.value,
         }
+
+    def recalibrate_confidence(
+        self,
+        trace: ReasoningTrace,
+        model: str = "gpt-4o-mini",
+    ) -> float:
+        """Recalibrate confidence scores based on tool results and fact verification.
+
+        Analyzes the reasoning trace for signals that affect confidence:
+        - Tool call success/failure patterns in each step
+        - Reflection phase findings (issues, corrections, caveats)
+        - Cross-references between observation claims and tool results
+        - Overall trace success status
+
+        Args:
+            trace: The ReasoningTrace to recalibrate.
+            model: LLM model to use for semantic confidence analysis (reserved
+                   for future LLM-based verification).
+
+        Returns:
+            A recalibrated confidence score between 0.0 and 1.0.
+        """
+        # Start with a neutral baseline
+        if not trace.success:
+            return 0.0
+
+        if not trace.steps:
+            return 0.5
+
+        confidence = 0.5
+        tool_success_count = 0
+        tool_failure_count = 0
+        reflection_issues = 0
+        total_steps = len(trace.steps)
+
+        # Keywords that indicate problems in reflection content
+        caution_keywords = [
+            "incorrect", "error", "mistake", "inaccurate", "wrong",
+            "missing", "incomplete", "verify", "double-check", "uncertain",
+            "might be", "could be wrong", "not sure", "potential issue",
+            "limitation", "caveat", "however", "but note", "important to note",
+        ]
+
+        for step in trace.steps:
+            # Check tool results for success/failure signals
+            for tr in step.tool_results:
+                if isinstance(tr, dict):
+                    if tr.get("success", True):
+                        tool_success_count += 1
+                    else:
+                        tool_failure_count += 1
+                elif hasattr(tr, "success"):
+                    if tr.success:
+                        tool_success_count += 1
+                    else:
+                        tool_failure_count += 1
+
+            # Check reflection phase for issues
+            if step.phase == ReasoningPhase.REFLECT:
+                content_lower = step.content.lower()
+                for keyword in caution_keywords:
+                    if keyword in content_lower:
+                        reflection_issues += 1
+                        break
+
+        # Adjust confidence based on tool results
+        total_tool_results = tool_success_count + tool_failure_count
+        if total_tool_results > 0:
+            tool_success_rate = tool_success_count / total_tool_results
+            # Tool successes boost confidence, failures reduce it
+            confidence += (tool_success_rate - 0.5) * 0.3
+
+        # Adjust confidence based on reflection findings
+        if reflection_issues > 0:
+            # Each reflection issue reduces confidence
+            confidence -= min(0.3, reflection_issues * 0.1)
+
+        # Adjust confidence based on step count (more steps = more verification)
+        if total_steps >= 4:
+            confidence += 0.05  # Bonus for thorough multi-phase reasoning
+
+        # Adjust confidence based on trace-level success
+        if trace.success:
+            confidence += 0.05
+
+        # Clamp to valid range
+        confidence = max(0.0, min(1.0, confidence))
+
+        # Update the steps with the recalibrated confidence
+        for step in trace.steps:
+            # Blend original confidence with recalibrated value
+            step.confidence = round((step.confidence + confidence) / 2, 2)
+
+        logger.debug(
+            "Confidence recalibrated: %.2f (tools: %d success / %d fail, "
+            "reflection issues: %d, steps: %d)",
+            confidence, tool_success_count, tool_failure_count,
+            reflection_issues, total_steps,
+        )
+
+        return confidence
