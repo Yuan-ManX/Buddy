@@ -1,0 +1,1 @@
+# Buddy — AI-Native Companion Platform
