@@ -19,6 +19,11 @@ Core components:
 - BuddySquads: Collaborative agent teams with trust scoring
 - BuddyGuard: Safety monitoring, rate limiting, and audit system
 - BuddyPulse: Health monitoring and metrics collection
+- WebSocketManager: Real-time streaming and event broadcast
+- SelfImprovementEngine: Autonomous skill generation from interaction patterns
+- PersonaManager: Dynamic persona switching with behavior control
+- GatewayHub: Multi-platform messaging integration
+- DaemonManager: Background agent runtime management
 """
 from agent.engine import AgentEngine
 from agent.memory import HierarchicalMemory, MemorySystem, MemoryLayer
@@ -34,6 +39,11 @@ from agent.dream import DreamEngine, DreamPhase, DreamInsight, DreamCycleResult
 from agent.shared import orchestrator, skills_registry
 from agent.guard import BuddyGuard, guard_system
 from agent.pulse import BuddyPulse, pulse_system, HealthStatus
+from agent.websocket import WebSocketManager, ws_manager, MessageType as WsMessageType, WebSocketMessage, Connection
+from agent.self_improvement import SelfImprovementEngine, self_improvement, LearningLoop, SkillStatus as LearningSkillStatus, PatternType, InteractionPattern, CandidateSkill
+from agent.persona import PersonaManager, Persona, ToneMode, VerbosityLevel, create_persona_from_preset, PRESET_PERSONAS
+from agent.gateway import GatewayHub, gateway_hub, MessagePlatform, GatewayMessage, GatewaySession, PlatformAdapter, TelegramAdapter, WebAdapter
+from agent.daemon import DaemonManager, daemon_manager, DaemonStatus, AgentRuntime
 
 __all__ = [
     "AgentEngine",
@@ -49,5 +59,10 @@ __all__ = [
     "DreamEngine", "DreamPhase", "DreamInsight", "DreamCycleResult",
     "BuddyGuard", "guard_system",
     "BuddyPulse", "pulse_system", "HealthStatus",
+    "WebSocketManager", "ws_manager", "WsMessageType", "WebSocketMessage", "Connection",
+    "SelfImprovementEngine", "self_improvement", "LearningLoop", "LearningSkillStatus", "PatternType", "InteractionPattern", "CandidateSkill",
+    "PersonaManager", "Persona", "ToneMode", "VerbosityLevel", "create_persona_from_preset", "PRESET_PERSONAS",
+    "GatewayHub", "gateway_hub", "MessagePlatform", "GatewayMessage", "GatewaySession", "PlatformAdapter", "TelegramAdapter", "WebAdapter",
+    "DaemonManager", "daemon_manager", "DaemonStatus", "AgentRuntime",
     "orchestrator", "skills_registry",
 ]
