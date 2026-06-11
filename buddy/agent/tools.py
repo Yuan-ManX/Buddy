@@ -885,3 +885,327 @@ tool_registry.register(ToolDefinition(
     timeout=10.0,
     safety=ExecutionSafety.MUTATING,
 ))
+
+
+# ── Extended Tools ────────────────────────────────────────
+
+async def _tool_grep_search(args: dict) -> str:
+    """Search file contents using regex patterns."""
+    import os
+    import re
+    pattern = args.get("pattern", "")
+    directory = args.get("directory", ".")
+    file_pattern = args.get("file_pattern", "*")
+    max_results = int(args.get("max_results", 50))
+
+    if not pattern:
+        return "Error: pattern is required"
+
+    workspace_root = os.path.join(os.path.expanduser("~"), ".buddy_workspaces")
+    expanded = os.path.realpath(os.path.expanduser(directory))
+    if not expanded.startswith(workspace_root):
+        return json.dumps({"error": "Access denied: path outside workspace"})
+
+    try:
+        compiled = re.compile(pattern, re.IGNORECASE)
+        results = []
+        import fnmatch
+        for root, dirs, files in os.walk(expanded):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            for fname in files:
+                if not fnmatch.fnmatch(fname, file_pattern):
+                    continue
+                fpath = os.path.join(root, fname)
+                try:
+                    with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                        for lno, line in enumerate(f, 1):
+                            if compiled.search(line):
+                                results.append({
+                                    "file": os.path.relpath(fpath, expanded),
+                                    "line": lno,
+                                    "content": line.strip()[:200],
+                                })
+                                if len(results) >= max_results:
+                                    break
+                except Exception:
+                    continue
+                if len(results) >= max_results:
+                    break
+            if len(results) >= max_results:
+                break
+
+        return json.dumps({
+            "pattern": pattern,
+            "matches": len(results),
+            "truncated": len(results) >= max_results,
+            "results": results,
+        })
+    except re.error as e:
+        return json.dumps({"error": f"Invalid regex: {str(e)}"})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def _tool_find_files(args: dict) -> str:
+    """Find files matching patterns in the workspace."""
+    import os
+    import fnmatch
+    directory = args.get("directory", ".")
+    glob_pattern = args.get("glob", "*")
+    max_depth = int(args.get("max_depth", 5))
+
+    workspace_root = os.path.join(os.path.expanduser("~"), ".buddy_workspaces")
+    expanded = os.path.realpath(os.path.expanduser(directory))
+    if not expanded.startswith(workspace_root):
+        return json.dumps({"error": "Access denied: path outside workspace"})
+
+    try:
+        results = []
+        for root, dirs, files in os.walk(expanded):
+            depth = root[len(expanded):].count(os.sep)
+            if depth > max_depth:
+                dirs[:] = []
+                continue
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            for fname in files:
+                if fnmatch.fnmatch(fname, glob_pattern):
+                    fpath = os.path.join(root, fname)
+                    results.append({
+                        "path": os.path.relpath(fpath, expanded),
+                        "size": os.path.getsize(fpath),
+                        "type": "file",
+                    })
+                if len(results) >= 200:
+                    break
+            if len(results) >= 200:
+                break
+
+        return json.dumps({
+            "pattern": glob_pattern,
+            "count": len(results),
+            "results": results[:200],
+        })
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def _tool_diff_files(args: dict) -> str:
+    """Compute diff between two files or strings."""
+    file_a = args.get("file_a", "")
+    file_b = args.get("file_b", "")
+    import difflib
+
+    if not file_a and not file_b:
+        return "Error: file_a and file_b are required"
+
+    try:
+        lines_a = file_a.splitlines(True)
+        lines_b = file_b.splitlines(True)
+
+        differ = difflib.unified_diff(
+            lines_a, lines_b,
+            fromfile="version_a",
+            tofile="version_b",
+            lineterm="",
+        )
+        diff_output = "\n".join(differ)
+
+        return json.dumps({
+            "diff": diff_output[:5000],
+            "lines_added": len([l for l in diff_output.split("\n") if l.startswith("+") and not l.startswith("+++")]),
+            "lines_removed": len([l for l in diff_output.split("\n") if l.startswith("-") and not l.startswith("---")]),
+        })
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def _tool_data_analysis(args: dict) -> str:
+    """Perform basic statistical analysis on numerical data."""
+    import math
+    data_str = args.get("data", "")
+    if not data_str:
+        return "Error: data is required"
+
+    try:
+        if isinstance(data_str, str):
+            numbers = [float(x.strip()) for x in data_str.split(",") if x.strip()]
+        else:
+            numbers = [float(x) for x in data_str]
+
+        if not numbers:
+            return json.dumps({"error": "No valid numbers found"})
+
+        n = len(numbers)
+        mean = sum(numbers) / n
+        sorted_nums = sorted(numbers)
+        median = sorted_nums[n // 2] if n % 2 else (sorted_nums[n // 2 - 1] + sorted_nums[n // 2]) / 2
+        variance = sum((x - mean) ** 2 for x in numbers) / n
+        std_dev = math.sqrt(variance)
+
+        return json.dumps({
+            "count": n,
+            "sum": round(sum(numbers), 4),
+            "mean": round(mean, 4),
+            "median": round(median, 4),
+            "min": round(min(numbers), 4),
+            "max": round(max(numbers), 4),
+            "std_dev": round(std_dev, 4),
+            "variance": round(variance, 4),
+        })
+    except ValueError:
+        return json.dumps({"error": "Invalid numerical data provided"})
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def _tool_count_tokens(args: dict) -> str:
+    """Estimate token count for a given text."""
+    text = args.get("text", "")
+    if not text:
+        return "Error: text is required"
+    # Rough estimation: 1 token ≈ 4 characters for English, ~2 for code
+    char_count = len(text)
+    word_count = len(text.split())
+    est_tokens_gpt = max(1, char_count // 4)
+    est_tokens_claude = max(1, char_count // 3)
+    return json.dumps({
+        "characters": char_count,
+        "words": word_count,
+        "estimated_tokens_gpt": est_tokens_gpt,
+        "estimated_tokens_claude": est_tokens_claude,
+        "lines": text.count("\n") + 1,
+    })
+
+
+async def _tool_todo_manager(args: dict) -> str:
+    """Manage a structured todo list for the agent."""
+    action = args.get("action", "list")
+    task_id = args.get("task_id", "")
+    title = args.get("title", "")
+    status = args.get("status", "pending")
+
+    if not hasattr(_tool_todo_manager, "_todos"):
+        _tool_todo_manager._todos = []
+
+    todos = _tool_todo_manager._todos
+
+    if action == "add":
+        if not title:
+            return "Error: title is required for add action"
+        new_id = f"todo-{len(todos) + 1}"
+        todos.append({
+            "id": new_id, "title": title, "status": "pending",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return json.dumps({"action": "added", "todo": todos[-1], "total": len(todos)})
+
+    elif action == "update":
+        for t in todos:
+            if t["id"] == task_id:
+                if title:
+                    t["title"] = title
+                if status in ("pending", "in_progress", "completed", "cancelled"):
+                    t["status"] = status
+                return json.dumps({"action": "updated", "todo": t})
+        return json.dumps({"error": f"Todo not found: {task_id}"})
+
+    elif action == "delete":
+        original_len = len(todos)
+        _tool_todo_manager._todos = [t for t in todos if t["id"] != task_id]
+        if len(_tool_todo_manager._todos) < original_len:
+            return json.dumps({"action": "deleted", "task_id": task_id, "remaining": len(_tool_todo_manager._todos)})
+        return json.dumps({"error": f"Todo not found: {task_id}"})
+
+    else:  # list
+        filtered = todos
+        if status != "all":
+            filtered = [t for t in todos if t["status"] == status]
+        return json.dumps({
+            "todos": filtered,
+            "total": len(todos),
+            "completed": sum(1 for t in todos if t["status"] == "completed"),
+            "pending": sum(1 for t in todos if t["status"] == "pending"),
+        })
+
+
+# Register extended tools
+tool_registry.register(ToolDefinition(
+    name="grep_search",
+    description="Search file contents in the workspace using regex patterns",
+    category=ToolCategory.CODE,
+    parameters=[
+        ToolParameter("pattern", "string", "Regex pattern to search for"),
+        ToolParameter("directory", "string", "Directory to search in (default: workspace root)", required=False, default="."),
+        ToolParameter("file_pattern", "string", "File glob pattern to filter (e.g., *.py)", required=False, default="*"),
+        ToolParameter("max_results", "integer", "Maximum results to return", required=False, default=50),
+    ],
+    handler=_tool_grep_search,
+    timeout=20.0,
+    safety=ExecutionSafety.READ_ONLY,
+))
+
+tool_registry.register(ToolDefinition(
+    name="find_files",
+    description="Find files in the workspace matching a glob pattern",
+    category=ToolCategory.SYSTEM,
+    parameters=[
+        ToolParameter("glob", "string", "Glob pattern to match files (e.g., *.py, **/*.ts)", required=False, default="*"),
+        ToolParameter("directory", "string", "Directory to search in", required=False, default="."),
+        ToolParameter("max_depth", "integer", "Maximum directory depth", required=False, default=5),
+    ],
+    handler=_tool_find_files,
+    timeout=15.0,
+    safety=ExecutionSafety.READ_ONLY,
+))
+
+tool_registry.register(ToolDefinition(
+    name="diff_files",
+    description="Compute a unified diff between two text strings",
+    category=ToolCategory.CODE,
+    parameters=[
+        ToolParameter("file_a", "string", "First text content"),
+        ToolParameter("file_b", "string", "Second text content"),
+    ],
+    handler=_tool_diff_files,
+    timeout=10.0,
+    safety=ExecutionSafety.READ_ONLY,
+))
+
+tool_registry.register(ToolDefinition(
+    name="data_analysis",
+    description="Perform statistical analysis on comma-separated numerical data",
+    category=ToolCategory.DATA,
+    parameters=[
+        ToolParameter("data", "string", "Comma-separated numerical values to analyze"),
+    ],
+    handler=_tool_data_analysis,
+    timeout=10.0,
+    safety=ExecutionSafety.READ_ONLY,
+))
+
+tool_registry.register(ToolDefinition(
+    name="count_tokens",
+    description="Estimate the token count for a given text for different models",
+    category=ToolCategory.SYSTEM,
+    parameters=[
+        ToolParameter("text", "string", "The text to count tokens for"),
+    ],
+    handler=_tool_count_tokens,
+    timeout=5.0,
+    safety=ExecutionSafety.READ_ONLY,
+))
+
+tool_registry.register(ToolDefinition(
+    name="todo_manager",
+    description="Manage a structured todo list for tracking tasks",
+    category=ToolCategory.SYSTEM,
+    parameters=[
+        ToolParameter("action", "string", "Action: list, add, update, or delete", required=False, default="list"),
+        ToolParameter("task_id", "string", "Task ID for update/delete", required=False, default=""),
+        ToolParameter("title", "string", "Task title for add/update", required=False, default=""),
+        ToolParameter("status", "string", "Task status: pending, in_progress, completed, cancelled", required=False, default="pending"),
+    ],
+    handler=_tool_todo_manager,
+    timeout=5.0,
+    safety=ExecutionSafety.MUTATING,
+))
