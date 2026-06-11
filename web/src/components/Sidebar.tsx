@@ -28,6 +28,11 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'pulse', label: 'Pulse', icon: '💓' },
   { id: 'gateway', label: 'Gateway', icon: '🌐' },
   { id: 'daemon', label: 'Daemon', icon: '👾' },
+  { id: 'swarm', label: 'Swarm', icon: '🦾' },
+  { id: 'runtime', label: 'Runtime', icon: '🖧' },
+  { id: 'scheduler', label: 'Scheduler', icon: '⏰' },
+  { id: 'studio', label: 'Studio', icon: '🎨' },
+  { id: 'workflow', label: 'Workflow', icon: '📋' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
@@ -50,6 +55,7 @@ const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'events', label: 'Events', icon: '📡' },
   { id: 'persona', label: 'Persona', icon: '🎭' },
   { id: 'learning', label: 'Learn', icon: '📚' },
+  { id: 'knowledge', label: 'Knowledge', icon: '📖' },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({
