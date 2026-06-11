@@ -205,3 +205,150 @@ class SubAgentOrchestrator:
         total_tokens = sum(r.tokens_used for r in results)
         parts.append(f"**Total tokens: {total_tokens}**")
         return "\n".join(parts)
+
+    async def execute_with_dependencies(
+        self,
+        tasks: list[dict[str, Any]],
+        model: str = "gpt-4o-mini",
+    ) -> list[SubAgentResult]:
+        """Execute tasks respecting dependency order with parallel batches.
+
+        Each task dict may contain:
+        - name: str (worker name)
+        - task: str (the task description)
+        - instructions: str (system instructions)
+        - depends_on: list[int] (indices of prerequisite tasks)
+        - tools: list[dict] (optional tool schemas)
+        """
+        # Build dependency graph
+        dependency_graph: dict[int, list[int]] = {}
+        for i, task in enumerate(tasks):
+            deps = task.get("depends_on", [])
+            dependency_graph[i] = deps if isinstance(deps, list) else []
+
+        completed: set[int] = set()
+        results: dict[int, SubAgentResult] = {}
+        total_tokens = 0
+
+        while len(completed) < len(tasks):
+            # Find tasks whose dependencies are all satisfied
+            ready = []
+            for i, task in enumerate(tasks):
+                if i in completed:
+                    continue
+                deps = dependency_graph.get(i, [])
+                if all(d in completed for d in deps):
+                    ready.append((i, task))
+
+            if not ready:
+                # No progress possible — break deadlock
+                logger.warning("Dependency deadlock detected; executing remaining tasks sequentially")
+                for i, task in enumerate(tasks):
+                    if i not in completed:
+                        ready.append((i, task))
+                if not ready:
+                    break
+
+            # Execute ready tasks in parallel
+            workers = []
+            task_map = {}
+            for idx, task in ready:
+                name = task.get("name", f"Worker-{idx + 1}")
+                instructions = task.get("instructions", "Complete the assigned task efficiently.")
+                tools = task.get("tools", [])
+
+                # Inject results from dependencies into task context
+                enhanced_task = task.get("task", "")
+                deps = dependency_graph.get(idx, [])
+                if deps:
+                    dep_context = "\n\nResults from prerequisite tasks:\n"
+                    for dep_idx in deps:
+                        if dep_idx in results:
+                            dep_context += f"- {tasks[dep_idx].get('name', f'Worker-{dep_idx + 1}')}: "
+                            dep_context += f"{results[dep_idx].result[:300]}\n"
+                    enhanced_task = f"{enhanced_task}{dep_context}"
+
+                worker = SubAgent(name, instructions, self.parent_agent_id, tools=tools)
+                task_map[worker.id] = idx
+                workers.append((worker, enhanced_task, model))
+
+            logger.info(f"Executing batch of {len(workers)} sub-agents (deps: {len(completed)}/{len(tasks)} done)")
+
+            batch_results = await asyncio.gather(
+                *[w.execute(t, m) for w, t, m in workers],
+                return_exceptions=True,
+            )
+
+            for result in batch_results:
+                if isinstance(result, SubAgentResult):
+                    idx = task_map.get(result.agent_id)
+                    if idx is not None:
+                        completed.add(idx)
+                        results[idx] = result
+                        total_tokens += result.tokens_used
+                else:
+                    logger.warning(f"Sub-agent execution failed with exception: {result}")
+
+        # Return results in original task order
+        ordered = [results[i] for i in range(len(tasks)) if i in results]
+        logger.info(f"Dependency-aware execution done: {len(ordered)}/{len(tasks)} completed, {total_tokens} tokens")
+        return ordered
+
+
+class SubAgentPool:
+    """Pre-warmed pool of sub-agents for fast parallel execution without cold starts."""
+
+    def __init__(self, parent_agent_id: str, pool_size: int = 5):
+        self.parent_agent_id = parent_agent_id
+        self.pool_size = pool_size
+        self._pool: list[SubAgent] = []
+        self._in_use: set[str] = set()
+        self._initialize_pool()
+
+    def _initialize_pool(self):
+        for i in range(self.pool_size):
+            agent = SubAgent(
+                name=f"PoolWorker-{i + 1}",
+                instructions="General-purpose worker agent. Execute tasks efficiently.",
+                parent_agent_id=self.parent_agent_id,
+            )
+            self._pool.append(agent)
+        logger.info(f"SubAgent pool initialized with {self.pool_size} workers")
+
+    async def execute(self, task: dict, model: str = "gpt-4o-mini") -> SubAgentResult:
+        """Execute a task using an available pool worker."""
+        available = [a for a in self._pool if a.id not in self._in_use]
+        if not available:
+            # All busy — create a temporary worker
+            logger.info("Pool exhausted, creating temporary worker")
+            worker = SubAgent(
+                name=f"TempWorker-{uuid.uuid4().hex[:4]}",
+                instructions=task.get("instructions", "Complete the task."),
+                parent_agent_id=self.parent_agent_id,
+            )
+            return await worker.execute(task.get("task", ""), model)
+
+        worker = available[0]
+        worker.instructions = task.get("instructions", worker.instructions)
+        self._in_use.add(worker.id)
+        try:
+            result = await worker.execute(task.get("task", ""), model)
+            return result
+        finally:
+            self._in_use.discard(worker.id)
+
+    async def execute_batch(self, tasks: list[dict], model: str = "gpt-4o-mini") -> list[SubAgentResult]:
+        """Execute multiple tasks using pool workers."""
+        results = await asyncio.gather(
+            *[self.execute(t, model) for t in tasks],
+            return_exceptions=True,
+        )
+        return [r for r in results if isinstance(r, SubAgentResult)]
+
+    def get_pool_status(self) -> dict:
+        return {
+            "pool_size": self.pool_size,
+            "available": len([a for a in self._pool if a.id not in self._in_use]),
+            "in_use": len(self._in_use),
+            "total": len(self._pool),
+        }
