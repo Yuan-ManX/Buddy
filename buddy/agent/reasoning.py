@@ -34,6 +34,8 @@ class ReasoningStyle(str, Enum):
     CREATIVE = "creative"         # Divergent thinking, brainstorming mode
     CODING = "coding"             # Code-focused reasoning with testing emphasis
     PARALLEL = "parallel"         # Multi-perspective reasoning with simultaneous viewpoints
+    TREE = "tree"                 # Tree-of-thought: explore multiple branches, prune, converge
+    SELF_CONSISTENCY = "self_consistency"  # Multiple samples with majority voting
 
 
 @dataclass
@@ -361,6 +363,330 @@ If issues found, provide a corrected response. Otherwise, confirm the answer."""
 
         return synthesis_trace
 
+    async def execute_tree_of_thought(
+        self,
+        system_prompt: str,
+        user_message: str,
+        tool_schemas: list[dict] | None = None,
+        tool_executor: Any = None,
+        model: str = "gpt-4o-mini",
+        num_branches: int = 3,
+        max_depth: int = 3,
+    ) -> ReasoningTrace:
+        """Execute tree-of-thought reasoning with branch exploration and pruning.
+
+        Expands multiple solution paths simultaneously, evaluates each branch
+        at every depth level, prunes low-quality branches, and converges on
+        the best final answer through iterative refinement.
+        """
+        start = time.time()
+        trace = ReasoningTrace()
+        total_tokens = 0
+
+        try:
+            branch_prompt = (
+                f"{system_prompt}\n\n"
+                f"Generate {num_branches} distinct approaches to solve this problem. "
+                f"Each approach should be a different strategy or perspective.\n\n"
+                f"Problem: {user_message}\n\n"
+                f"Return {num_branches} numbered approaches, each as a separate paragraph."
+            )
+
+            response = await self.client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": branch_prompt}],
+                max_tokens=2000,
+                temperature=0.8,
+            )
+            content = response.choices[0].message.content or ""
+            if response.usage:
+                total_tokens += response.usage.total_tokens
+
+            branches = self._parse_branches(content, num_branches)
+            if not branches:
+                return await self.execute(system_prompt, user_message, tool_schemas, tool_executor, model)
+
+            active_branches = [(b, 0.5) for b in branches]
+
+            for depth in range(max_depth):
+                if not active_branches:
+                    break
+                new_branches = []
+                for branch_text, confidence in active_branches:
+                    if confidence < 0.2:
+                        continue
+                    expand_prompt = (
+                        f"{system_prompt}\n\n"
+                        f"Original problem: {user_message}\n\n"
+                        f"Current approach (depth {depth + 1}/{max_depth}):\n{branch_text}\n\n"
+                        f"Refine and expand this approach. Add more specific details, "
+                        f"consider edge cases, and improve the solution. "
+                        f"Also provide a confidence score (0.0-1.0) for this branch.\n\n"
+                        f"Response format:\n"
+                        f"CONFIDENCE: <0.0-1.0>\n"
+                        f"REASONING: <refined approach>"
+                    )
+                    try:
+                        resp = await self.client.chat.completions.create(
+                            model=model,
+                            messages=[{"role": "user", "content": expand_prompt}],
+                            max_tokens=1000,
+                            temperature=0.6,
+                        )
+                        expanded = resp.choices[0].message.content or ""
+                        if resp.usage:
+                            total_tokens += resp.usage.total_tokens
+                        new_confidence = self._extract_confidence(expanded, confidence)
+                        reasoning = self._extract_reasoning(expanded)
+                        trace.steps.append(ReasoningStep(
+                            phase=ReasoningPhase.THINK,
+                            content=f"Branch depth {depth + 1}: {reasoning[:200]}",
+                            confidence=new_confidence,
+                            elapsed_ms=0.0,
+                        ))
+                        new_branches.append((reasoning, new_confidence))
+                    except Exception as e:
+                        logger.debug(f"Branch expansion failed at depth {depth}: {e}")
+                        continue
+                new_branches.sort(key=lambda x: -x[1])
+                active_branches = new_branches[:num_branches]
+
+            best_branches = [b for b, _ in active_branches[:2]] if active_branches else [branches[0]]
+            synthesis_prompt = (
+                f"{system_prompt}\n\n"
+                f"Original problem: {user_message}\n\n"
+                f"Best approaches found:\n\n" +
+                "\n\n".join(f"Approach {i+1}:\n{b}" for i, b in enumerate(best_branches)) +
+                f"\n\nSynthesize these into a single comprehensive answer. "
+                f"Combine the best elements from each approach."
+            )
+            final_response = await self.client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": synthesis_prompt}],
+                max_tokens=4096,
+                temperature=0.4,
+            )
+            final_answer = final_response.choices[0].message.content or ""
+            if final_response.usage:
+                total_tokens += final_response.usage.total_tokens
+            trace.final_answer = final_answer
+            trace.total_tokens = total_tokens
+            trace.success = True
+
+        except Exception as e:
+            logger.error(f"Tree-of-thought reasoning error: {e}")
+            trace.success = False
+            trace.error = str(e)
+            trace.final_answer = f"Tree-of-thought reasoning encountered an error: {str(e)}"
+
+        trace.total_time_ms = (time.time() - start) * 1000
+        self._trace_store.append(trace)
+        if len(self._trace_store) > 200:
+            self._trace_store = self._trace_store[-100:]
+        return trace
+
+    async def execute_self_consistency(
+        self,
+        system_prompt: str,
+        user_message: str,
+        tool_schemas: list[dict] | None = None,
+        tool_executor: Any = None,
+        model: str = "gpt-4o-mini",
+        num_samples: int = 5,
+    ) -> ReasoningTrace:
+        """Execute self-consistency reasoning with multiple sampling and majority voting.
+
+        Generates multiple independent reasoning paths, then aggregates results
+        through voting to produce a more reliable answer. Most effective for
+        math, logic, and factual queries.
+        """
+        start = time.time()
+        trace = ReasoningTrace()
+        total_tokens = 0
+
+        try:
+            sample_tasks = []
+            for i in range(num_samples):
+                temp = 0.7 + (i * 0.05)
+                sample_tasks.append(self._generate_sample(
+                    system_prompt, user_message, tool_schemas, tool_executor,
+                    model, temp, i,
+                ))
+            sample_results = await asyncio.gather(*sample_tasks, return_exceptions=True)
+            valid_samples = []
+            for i, result in enumerate(sample_results):
+                if isinstance(result, Exception):
+                    logger.warning(f"Sample {i} failed: {result}")
+                    continue
+                valid_samples.append(result)
+                trace.steps.append(ReasoningStep(
+                    phase=ReasoningPhase.THINK,
+                    content=f"Sample {i+1}: {result['answer'][:200]}",
+                    confidence=result.get("confidence", 0.5),
+                    elapsed_ms=result.get("elapsed_ms", 0),
+                ))
+
+            if not valid_samples:
+                trace.success = False
+                trace.error = "All self-consistency samples failed."
+                trace.final_answer = "Unable to generate consensus — all samples failed."
+                return trace
+
+            answers = [s["answer"].strip() for s in valid_samples]
+            tokens_used = sum(s.get("tokens", 0) for s in valid_samples)
+            total_tokens += tokens_used
+
+            consensus = self._majority_vote(answers)
+
+            if len(set(a[:100] for a in answers)) > 1:
+                synthesis_prompt = (
+                    f"Original question: {user_message}\n\n"
+                    f"Multiple reasoning attempts produced these answers:\n\n" +
+                    "\n---\n".join(f"Answer {i+1}:\n{a}" for i, a in enumerate(answers)) +
+                    f"\n\nIdentify the most correct answer and explain why. "
+                    f"If there's disagreement, resolve it through logical analysis. "
+                    f"Provide a single final answer."
+                )
+                final_response = await self.client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": synthesis_prompt}],
+                    max_tokens=4096,
+                    temperature=0.3,
+                )
+                final_answer = final_response.choices[0].message.content or consensus
+                if final_response.usage:
+                    total_tokens += final_response.usage.total_tokens
+            else:
+                final_answer = consensus
+
+            unique_answers = len(set(a[:200] for a in answers))
+            agreement_score = 1.0 - (unique_answers - 1) / max(len(answers) - 1, 1)
+
+            trace.final_answer = final_answer
+            trace.total_tokens = total_tokens
+            trace.success = True
+
+            trace.steps.append(ReasoningStep(
+                phase=ReasoningPhase.REFLECT,
+                content=f"Self-consistency: {len(valid_samples)}/{num_samples} samples, "
+                        f"agreement: {agreement_score:.2f}",
+                confidence=agreement_score,
+                elapsed_ms=0.0,
+            ))
+
+        except Exception as e:
+            logger.error(f"Self-consistency reasoning error: {e}")
+            trace.success = False
+            trace.error = str(e)
+            trace.final_answer = f"Self-consistency reasoning encountered an error: {str(e)}"
+
+        trace.total_time_ms = (time.time() - start) * 1000
+        self._trace_store.append(trace)
+        if len(self._trace_store) > 200:
+            self._trace_store = self._trace_store[-100:]
+        return trace
+
+    async def _generate_sample(
+        self, system_prompt: str, user_message: str,
+        tool_schemas, tool_executor, model: str, temperature: float, index: int,
+    ) -> dict:
+        """Generate a single reasoning sample for self-consistency."""
+        sample_start = time.time()
+        try:
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ]
+            kwargs = {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": 2048,
+            }
+            if tool_schemas and tool_executor:
+                kwargs["tools"] = tool_schemas
+                kwargs["tool_choice"] = "auto"
+            response = await self.client.chat.completions.create(**kwargs)
+            answer = response.choices[0].message.content or ""
+            tokens = response.usage.total_tokens if response.usage else 0
+            return {
+                "answer": answer,
+                "tokens": tokens,
+                "elapsed_ms": (time.time() - sample_start) * 1000,
+                "confidence": 0.7,
+                "index": index,
+            }
+        except Exception as e:
+            logger.warning(f"Sample {index} generation failed: {e}")
+            return {
+                "answer": f"[Sample {index} failed: {str(e)}]",
+                "tokens": 0,
+                "elapsed_ms": (time.time() - sample_start) * 1000,
+                "confidence": 0.1,
+                "index": index,
+            }
+
+    def _parse_branches(self, content: str, expected_count: int) -> list[str]:
+        """Parse numbered branches from LLM output."""
+        branches = []
+        lines = content.split("\n")
+        current = []
+        for line in lines:
+            stripped = line.strip()
+            is_new_branch = False
+            for pattern in [f"{i+1}.", f"{i+1})", f"Approach {i+1}", f"Branch {i+1}"]:
+                if stripped.startswith(pattern):
+                    is_new_branch = True
+                    break
+            if is_new_branch and current:
+                branches.append(" ".join(current).strip())
+                current = []
+            current.append(stripped)
+        if current:
+            branches.append(" ".join(current).strip())
+        branches = [b for b in branches if len(b) > 10]
+        return branches[:expected_count]
+
+    def _extract_confidence(self, text: str, default: float = 0.5) -> float:
+        """Extract confidence score from text output."""
+        import re
+        match = re.search(r'CONFIDENCE:\s*([0-9]*\.?[0-9]+)', text, re.IGNORECASE)
+        if match:
+            return max(0.0, min(1.0, float(match.group(1))))
+        lines = text.strip().split("\n")
+        for line in reversed(lines):
+            match = re.search(r'([0-9]\.[0-9]+)', line)
+            if match:
+                val = float(match.group(1))
+                if 0.0 <= val <= 1.0:
+                    return val
+        return default
+
+    def _extract_reasoning(self, text: str) -> str:
+        """Extract reasoning content from formatted output."""
+        import re
+        match = re.search(r'REASONING:\s*\n?(.*)', text, re.IGNORECASE | re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        lines = text.split("\n")
+        filtered = [l for l in lines if not l.strip().upper().startswith("CONFIDENCE:")]
+        return "\n".join(filtered).strip()
+
+    def _majority_vote(self, answers: list[str]) -> str:
+        """Perform majority voting on a list of answer strings."""
+        if not answers:
+            return ""
+        if len(answers) == 1:
+            return answers[0]
+        from collections import Counter
+        signatures = [a[:200].lower().strip() for a in answers]
+        counter = Counter(signatures)
+        most_common_sig, _ = counter.most_common(1)[0]
+        for a in answers:
+            if a[:200].lower().strip() == most_common_sig:
+                return a
+        return max(answers, key=len)
+
     async def _observe(self, messages: list[dict], model: str) -> ReasoningStep:
         """Phase 1: Observe and understand the task."""
         if self.style == ReasoningStyle.CONCISE:
@@ -545,6 +871,16 @@ If issues found, provide a corrected response. Otherwise, confirm the answer."""
                 "Consider multiple perspectives simultaneously. Analyze from different angles: "
                 "technical, practical, ethical, and creative. Weigh trade-offs and synthesize "
                 "a balanced conclusion. Use parallel thinking to avoid tunnel vision."
+            ),
+            ReasoningStyle.TREE: (
+                "Explore multiple solution paths systematically. For each path, think through "
+                "intermediate steps, evaluate feasibility, and compare alternatives. "
+                "Prune unpromising approaches early. Converge on the best solution."
+            ),
+            ReasoningStyle.SELF_CONSISTENCY: (
+                "Generate multiple independent solutions to the same problem. "
+                "Compare answers, identify the most consistent and reliable one. "
+                "Use diversity of thought to increase accuracy. Vote on the best answer."
             ),
         }
 
