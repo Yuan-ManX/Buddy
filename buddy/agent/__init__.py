@@ -24,6 +24,10 @@ Core components:
 - PersonaManager: Dynamic persona switching with behavior control
 - GatewayHub: Multi-platform messaging integration
 - DaemonManager: Background agent runtime management
+- RuntimeHub: Universal execution environment management (local, Docker, venv)
+- BuddyScheduler: Cron-based task scheduling with platform delivery
+- BuddyStudio: Project workspace system with white-box memory
+- WorkflowEngine: Agentic task lifecycle management with delegation
 """
 from agent.engine import AgentEngine
 from agent.memory import HierarchicalMemory, MemorySystem, MemoryLayer
@@ -44,6 +48,10 @@ from agent.self_improvement import SelfImprovementEngine, self_improvement, Lear
 from agent.persona import PersonaManager, Persona, ToneMode, VerbosityLevel, create_persona_from_preset, PRESET_PERSONAS
 from agent.gateway import GatewayHub, gateway_hub, MessagePlatform, GatewayMessage, GatewaySession, PlatformAdapter, TelegramAdapter, WebAdapter
 from agent.daemon import DaemonManager, daemon_manager, DaemonStatus, AgentRuntime
+from agent.runtime_hub import RuntimeHub, runtime_hub, RuntimeBackend, RuntimeStatus as RtStatus, RuntimeInfo, ExecutionRequest, ExecutionResult
+from agent.scheduler import BuddyScheduler, buddy_scheduler, ScheduleType, ScheduleStatus, ScheduledTask, CronParser, NaturalScheduleParser
+from agent.studio import BuddyStudio, buddy_studio, StudioStatus, WhiteBoxMemory, MemoryEntry, MemoryCategory, MemoryImportance, MemorySnapshot, MemorySnapshotter, StudioInfo, TemplateLibrary
+from agent.workflow import WorkflowEngine, workflow_engine, TaskState, WorkflowPriority, BlockerType, WorkflowTask, TaskBoard, ActivityTracker, Blocker
 
 __all__ = [
     "AgentEngine",
@@ -64,5 +72,9 @@ __all__ = [
     "PersonaManager", "Persona", "ToneMode", "VerbosityLevel", "create_persona_from_preset", "PRESET_PERSONAS",
     "GatewayHub", "gateway_hub", "MessagePlatform", "GatewayMessage", "GatewaySession", "PlatformAdapter", "TelegramAdapter", "WebAdapter",
     "DaemonManager", "daemon_manager", "DaemonStatus", "AgentRuntime",
+    "RuntimeHub", "runtime_hub", "RuntimeBackend", "RtStatus", "RuntimeInfo", "ExecutionRequest", "ExecutionResult",
+    "BuddyScheduler", "buddy_scheduler", "ScheduleType", "ScheduleStatus", "ScheduledTask", "CronParser", "NaturalScheduleParser",
+    "BuddyStudio", "buddy_studio", "StudioStatus", "WhiteBoxMemory", "MemoryEntry", "MemoryCategory", "MemoryImportance", "MemorySnapshot", "MemorySnapshotter", "StudioInfo", "TemplateLibrary",
+    "WorkflowEngine", "workflow_engine", "TaskState", "WorkflowPriority", "BlockerType", "WorkflowTask", "TaskBoard", "ActivityTracker", "Blocker",
     "orchestrator", "skills_registry",
 ]
