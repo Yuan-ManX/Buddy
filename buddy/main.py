@@ -2,9 +2,16 @@
 
 Backend API Entry Point (port 8001)
 """
+import sys
+import os
 import time
 import logging
 from contextlib import asynccontextmanager
+
+# Ensure the buddy package directory is on sys.path for imports
+_buddy_dir = os.path.dirname(os.path.abspath(__file__))
+if _buddy_dir not in sys.path:
+    sys.path.insert(0, _buddy_dir)
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
