@@ -166,6 +166,15 @@ export const api = {
       qs.set('message', message);
       return request<import('../types').RoutingAnalysis>(`/routing/analyze?${qs.toString()}`, { method: 'POST' });
     },
+    analyzeDeep: (message: string, contextSummary?: string) => {
+      const qs = new URLSearchParams();
+      qs.set('message', message);
+      if (contextSummary) qs.set('context_summary', contextSummary);
+      return request<import('../types').RoutingAnalysis>(`/routing/analyze-deep?${qs.toString()}`, { method: 'POST' });
+    },
+    tiers: () => request<Record<string, { model: string; temperature: number; max_tokens: number; cost_multiplier: number; usage_count: number }>>('/routing/tiers'),
+    updateTier: (tierName: string, data: { model?: string; temperature?: number; max_tokens?: number; cost_multiplier?: number }) =>
+      request(`/routing/tiers/${tierName}`, { method: 'PUT', body: JSON.stringify(data) }),
   },
 
   autopilots: {
@@ -579,6 +588,82 @@ export const api = {
     anomalies: () => request<{ alerts: any[]; count: number }>('/pulse/anomalies'),
   },
 
+  // ── Persona Management ──
+  personas: {
+    list: (agentId: string) =>
+      request<Array<import('../types').Persona>>(`/agents/${agentId}/personas`),
+    getActive: (agentId: string) =>
+      request<import('../types').Persona>(`/agents/${agentId}/personas/active`),
+    presets: () =>
+      request<Array<import('../types').PersonaPreset>>('/agents/_/personas/presets'),
+    activate: (agentId: string, personaId: string) =>
+      request<{ success: boolean; active_persona_id: string }>(`/agents/${agentId}/personas/activate/${personaId}`, { method: 'POST' }),
+    createFromPreset: (agentId: string, presetName: string) => {
+      const params = new URLSearchParams({ preset_name: presetName });
+      return request<import('../types').Persona>(`/agents/${agentId}/personas/create-from-preset?${params}`, { method: 'POST' });
+    },
+    create: (agentId: string, data: { name: string; tone?: string; verbosity?: string; description?: string; expertise_areas?: string[]; communication_style?: string }) =>
+      request<import('../types').Persona>(`/agents/${agentId}/personas`, { method: 'POST', body: JSON.stringify(data) }),
+    delete: (agentId: string, personaId: string) =>
+      request<void>(`/agents/${agentId}/personas/${personaId}`, { method: 'DELETE' }),
+  },
+
+  // ── Learning (Self-Improvement) ──
+  learning: {
+    stats: (agentId: string) =>
+      request<import('../types').LearningStats>(`/agents/${agentId}/learning/stats`),
+    patterns: (agentId: string) =>
+      request<Array<import('../types').InteractionPattern>>(`/agents/${agentId}/learning/patterns`),
+    candidates: (agentId: string) =>
+      request<Array<import('../types').CandidateSkill>>(`/agents/${agentId}/learning/candidates`),
+    history: (limit?: number) =>
+      request<Array<import('../types').LearningCycleResult>>(`/learning/history?limit=${limit || 20}`),
+    recordInteraction: (agentId: string, userMessage: string, assistantResponse: string, toolsUsed?: string, success?: boolean) => {
+      const params = new URLSearchParams({ user_message: userMessage, assistant_response: assistantResponse, tools_used: toolsUsed || '', success: String(success !== false) });
+      return request<{ recorded: boolean }>(`/agents/${agentId}/learning/record?${params}`, { method: 'POST' });
+    },
+    runCycle: (agentId: string) =>
+      request<import('../types').LearningCycleResult>(`/agents/${agentId}/learning/run-cycle`, { method: 'POST' }),
+    runAll: () =>
+      request<{ results: Array<import('../types').LearningCycleResult>; agents_processed: number }>('/learning/run-all', { method: 'POST' }),
+  },
+
+  // ── Gateway ──
+  gateway: {
+    stats: () =>
+      request<import('../types').GatewayStats>('/gateway/stats'),
+    sessions: () =>
+      request<Array<import('../types').GatewaySession>>('/gateway/sessions'),
+    connectPlatform: (platform: string, config?: string) => {
+      const params = new URLSearchParams({ platform, config: config || '{}' });
+      return request<{ success: boolean; platform: string }>(`/gateway/platforms/connect?${params}`, { method: 'POST' });
+    },
+    sendMessage: (platform: string, userId: string, content: string) => {
+      const params = new URLSearchParams({ platform, user_id: userId, content });
+      return request<{ success: boolean }>(`/gateway/send?${params}`, { method: 'POST' });
+    },
+  },
+
+  // ── Daemon ──
+  daemon: {
+    stats: () =>
+      request<import('../types').DaemonStats>('/daemon/stats'),
+    getAgent: (agentId: string) =>
+      request<import('../types').DaemonRuntime>(`/daemon/agents/${agentId}`),
+    startAgent: (agentId: string, agentName?: string) => {
+      const params = agentName ? `?agent_name=${encodeURIComponent(agentName)}` : '';
+      return request<{ success: boolean; agent_id: string }>(`/daemon/agents/${agentId}/start${params}`, { method: 'POST' });
+    },
+    stopAgent: (agentId: string) =>
+      request<{ success: boolean }>(`/daemon/agents/${agentId}/stop`, { method: 'POST' }),
+    restartAgent: (agentId: string) =>
+      request<{ success: boolean }>(`/daemon/agents/${agentId}/restart`, { method: 'POST' }),
+    startAll: () =>
+      request<{ success: boolean }>('/daemon/start-all', { method: 'POST' }),
+    stopAll: () =>
+      request<{ success: boolean }>('/daemon/stop-all', { method: 'POST' }),
+  },
+
   // ── Squads ──
   squads: {
     form: (data: { name: string; description?: string; leader_id?: string }) =>
@@ -621,5 +706,172 @@ export const api = {
     },
     stats: () => request('/squads/stats'),
     byAgent: (agentId: string) => request<Array<import('../types').Squad>>(`/squads/by-agent/${agentId}`),
+  },
+
+  // ── RAG Knowledge Base ──
+  rag: {
+    ingestText: (agentId: string, data: { content: string; title?: string; source?: string; metadata?: Record<string, unknown> }) =>
+      request<import('../types').RAGDocument>(`/agents/${agentId}/rag/ingest-text`, { method: 'POST', body: JSON.stringify(data) }),
+    ingestFile: (agentId: string, filePath: string) => {
+      const params = new URLSearchParams({ file_path: filePath });
+      return request<import('../types').RAGDocument>(`/agents/${agentId}/rag/ingest-file?${params}`, { method: 'POST' });
+    },
+    ingestUrl: (agentId: string, url: string) => {
+      const params = new URLSearchParams({ url });
+      return request<import('../types').RAGDocument>(`/agents/${agentId}/rag/ingest-url?${params}`, { method: 'POST' });
+    },
+    search: (agentId: string, query: string, topK?: number, hybrid?: boolean) => {
+      const params = new URLSearchParams({ query });
+      if (topK) params.set('top_k', String(topK));
+      if (hybrid !== undefined) params.set('hybrid', String(hybrid));
+      return request<{ agent_id: string; query: string; results: Array<import('../types').RAGSearchResult>; count: number }>(`/agents/${agentId}/rag/search?${params}`);
+    },
+    documents: (agentId: string) =>
+      request<{ agent_id: string; documents: Array<import('../types').RAGDocument> }>(`/agents/${agentId}/rag/documents`),
+    deleteDocument: (agentId: string, docId: string) =>
+      request<void>(`/agents/${agentId}/rag/documents/${docId}`, { method: 'DELETE' }),
+    stats: (agentId: string) =>
+      request<import('../types').RAGStats>(`/agents/${agentId}/rag/stats`),
+  },
+
+  // ── Swarm Engine ──
+  swarm: {
+    form: (data: { name: string; goal: string; min_members?: number }) =>
+      request<import('../types').SwarmSession>(`/swarm/form`, { method: 'POST', body: JSON.stringify(data) }),
+    plan: (sessionId: string) =>
+      request<{ session_id: string; tasks: Array<import('../types').SwarmTask>; count: number }>(`/swarm/${sessionId}/plan`, { method: 'POST' }),
+    execute: (sessionId: string) =>
+      request<import('../types').SwarmSession>(`/swarm/${sessionId}/execute`, { method: 'POST' }),
+    get: (sessionId: string) =>
+      request<import('../types').SwarmSession>(`/swarm/${sessionId}`),
+    list: () =>
+      request<{ sessions: Array<import('../types').SwarmSession> }>('/swarm/sessions'),
+    stats: () =>
+      request<import('../types').SwarmStats>('/swarm/stats'),
+  },
+
+  // ── Runtime Hub ──
+  runtimes: {
+    list: () =>
+      request<{ runtimes: Array<import('../types').RuntimeItem> }>('/runtimes'),
+    get: (id: string) =>
+      request<import('../types').RuntimeItem>(`/runtimes/${id}`),
+    create: (data: { name: string; backend?: string; workspace_dir?: string; image?: string; tags?: string[] }) =>
+      request<import('../types').RuntimeItem>('/runtimes', { method: 'POST', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<{ success: boolean }>(`/runtimes/${id}`, { method: 'DELETE' }),
+    execute: (data: { runtime_id: string; command?: string; code?: string; language?: string; timeout_sec?: number }) =>
+      request<import('../types').ExecutionOutput>('/runtimes/execute', { method: 'POST', body: JSON.stringify(data) }),
+    history: (id: string) =>
+      request<{ history: Array<import('../types').ExecutionOutput> }>(`/runtimes/${id}/history`),
+    discover: () =>
+      request<{ discovered: Array<import('../types').RuntimeItem> }>('/runtimes/discover', { method: 'POST' }),
+    stats: () =>
+      request<import('../types').RuntimeHubStats>('/runtimes-stats'),
+  },
+
+  // ── Scheduler ──
+  schedules: {
+    list: () =>
+      request<{ schedules: Array<import('../types').ScheduledTaskItem> }>('/schedules'),
+    get: (id: string) =>
+      request<import('../types').ScheduledTaskItem>(`/schedules/${id}`),
+    create: (data: { name: string; prompt: string; agent_id?: string; description?: string; cron_expression?: string; interval_seconds?: number; schedule_type?: string; natural_schedule?: string; tags?: string[] }) =>
+      request<import('../types').ScheduledTaskItem>('/schedules', { method: 'POST', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<{ success: boolean }>(`/schedules/${id}`, { method: 'DELETE' }),
+    pause: (id: string) =>
+      request<{ success: boolean }>(`/schedules/${id}/pause`, { method: 'POST' }),
+    resume: (id: string) =>
+      request<{ success: boolean }>(`/schedules/${id}/resume`, { method: 'POST' }),
+    history: (id: string) =>
+      request<{ history: Array<Record<string, unknown>> }>(`/schedules/${id}/history`),
+    parse: (text: string) => {
+      const params = new URLSearchParams({ text });
+      return request<import('../types').ScheduleParseResult>(`/schedules/parse?${params}`, { method: 'POST' });
+    },
+    stats: () =>
+      request<import('../types').SchedulerStats>('/schedules-stats'),
+  },
+
+  // ── Studio ──
+  studios: {
+    list: () =>
+      request<{ studios: Array<import('../types').StudioInfoItem>; templates: Array<import('../types').StudioTemplate> }>('/studios'),
+    get: (id: string) =>
+      request<import('../types').StudioInfoItem>(`/studios/${id}`),
+    create: (data: { name: string; description?: string; template_id?: string; icon?: string; tags?: string[] }) =>
+      request<import('../types').StudioInfoItem>('/studios', { method: 'POST', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<{ success: boolean }>(`/studios/${id}`, { method: 'DELETE' }),
+    analyze: (id: string) =>
+      request<Record<string, unknown>>(`/studios/${id}/analyze`),
+    memory: {
+      list: (studioId: string, category?: string, search?: string) => {
+        const params = new URLSearchParams();
+        if (category) params.set('category', category);
+        if (search) params.set('search', search);
+        return request<{ entries: Array<import('../types').StudioMemoryEntry>; stats: Record<string, unknown> }>(`/studios/${studioId}/memory?${params}`);
+      },
+      create: (studioId: string, data: { key: string; value: string; category?: string; importance?: string; source?: string; tags?: string[]; context?: string; confidence?: number }) =>
+        request<import('../types').StudioMemoryEntry>(`/studios/${studioId}/memory`, { method: 'POST', body: JSON.stringify(data) }),
+      update: (studioId: string, entryId: string, data: { value?: string; category?: string; importance?: string; tags?: string[]; is_pinned?: boolean }) =>
+        request<{ success: boolean; version: number }>(`/studios/${studioId}/memory/${entryId}`, { method: 'PUT', body: JSON.stringify(data) }),
+      delete: (studioId: string, entryId: string) =>
+        request<{ success: boolean }>(`/studios/${studioId}/memory/${entryId}`, { method: 'DELETE' }),
+      pin: (studioId: string, entryId: string) =>
+        request<{ success: boolean }>(`/studios/${studioId}/memory/${entryId}/pin`, { method: 'POST' }),
+    },
+    snapshots: {
+      create: (studioId: string, label?: string, description?: string) => {
+        const params = new URLSearchParams();
+        if (label) params.set('label', label);
+        if (description) params.set('description', description);
+        return request<import('../types').StudioSnapshot>(`/studios/${studioId}/snapshots?${params}`, { method: 'POST' });
+      },
+      list: (studioId: string) =>
+        request<{ snapshots: Array<import('../types').StudioSnapshot> }>(`/studios/${studioId}/snapshots`),
+      rollback: (studioId: string, snapshotId: string) => {
+        const params = new URLSearchParams({ snapshot_id: snapshotId });
+        return request<{ success: boolean; entry_count: number }>(`/studios/${studioId}/snapshots/rollback?${params}`, { method: 'POST' });
+      },
+    },
+    stats: () =>
+      request<import('../types').StudioStats>('/studios-stats'),
+  },
+
+  // ── Workflow ──
+  workflows: {
+    list: (state?: string, priority?: string, assigned_agent?: string) => {
+      const params = new URLSearchParams();
+      if (state) params.set('state', state);
+      if (priority) params.set('priority', priority);
+      if (assigned_agent) params.set('assigned_agent', assigned_agent);
+      return request<{ tasks: Array<import('../types').WorkflowTaskItem> }>(`/workflow/tasks?${params}`);
+    },
+    get: (id: string) =>
+      request<import('../types').WorkflowTaskItem>(`/workflow/tasks/${id}`),
+    create: (data: { title: string; description?: string; priority?: string; assigned_agent?: string; created_by?: string; dependencies?: string[]; tags?: string[]; studio_id?: string }) =>
+      request<import('../types').WorkflowTaskItem>('/workflow/tasks', { method: 'POST', body: JSON.stringify(data) }),
+    transition: (id: string, state: string) =>
+      request<import('../types').WorkflowTaskItem>(`/workflow/tasks/${id}/transition`, { method: 'POST', body: JSON.stringify({ state }) }),
+    assign: (id: string, agentId: string) =>
+      request<import('../types').WorkflowTaskItem>(`/workflow/tasks/${id}/assign`, { method: 'POST', body: JSON.stringify({ agent_id: agentId }) }),
+    delegate: (id: string, delegateAgentId: string) =>
+      request(`/workflow/tasks/${id}/delegate`, { method: 'POST', body: JSON.stringify({ delegate_agent_id: delegateAgentId }) }),
+    blockers: {
+      list: (taskId: string) =>
+        request<{ blockers: Array<import('../types').WorkflowBlocker> }>(`/workflow/tasks/${taskId}/blockers`),
+      create: (taskId: string, blockerType: string, description: string, reportedBy?: string) =>
+        request<import('../types').WorkflowBlocker>(`/workflow/tasks/${taskId}/blockers`, { method: 'POST', body: JSON.stringify({ blocker_type: blockerType, description, reported_by: reportedBy || '' }) }),
+      resolve: (taskId: string, blockerId: string, resolution?: string) =>
+        request<{ success: boolean }>(`/workflow/tasks/${taskId}/blockers/${blockerId}/resolve`, { method: 'POST', body: JSON.stringify({ resolution: resolution || '' }) }),
+    },
+    canStart: (id: string) =>
+      request<{ can_start: boolean; reason: string; unmet_dependencies: string[] }>(`/workflow/tasks/${id}/can-start`),
+    recent: (limit: number = 20) =>
+      request<{ tasks: Array<import('../types').WorkflowTaskItem> }>(`/workflow/recent?limit=${limit}`),
+    stats: () =>
+      request<import('../types').WorkflowStats>('/workflow-stats'),
   },
 };
