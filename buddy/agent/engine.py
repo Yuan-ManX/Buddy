@@ -26,6 +26,8 @@ from agent.subagent import SubAgentOrchestrator
 from agent.dream import DreamEngine, DreamCycleResult
 from agent.approval import approval_engine
 from agent.events import event_bus, Event, EventType
+from agent.rag import RAGEngine
+from agent.swarm import SwarmEngine, SwarmSession, SwarmRole
 
 logger = logging.getLogger("buddy.engine")
 
@@ -92,6 +94,7 @@ class AgentEngine:
         self.workspace = AgentWorkspace(agent_id)
         self.subagent_orchestrator = SubAgentOrchestrator(agent_id)
         self.dream = DreamEngine(agent_id=self.agent_id, memory_system=self.memory, client=self.client)
+        self.rag = RAGEngine(agent_id=agent_id, client=self.client)
         self._conversation_id: str | None = None
         self._iteration_budget = IterationBudget(settings.MAX_ITERATIONS)
         self._fallback_models = settings.FALLBACK_MODELS.copy()
@@ -734,4 +737,5 @@ Current date: {datetime.now().strftime('%Y-%m-%d')}
             },
             "workspace": self.workspace.get_stats(),
             "dream": self.dream.get_status(),
+            "rag": self.rag.get_stats(),
         }
