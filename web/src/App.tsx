@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { TaskDashboard } from './components/TaskDashboard';
@@ -23,8 +23,19 @@ import { TrajectoryPanel } from './components/TrajectoryPanel';
 import { SquadsPanel } from './components/SquadsPanel';
 import { GuardPanel } from './components/GuardPanel';
 import { PulsePanel } from './components/PulsePanel';
+import { PersonaPanel } from './components/PersonaPanel';
+import { LearningPanel } from './components/LearningPanel';
+import { GatewayPanel } from './components/GatewayPanel';
+import { DaemonPanel } from './components/DaemonPanel';
+import { SwarmPanel } from './components/SwarmPanel';
+import { KnowledgeBasePanel } from './components/KnowledgeBasePanel';
+import { RuntimeHubPanel } from './components/RuntimeHubPanel';
+import { SchedulerPanel } from './components/SchedulerPanel';
+import { StudioPanel } from './components/StudioPanel';
+import { WorkflowPanel } from './components/WorkflowPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
+import { CommandPalette } from './components/CommandPalette';
 import { api } from './api/client';
 import type { Agent, Conversation, Message as MsgType, Task, TabView } from './types';
 import './App.css';
@@ -49,6 +60,7 @@ export default function App() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [editForm, setEditForm] = useState({ name: '', role: '', personality: '', instructions: '' });
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -75,6 +87,21 @@ export default function App() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      }
+      if (e.key === 'Escape') {
+        setCommandPaletteOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (selectedConv) {
@@ -185,6 +212,25 @@ export default function App() {
     }
   };
 
+  // Command palette actions
+  const commandActions = useMemo(() => [
+    { id: 'new-agent', label: 'Create Agent', description: 'Create a new AI agent', category: 'Agents', action: () => setShowNewAgent(true) },
+    { id: 'new-conv', label: 'New Conversation', description: 'Start a new chat conversation', category: 'Chat', action: handleCreateConv },
+    { id: 'go-chat', label: 'Go to Chat', description: 'Open the chat view', category: 'Navigation', action: () => setActiveTab('chat') },
+    { id: 'go-dashboard', label: 'Go to Dashboard', description: 'View system dashboard', category: 'Navigation', action: () => setActiveTab('dashboard') },
+    { id: 'go-tasks', label: 'Go to Tasks', description: 'View task dashboard', category: 'Navigation', action: () => setActiveTab('tasks') },
+    { id: 'go-memory', label: 'Go to Memory', description: 'View agent memory', category: 'Navigation', action: () => setActiveTab('memory') },
+    { id: 'go-skills', label: 'Go to Skills', description: 'Manage agent skills', category: 'Navigation', action: () => setActiveTab('skills') },
+    { id: 'go-tools', label: 'Go to Tools', description: 'Browse available tools', category: 'Navigation', action: () => setActiveTab('tools') },
+    { id: 'go-squads', label: 'Go to Squads', description: 'Manage agent squads', category: 'Navigation', action: () => setActiveTab('squads') },
+    { id: 'go-forge', label: 'Go to Forge', description: 'Skill creation forge', category: 'Navigation', action: () => setActiveTab('forge') },
+    { id: 'go-guard', label: 'Go to Guard', description: 'Safety & monitoring', category: 'Navigation', action: () => setActiveTab('guard') },
+    { id: 'go-swarm', label: 'Go to Swarm', description: 'Agent swarm engine', category: 'Navigation', action: () => setActiveTab('swarm') },
+    { id: 'go-knowledge', label: 'Go to Knowledge Base', description: 'RAG knowledge management', category: 'Navigation', action: () => setActiveTab('knowledge') },
+    { id: 'go-nexus', label: 'Go to Nexus', description: 'Coordination hub', category: 'Navigation', action: () => setActiveTab('nexus') },
+    { id: 'refresh', label: 'Refresh Data', description: 'Reload all data from server', category: 'System', action: () => { loadData(); } },
+  ], [handleCreateConv, loadData]);
+
   const handleConversationCreated = useCallback(async (convId: string) => {
     try {
       const convList = await api.conversations.list();
@@ -224,6 +270,11 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ToastProvider>
+        <CommandPalette
+          isOpen={commandPaletteOpen}
+          onClose={() => setCommandPaletteOpen(false)}
+          actions={commandActions}
+        />
         <div className="app">
       <Sidebar
         agents={agents}
@@ -369,12 +420,19 @@ export default function App() {
         )}
 
         {/* Global panels — no agent required */}
-        {activeTab === 'overview' && <SystemOverview />}
-        {activeTab === 'dashboard' && <Dashboard />}
-        {activeTab === 'nexus' && <NexusPanel />}
-        {activeTab === 'forge' && <ForgePanel />}
-        {activeTab === 'guard' && <GuardPanel />}
-        {activeTab === 'pulse' && <PulsePanel />}
+          {activeTab === 'overview' && <SystemOverview />}
+          {activeTab === 'dashboard' && <Dashboard />}
+          {activeTab === 'nexus' && <NexusPanel />}
+          {activeTab === 'forge' && <ForgePanel />}
+          {activeTab === 'guard' && <GuardPanel />}
+          {activeTab === 'pulse' && <PulsePanel />}
+          {activeTab === 'gateway' && <GatewayPanel />}
+          {activeTab === 'daemon' && <DaemonPanel />}
+        {activeTab === 'swarm' && <SwarmPanel agents={agents} />}
+        {activeTab === 'runtime' && <RuntimeHubPanel />}
+        {activeTab === 'scheduler' && <SchedulerPanel />}
+        {activeTab === 'studio' && <StudioPanel />}
+        {activeTab === 'workflow' && <WorkflowPanel />}
 
         {/* Agent-specific panels */}
         {selectedAgent && (
@@ -439,13 +497,25 @@ export default function App() {
               <TrajectoryPanel agent={selectedAgent} />
             )}
             {activeTab === 'squads' && (
-              <SquadsPanel agent={selectedAgent} />
-            )}
-          </>
-        )}
+                <SquadsPanel agent={selectedAgent} />
+              )}
+              {activeTab === 'persona' && (
+                <PersonaPanel agent={selectedAgent} />
+              )}
+              {activeTab === 'learning' && (
+            <LearningPanel agent={selectedAgent} />
+          )}
+          {activeTab === 'swarm' && (
+            <SwarmPanel agents={agents} />
+          )}
+          {activeTab === 'knowledge' && (
+            <KnowledgeBasePanel agent={selectedAgent} />
+          )}
+      </>
+    )}
 
         {/* Empty state — no agent and no global panel selected */}
-        {!selectedAgent && !['overview', 'dashboard', 'nexus', 'forge', 'guard', 'pulse'].includes(activeTab) && (
+        {!selectedAgent && !['overview', 'dashboard', 'nexus', 'forge', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow'].includes(activeTab) && (
           <div className="main-empty">
             <div className="main-empty-icon">B</div>
             <h2>Welcome to Buddy</h2>
