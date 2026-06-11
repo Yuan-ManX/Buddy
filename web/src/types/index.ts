@@ -1,4 +1,4 @@
-export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse' | 'persona' | 'learning' | 'gateway' | 'daemon';
+export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse' | 'persona' | 'learning' | 'gateway' | 'daemon' | 'swarm' | 'knowledge' | 'runtime' | 'scheduler' | 'studio' | 'workflow';
 
 export interface Agent {
   id: string;
@@ -647,4 +647,253 @@ export interface DaemonStats {
   total_concurrency: number;
   max_total_concurrency: number;
   runtimes: DaemonRuntime[];
+}
+
+// ── RAG Types ──
+
+export interface RAGDocument {
+  id: string;
+  title: string;
+  source: string;
+  chunk_count: number;
+  total_tokens: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface RAGSearchResult {
+  chunk_id: string;
+  document_id: string;
+  content: string;
+  similarity: number;
+  title: string;
+  source: string;
+  chunk_index: number;
+}
+
+export interface RAGStats {
+  agent_id: string;
+  document_count: number;
+  chunk_count: number;
+  embedded_chunks: number;
+  total_tokens: number;
+  embedding_model: string;
+}
+
+// ── Swarm Types ──
+
+export interface SwarmMember {
+  agent_id: string;
+  agent_name: string;
+  role: string;
+  status: string;
+}
+
+export interface SwarmTask {
+  id: string;
+  description: string;
+  required_roles: string[];
+  dependencies: string[];
+  priority: number;
+  status: string;
+}
+
+export interface SwarmSession {
+  session_id: string;
+  name: string;
+  goal: string;
+  members: SwarmMember[];
+  tasks: SwarmTask[];
+  results: Array<{ task_id: string; result: string }>;
+  status: string;
+  created_at: string;
+  completed_at: string;
+}
+
+export interface SwarmStats {
+  total_sessions: number;
+  active_sessions: number;
+  completed_sessions: number;
+  failed_sessions: number;
+  average_members: number;
+}
+
+// ── Runtime Hub Types ──
+
+export interface RuntimeItem {
+  id: string;
+  name: string;
+  backend: string;
+  status: string;
+  workspace_dir: string;
+  image: string;
+  tags: string[];
+  metadata: Record<string, string>;
+  execution_count: number;
+  last_execution_at: string;
+  created_at: string;
+}
+
+export interface RuntimeHubStats {
+  total_runtimes: number;
+  runtimes_by_backend: Record<string, number>;
+  runtimes_by_status: Record<string, number>;
+  total_executions: number;
+  monitor_enabled: boolean;
+}
+
+export interface ExecutionOutput {
+  execution_id: string;
+  exit_code: number;
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  duration_ms: number;
+  error_message: string;
+  started_at: string;
+  finished_at: string;
+}
+
+// ── Scheduler Types ──
+
+export interface ScheduledTaskItem {
+  id: string;
+  name: string;
+  prompt: string;
+  agent_id: string;
+  description: string;
+  cron_expression: string;
+  interval_seconds: number;
+  schedule_type: string;
+  tags: string[];
+  status: string;
+  run_count: number;
+  max_runs: number;
+  last_run_at: string;
+  next_run_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SchedulerStats {
+  total_tasks: number;
+  active_tasks: number;
+  paused_tasks: number;
+  completed_tasks: number;
+  status_distribution: Record<string, number>;
+  engine_running: boolean;
+}
+
+export interface ScheduleParseResult {
+  text: string;
+  schedule_type: string;
+  cron_expression: string;
+  interval_seconds: number;
+}
+
+// ── Studio Types ──
+
+export interface StudioInfoItem {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  template_id: string;
+  tags: string[];
+  status: string;
+  memory_entry_count: number;
+  snapshot_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StudioTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  icon: string;
+}
+
+export interface StudioMemoryEntry {
+  id: string;
+  key: string;
+  value: string;
+  category: string;
+  importance: string;
+  source: string;
+  tags: string[];
+  confidence: number;
+  version: number;
+  is_pinned: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StudioSnapshot {
+  snapshot_id: string;
+  label: string;
+  description: string;
+  entry_count: number;
+  created_at: string;
+}
+
+export interface StudioStats {
+  total_studios: number;
+  active_studios: number;
+  archived_studios: number;
+  total_memory_entries: number;
+  total_snapshots: number;
+}
+
+// ── Workflow Types ──
+
+export interface WorkflowTaskItem {
+  id: string;
+  title: string;
+  description: string;
+  state: string;
+  priority: string;
+  assigned_agent: string;
+  created_by: string;
+  dependencies: string[];
+  tags: string[];
+  studio_id: string;
+  blockers: Array<{
+    type: string;
+    description: string;
+    is_resolved: boolean;
+    resolved_at: string;
+    created_at: string;
+  }>;
+  blocker_count: number;
+  active_blockers: number;
+  planned_hours: number;
+  actual_hours: number;
+  created_at: string;
+  updated_at: string;
+  started_at: string;
+  completed_at: string;
+  activity_count: number;
+}
+
+export interface WorkflowBlocker {
+  id: string;
+  task_id: string;
+  blocker_type: string;
+  description: string;
+  reported_by: string;
+  resolved_by: string;
+  resolution: string;
+  resolved: boolean;
+  created_at: string;
+  resolved_at: string;
+}
+
+export interface WorkflowStats {
+  total_tasks: number;
+  tasks_by_state: Record<string, number>;
+  tasks_by_priority: Record<string, number>;
+  total_blockers: number;
+  unresolved_blockers: number;
 }
