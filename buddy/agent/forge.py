@@ -10,6 +10,8 @@ The Forge is the engine behind Buddy's "closed learning loop" — every task
 makes the entire system smarter for the next one.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
