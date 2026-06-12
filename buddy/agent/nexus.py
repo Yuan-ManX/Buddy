@@ -13,6 +13,7 @@ The Nexus manages:
   - Unified event streaming across all subsystems
   - Resource scheduling and capacity management
 """
+from __future__ import annotations
 
 import asyncio
 import logging
