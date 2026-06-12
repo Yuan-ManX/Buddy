@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { Agent, Conversation, TabView } from '../types';
 import { getRoleColor } from '../utils/colors';
+import { useTheme } from '../hooks/useTheme';
 
 interface SidebarProps {
   agents: Agent[];
@@ -22,8 +23,16 @@ interface SidebarProps {
 // Tab categories with grouping
 const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+  { id: 'phub', label: 'Hub', icon: '🏗️' },
   { id: 'nexus', label: 'Nexus', icon: '🔗' },
   { id: 'forge', label: 'Forge', icon: '⚒️' },
+  { id: 'pipeline', label: 'Pipeline', icon: '🔀' },
+  { id: 'capability', label: 'Capability', icon: '🎯' },
+  { id: 'kgraph', label: 'K-Graph', icon: '🕸️' },
+  { id: 'board', label: 'Board', icon: '📋' },
+  { id: 'compounding', label: 'Compound', icon: '⚡' },
+  { id: 'whitememory', label: 'W-Memory', icon: '🧠' },
+  { id: 'memorysync', label: 'M-Sync', icon: '🔄' },
   { id: 'guard', label: 'Guard', icon: '🛡️' },
   { id: 'pulse', label: 'Pulse', icon: '💓' },
   { id: 'gateway', label: 'Gateway', icon: '🌐' },
@@ -33,6 +42,9 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'scheduler', label: 'Scheduler', icon: '⏰' },
   { id: 'studio', label: 'Studio', icon: '🎨' },
   { id: 'workflow', label: 'Workflow', icon: '📋' },
+  { id: 'costs', label: 'Costs', icon: '💰' },
+  { id: 'workspaces', label: 'Workspaces', icon: '🗂️' },
+  { id: 'agentdashboard', label: 'A-Dash', icon: '📈' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
@@ -56,6 +68,7 @@ const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'persona', label: 'Persona', icon: '🎭' },
   { id: 'learning', label: 'Learn', icon: '📚' },
   { id: 'knowledge', label: 'Knowledge', icon: '📖' },
+  { id: 'proactive', label: 'Proactive', icon: '🎯' },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -74,6 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onRenameConv,
   onSelectTab,
 }) => {
+  const { mode, toggle: toggleTheme, isDark } = useTheme();
   const [agentSearch, setAgentSearch] = useState('');
   const [convSearch, setConvSearch] = useState('');
   const [tabsExpanded, setTabsExpanded] = useState(true);
@@ -303,6 +317,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="sidebar-status">
           <span className="sidebar-status-dot" />
           <span>System Online</span>
+          <button
+            className="sidebar-theme-toggle"
+            onClick={toggleTheme}
+            title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+          >
+            {isDark ? '☀️' : '🌙'}
+          </button>
           <span className="sidebar-shortcut-hint">⌘K</span>
         </div>
       </div>
