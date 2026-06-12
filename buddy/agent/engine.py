@@ -6,9 +6,11 @@ event-driven lifecycle notifications.
 """
 from __future__ import annotations
 import json
+import re
 import asyncio
 import logging
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, AsyncIterator
 
 from openai import AsyncOpenAI
@@ -28,8 +30,68 @@ from agent.approval import approval_engine
 from agent.events import event_bus, Event, EventType
 from agent.rag import RAGEngine
 from agent.swarm import SwarmEngine, SwarmSession, SwarmRole
+from agent.guardrails import guardrails_engine, GuardrailResult
+from agent.compressor import trajectory_compressor, CompressedTrajectory
+from agent.persona import PersonaManager
+from agent.reactive_loop import ReactiveLoop, LoopMode
+from agent.proactive import ProactiveDiscoveryEngine
 
 logger = logging.getLogger("buddy.engine")
+
+
+class CheckpointManager:
+    """Manages agent execution checkpoints for state preservation and rollback.
+
+    Checkpoints capture the agent's memory state and conversation context
+    at critical decision points, enabling safe exploration and recovery
+    from failed execution paths.
+    """
+
+    def __init__(self, agent_id: str):
+        self.agent_id = agent_id
+        self._checkpoints: dict[str, dict[str, Any]] = {}
+        self._max_checkpoints = 20
+
+    def save(self, name: str, state: dict[str, Any]) -> str:
+        """Save a checkpoint with the given name and state."""
+        checkpoint_id = f"cp-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{name}"
+        self._checkpoints[checkpoint_id] = {
+            "name": name,
+            "state": state.copy(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "agent_id": self.agent_id,
+        }
+        # Prune old checkpoints if over limit
+        if len(self._checkpoints) > self._max_checkpoints:
+            oldest = sorted(self._checkpoints.keys())[0]
+            del self._checkpoints[oldest]
+        return checkpoint_id
+
+    def restore(self, checkpoint_id: str) -> dict[str, Any] | None:
+        """Restore state from a checkpoint."""
+        cp = self._checkpoints.get(checkpoint_id)
+        return cp["state"].copy() if cp else None
+
+    def list_checkpoints(self) -> list[dict[str, Any]]:
+        """List all checkpoints."""
+        return [
+            {"id": cid, "name": cp["name"], "timestamp": cp["timestamp"]}
+            for cid, cp in sorted(self._checkpoints.items(),
+                                  key=lambda x: x[1]["timestamp"], reverse=True)
+        ]
+
+    def delete(self, checkpoint_id: str) -> bool:
+        """Delete a checkpoint."""
+        if checkpoint_id in self._checkpoints:
+            del self._checkpoints[checkpoint_id]
+            return True
+        return False
+
+    def get_stats(self) -> dict[str, Any]:
+        return {
+            "total_checkpoints": len(self._checkpoints),
+            "agent_id": self.agent_id,
+        }
 
 
 class IterationBudget:
@@ -66,6 +128,20 @@ class IterationBudget:
         return self._used / max(self.max_iterations, 1)
 
 
+@dataclass
+class TaskComplexity:
+    """Result of task complexity analysis for reasoning style selection."""
+    style: ReasoningStyle
+    label: str                          # Human-readable category label
+    confidence: float                   # 0.0 to 1.0
+    reason: str                         # Why this style was selected
+    params: dict[str, Any] = None       # Style-specific parameters (branches, samples, etc.)
+
+    def __post_init__(self):
+        if self.params is None:
+            self.params = {}
+
+
 class AgentEngine:
     """Core agent execution engine with LLM integration, tool calling,
     reasoning pipeline, skill execution, plan orchestration, and
@@ -95,10 +171,22 @@ class AgentEngine:
         self.subagent_orchestrator = SubAgentOrchestrator(agent_id)
         self.dream = DreamEngine(agent_id=self.agent_id, memory_system=self.memory, client=self.client)
         self.rag = RAGEngine(agent_id=agent_id, client=self.client)
+        self.persona_manager = PersonaManager(agent_id)
+        self.proactive = ProactiveDiscoveryEngine(agent_id=agent_id, client=self.client)
+        self._reactive_loop: ReactiveLoop | None = None
         self._conversation_id: str | None = None
         self._iteration_budget = IterationBudget(settings.MAX_ITERATIONS)
         self._fallback_models = settings.FALLBACK_MODELS.copy()
         self._total_tokens_used = 0
+        self._tool_execution_count = 0
+        self._tool_success_count = 0
+        self._tool_failure_count = 0
+        self._checkpoints = CheckpointManager(agent_id)
+        self._execution_trajectory: dict[str, Any] = {
+            "messages": [],
+            "tool_calls": [],
+            "steps": [],
+        }
 
     @property
     def iteration_budget(self) -> IterationBudget:
@@ -107,6 +195,18 @@ class AgentEngine:
     @property
     def total_tokens(self) -> int:
         return self._total_tokens_used
+
+    @property
+    def tool_execution_count(self) -> int:
+        return self._tool_execution_count
+
+    @property
+    def tool_success_count(self) -> int:
+        return self._tool_success_count
+
+    @property
+    def tool_failure_count(self) -> int:
+        return self._tool_failure_count
 
     def _track_tokens(self, usage: Any):
         """Track token usage from an LLM response."""
@@ -238,22 +338,79 @@ class AgentEngine:
         routing = model_router.route(user_message, context_depth)
         logger.info(f"Routing: {routing.reasoning}")
 
-        # Reasoning loop if enabled
+        # Reasoning loop — auto-select style based on task complexity
         if enable_reasoning:
+            system_prompt = messages[0]["content"] if messages[0]["role"] == "system" else ""
+            tool_schemas = tool_registry.get_openai_schemas() if enable_tools else None
+            tool_executor = self._execute_tool if enable_tools else None
+
+            complexity = self._analyze_task_complexity(user_message)
+            logger.info(
+                f"Task complexity: {complexity.label} "
+                f"(style={complexity.style.value}, confidence={complexity.confidence:.2f}): "
+                f"{complexity.reason}"
+            )
+
             try:
-                trace = await self.reasoning.execute(
-                    system_prompt=messages[0]["content"] if messages[0]["role"] == "system" else "",
-                    user_message=user_message,
-                    tool_schemas=tool_registry.get_openai_schemas() if enable_tools else None,
-                    tool_executor=self._execute_tool if enable_tools else None,
-                    model=routing.model,
-                )
-                content = trace.final_answer
+                if complexity.style == ReasoningStyle.CONCISE:
+                    # Skip reasoning entirely for simple questions
+                    content = await self._direct_chat(messages, routing, enable_tools)
+                elif complexity.style == ReasoningStyle.PARALLEL:
+                    trace = await self.reasoning.execute_parallel(
+                        system_prompt=system_prompt,
+                        user_message=user_message,
+                        tool_schemas=tool_schemas,
+                        tool_executor=tool_executor,
+                        model=routing.model,
+                        num_perspectives=complexity.params.get("num_perspectives", 4),
+                    )
+                    content = trace.final_answer
+                elif complexity.style == ReasoningStyle.TREE:
+                    trace = await self.reasoning.execute_tree_of_thought(
+                        system_prompt=system_prompt,
+                        user_message=user_message,
+                        tool_schemas=tool_schemas,
+                        tool_executor=tool_executor,
+                        model=routing.model,
+                        num_branches=complexity.params.get("num_branches", 3),
+                        max_depth=complexity.params.get("max_depth", 3),
+                    )
+                    content = trace.final_answer
+                elif complexity.style == ReasoningStyle.SELF_CONSISTENCY:
+                    trace = await self.reasoning.execute_self_consistency(
+                        system_prompt=system_prompt,
+                        user_message=user_message,
+                        tool_schemas=tool_schemas,
+                        tool_executor=tool_executor,
+                        model=routing.model,
+                        num_samples=complexity.params.get("num_samples", 5),
+                    )
+                    content = trace.final_answer
+                else:
+                    # CODING, BALANCED, THOROUGH, CREATIVE — use standard execute
+                    self.reasoning.style = complexity.style
+                    trace = await self.reasoning.execute(
+                        system_prompt=system_prompt,
+                        user_message=user_message,
+                        tool_schemas=tool_schemas,
+                        tool_executor=tool_executor,
+                        model=routing.model,
+                    )
+                    content = trace.final_answer
             except Exception as e:
                 logger.warning(f"Reasoning loop failed, falling back to direct: {e}")
                 content = await self._direct_chat(messages, routing, enable_tools)
         else:
             content = await self._direct_chat(messages, routing, enable_tools)
+
+        # Apply guardrails to output
+        guard_result = guardrails_engine.check(content, {"agent_id": self.agent_id})
+        if not guard_result.passed:
+            logger.warning(f"Guardrails blocked output for {self.agent_id}: {[v['type'] for v in guard_result.violations]}")
+            content = "I'm unable to provide that response as it may contain unsafe content."
+        elif guard_result.sanitized_content != content:
+            logger.info(f"Guardrails sanitized output for {self.agent_id}")
+            content = guard_result.sanitized_content
 
         # Store in memory
         await self.memory.store(
@@ -316,6 +473,172 @@ class AgentEngine:
 
         logger.error(f"All models in fallback chain failed. Last error: {last_error}")
         return self._fallback_response(messages[-1]["content"])
+
+    def _analyze_task_complexity(self, user_message: str) -> TaskComplexity:
+        """Analyze the user's message to determine task complexity and the optimal
+        reasoning style.
+
+        Uses lexical heuristics (keyword density, structural markers, length)
+        to classify requests into six categories, each mapped to a reasoning
+        style with tuned parameters.
+
+        Categories:
+          - simple_factual  -> CONCISE (no reasoning overhead)
+          - coding_technical -> CODING
+          - complex_multi_step -> TREE (3 branches)
+          - math_logic -> SELF_CONSISTENCY (5 samples)
+          - creative_brainstorm -> PARALLEL (4 perspectives)
+          - general -> BALANCED
+        """
+        msg = user_message.strip()
+        msg_lower = msg.lower()
+        msg_len = len(msg)
+
+        # ── Keyword sets ──
+        coding_keywords = [
+            "code", "function", "bug", "error", "debug", "compile", "api",
+            "class", "method", "def ", "import ", "python", "javascript",
+            "typescript", "golang", "rust", "java", "sql", "html", "css",
+            "react", "vue", "angular", "docker", "kubernetes", "git",
+            "algorithm", "data structure", "refactor", "optimize",
+            "unit test", "integration test", "deploy", "ci/cd",
+            "framework", "library", "dependency", "endpoint", "request",
+            "response", "json", "rest", "graphql", "programming",
+            "write a script", "implement", "interface",
+        ]
+        math_keywords = [
+            "calculate", "solve", "equation", "proof", "theorem",
+            "probability", "statistics", "derivative", "integral",
+            "logarithm", "exponential", "matrix", "vector", "algebra",
+            "geometry", "trigonometry", "arithmetic", "combinatorics",
+            "optimization problem", "linear", "regression", "correlation",
+            "standard deviation", "variance", "hypothesis", "confidence interval",
+            "prime", "factor", "gcd", "lcm", "modulo", "sqrt",
+        ]
+        creative_keywords = [
+            "brainstorm", "idea", "creative", "design", "imagine",
+            "innovative", "novel", "story", "poem", "write a",
+            "slogan", "tagline", "name for", "brand", "logo",
+            "concept", "vision", "dream", "inspire", "artistic",
+            "what if", "alternative", "perspective", "future of",
+        ]
+        complex_markers = [
+            "step by step", "explain how", "compare and contrast",
+            "pros and cons", "trade-off", "analyze", "evaluate",
+            "architecture", "design a system", "strategy", "plan",
+            "multiple", "complex", "comprehensive", "detailed",
+            "break down", "deep dive", "in depth", "thorough",
+        ]
+        simple_markers = [
+            "what is", "who is", "when did", "where is", "define",
+            "definition of", "meaning of", "how do you spell",
+            "translate", "synonym", "antonym", "weather",
+            "time now", "date today", "news", "capital of",
+            "population of", "how tall", "how many",
+        ]
+
+        # ── Scoring ──
+        def keyword_score(text: str, keywords: list[str]) -> float:
+            """Count keyword matches, normalized by text length."""
+            hits = sum(1 for kw in keywords if kw in text)
+            return min(1.0, hits / max(len(keywords) * 0.1, 1))
+
+        coding_score = keyword_score(msg_lower, coding_keywords)
+        math_score = keyword_score(msg_lower, math_keywords)
+        creative_score = keyword_score(msg_lower, creative_keywords)
+        complex_score = keyword_score(msg_lower, complex_markers)
+        simple_score = keyword_score(msg_lower, simple_markers)
+
+        # Structural heuristics
+        has_code_blocks = bool(re.search(r"```|`[^`]+`", msg))  # Markdown code fences
+        has_numbers = bool(re.search(r"\d+", msg))
+        has_multiple_questions = len(re.findall(r"\?", msg)) > 1
+        has_bullets = bool(re.search(r"^[-*]\s|^\d+[.)]\s", msg, re.MULTILINE))
+        has_step_instructions = bool(re.search(r"step\s*\d|first.*then.*finally", msg_lower))
+        is_short = msg_len < 60
+
+        # Boost scores with structural signals
+        if has_code_blocks:
+            coding_score = min(1.0, coding_score + 0.3)
+        if has_multiple_questions:
+            complex_score = min(1.0, complex_score + 0.25)
+        if has_step_instructions:
+            complex_score = min(1.0, complex_score + 0.3)
+        if is_short and not has_code_blocks:
+            simple_score = min(1.0, simple_score + 0.2)
+        if has_bullets and msg_len > 200:
+            complex_score = min(1.0, complex_score + 0.15)
+
+        # ── Decision logic ──
+        MIN_CONFIDENCE = 0.2
+
+        if simple_score > max(coding_score, math_score, creative_score, complex_score, 0.1) and is_short:
+            return TaskComplexity(
+                style=ReasoningStyle.CONCISE,
+                label="simple_factual",
+                confidence=min(0.95, simple_score + 0.1),
+                reason="Short factual question with no structural complexity; direct answer sufficient.",
+            )
+
+        if coding_score > max(math_score, creative_score, complex_score, simple_score, MIN_CONFIDENCE):
+            return TaskComplexity(
+                style=ReasoningStyle.CODING,
+                label="coding_technical",
+                confidence=min(0.95, coding_score + 0.1),
+                reason="Technical/coding question detected via keyword and structural analysis.",
+            )
+
+        if math_score > max(coding_score, creative_score, complex_score, simple_score, MIN_CONFIDENCE):
+            return TaskComplexity(
+                style=ReasoningStyle.SELF_CONSISTENCY,
+                label="math_logic",
+                confidence=min(0.95, math_score + 0.1),
+                reason="Mathematical/logical problem — self-consistency with multiple samples improves accuracy.",
+                params={"num_samples": 5},
+            )
+
+        if creative_score > max(coding_score, math_score, complex_score, simple_score, MIN_CONFIDENCE):
+            return TaskComplexity(
+                style=ReasoningStyle.PARALLEL,
+                label="creative_brainstorm",
+                confidence=min(0.95, creative_score + 0.1),
+                reason="Creative/brainstorming task — parallel perspectives yield richer ideas.",
+                params={"num_perspectives": 4},
+            )
+
+        if complex_score > max(coding_score, math_score, creative_score, simple_score, MIN_CONFIDENCE):
+            return TaskComplexity(
+                style=ReasoningStyle.TREE,
+                label="complex_multi_step",
+                confidence=min(0.95, complex_score + 0.1),
+                reason="Complex multi-step problem — tree-of-thought explores solution branches.",
+                params={"num_branches": 3, "max_depth": 3},
+            )
+
+        # ── Fall-through: length-based heuristics ──
+        if has_multiple_questions or has_step_instructions:
+            return TaskComplexity(
+                style=ReasoningStyle.TREE,
+                label="complex_multi_step",
+                confidence=0.65,
+                reason="Message contains multiple questions or step instructions.",
+                params={"num_branches": 3, "max_depth": 3},
+            )
+
+        if msg_len > 500:
+            return TaskComplexity(
+                style=ReasoningStyle.THOROUGH,
+                label="general",
+                confidence=0.55,
+                reason="Long message suggests detailed query; thorough reasoning appropriate.",
+            )
+
+        return TaskComplexity(
+            style=ReasoningStyle.BALANCED,
+            label="general",
+            confidence=0.7,
+            reason="Standard query — balanced reasoning provides a solid baseline.",
+        )
 
     async def _stream_chat(
         self,
@@ -479,7 +802,9 @@ class AgentEngine:
             except Exception as e:
                 return ToolResult(name=name, success=False, error=str(e))
 
-        return await tool_registry.execute(name, arguments)
+        result = await tool_registry.execute(name, arguments)
+        self.track_tool_call(name, arguments, result.success, result.output)
+        return result
 
     async def _execute_tool_safe(self, name: str, arguments: dict) -> ToolResult:
         """Execute a tool with safety check (delegates to unified _execute_tool)."""
@@ -601,6 +926,64 @@ class AgentEngine:
                     "Use tools proactively when they help answer the user's question.\n"
                 )
 
+        # ── Identity context ──
+        identity_section = ""
+        try:
+            from agent.shared import identity as identity_system  # Lazy import to avoid circular deps
+            profile = identity_system.get_profile(self.agent_id)
+            if profile:
+                high_conf_attrs = identity_system.get_high_confidence_attributes(
+                    self.agent_id, min_confidence=0.8
+                )
+                if high_conf_attrs:
+                    attr_lines = []
+                    for attr in high_conf_attrs[:8]:
+                        attr_lines.append(
+                            f"- {attr.key}: {str(attr.value)[:120]} "
+                            f"(confidence: {attr.confidence:.0%})"
+                        )
+                    identity_section = (
+                        "\n## Identity Profile\n"
+                        f"Display name: {profile.display_name}\n"
+                        f"Total interactions: {profile.total_interactions}\n"
+                        "Established attributes:\n" + "\n".join(attr_lines) + "\n"
+                    )
+        except Exception as e:
+            logger.debug(f"Identity section skipped: {e}")
+
+        # ── Active persona ──
+        persona_section = ""
+        try:
+            active_persona = self.persona_manager.active_persona
+            if active_persona:
+                persona_section = (
+                    "\n## Active Persona\n" +
+                    self.persona_manager.build_system_prompt_prefix() + "\n"
+                )
+        except Exception as e:
+            logger.debug(f"Persona section skipped: {e}")
+
+        # ── Trajectory insights ──
+        trajectory_section = ""
+        try:
+            if self._execution_trajectory.get("steps"):
+                recent_compressed = trajectory_compressor.list_compressed(
+                    agent_id=self.agent_id, limit=2
+                )
+                if recent_compressed:
+                    insights = []
+                    for ct in recent_compressed:
+                        if ct.insights:
+                            insights.extend(ct.insights)
+                    if insights:
+                        unique_insights = list(dict.fromkeys(insights))[:5]
+                        trajectory_section = (
+                            "\n## Recent Session Insights\n" +
+                            "\n".join(f"- {i}" for i in unique_insights) + "\n"
+                        )
+        except Exception as e:
+            logger.debug(f"Trajectory section skipped: {e}")
+
         return f"""You are {self.agent_name}, an AI agent in the Buddy platform.
 
 {self.instructions}
@@ -616,7 +999,7 @@ Guidelines:
 - If you don't know something, say so honestly
 - Be concise but thorough — respect the user's time
 - Use available tools and skills to provide the best answer
-{tools_section}
+{identity_section}{persona_section}{trajectory_section}{tools_section}
 Current date: {datetime.now().strftime('%Y-%m-%d')}
 {memory_context}"""
 
@@ -738,4 +1121,145 @@ Current date: {datetime.now().strftime('%Y-%m-%d')}
             "workspace": self.workspace.get_stats(),
             "dream": self.dream.get_status(),
             "rag": self.rag.get_stats(),
+            "guardrails": guardrails_engine.get_stats(),
+            "checkpoints": self._checkpoints.get_stats(),
+            "compressor": trajectory_compressor.get_stats(),
         }
+
+    # ── Checkpoint Operations ───────────────────────────────
+
+    def save_checkpoint(self, name: str) -> str:
+        """Save current agent state as a named checkpoint."""
+        state = {
+            "conversation_id": self._conversation_id,
+            "total_tokens": self._total_tokens_used,
+            "iteration_used": self._iteration_budget._used,
+            "trajectory": self._execution_trajectory.copy(),
+        }
+        return self._checkpoints.save(name, state)
+
+    def restore_checkpoint(self, checkpoint_id: str) -> bool:
+        """Restore agent state from a checkpoint."""
+        state = self._checkpoints.restore(checkpoint_id)
+        if state is None:
+            return False
+        self._conversation_id = state.get("conversation_id")
+        self._total_tokens_used = state.get("total_tokens", 0)
+        self._iteration_budget._used = state.get("iteration_used", 0)
+        self._execution_trajectory = state.get("trajectory", {})
+        return True
+
+    def list_checkpoints(self) -> list[dict[str, Any]]:
+        """List all saved checkpoints."""
+        return self._checkpoints.list_checkpoints()
+
+    def delete_checkpoint(self, checkpoint_id: str) -> bool:
+        """Delete a checkpoint by ID."""
+        return self._checkpoints.delete(checkpoint_id)
+
+    # ── Trajectory Compression ─────────────────────────────
+
+    def compress_execution(
+        self,
+        session_id: str = "",
+        duration_seconds: float = 0.0,
+    ) -> CompressedTrajectory:
+        """Compress the current execution trajectory into a structured summary.
+
+        Automatically records tool calls and step metrics before compression.
+        """
+        trajectory = self._execution_trajectory.copy()
+        trajectory["total_tokens"] = self._total_tokens_used
+        trajectory["duration_seconds"] = duration_seconds
+        trajectory["estimated_cost"] = (
+            self._total_tokens_used * 0.000002  # approximate cost
+        )
+
+        compressed = trajectory_compressor.compress(
+            trajectory=trajectory,
+            agent_id=self.agent_id,
+            session_id=session_id or self._conversation_id or "unknown",
+        )
+        return compressed
+
+    def track_tool_call(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        success: bool,
+        output: str = "",
+    ):
+        """Record a tool call in the execution trajectory."""
+        self._tool_execution_count += 1
+        if success:
+            self._tool_success_count += 1
+        else:
+            self._tool_failure_count += 1
+
+        self._execution_trajectory["tool_calls"].append({
+            "name": tool_name,
+            "args": arguments,
+            "success": success,
+            "output": output[:500],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+    def track_step(
+        self,
+        action: str,
+        content: str,
+        reasoning: str = "",
+        outcome: str = "",
+        status: str = "done",
+    ):
+        """Record an execution step in the trajectory."""
+        self._execution_trajectory["steps"].append({
+            "action": action,
+            "content": content[:500],
+            "reasoning": reasoning[:500],
+            "outcome": outcome,
+            "status": status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+    def clear_trajectory(self):
+        """Reset the execution trajectory buffer."""
+        self._execution_trajectory = {
+            "messages": [],
+            "tool_calls": [],
+            "steps": [],
+        }
+
+    def get_compressor_stats(self) -> dict[str, Any]:
+        """Get compression statistics."""
+        return trajectory_compressor.get_stats()
+
+    def get_compressed_trajectories(
+        self,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Get compressed trajectories for this agent."""
+        results = trajectory_compressor.list_compressed(
+            agent_id=self.agent_id,
+            limit=limit,
+        )
+        return [ct.to_dict() for ct in results]
+
+    def get_detected_patterns(
+        self,
+        pattern_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get detected execution patterns."""
+        trajectory_compressor.detect_patterns(self.agent_id)
+        patterns = trajectory_compressor.get_patterns(pattern_type)
+        return [
+            {
+                "pattern_id": p.pattern_id,
+                "pattern_type": p.pattern_type,
+                "description": p.description,
+                "frequency": p.frequency,
+                "success_rate": p.success_rate,
+                "template": p.template,
+            }
+            for p in patterns
+        ]
