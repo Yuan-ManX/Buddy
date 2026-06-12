@@ -55,16 +55,19 @@ export default function Dashboard() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [platformHealth, setPlatformHealth] = useState<any>(null);
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [ov, ag] = await Promise.all([
+      const [ov, ag, ph] = await Promise.all([
         api.system.overview(),
         api.agents.list(),
+        api.platformHub.health().catch(() => null),
       ]);
       setOverview(ov);
       setAgents(ag.items);
+      setPlatformHealth(ph);
     } catch (err) {
       console.error('Dashboard load error:', err);
     } finally {
@@ -252,6 +255,48 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Trajectory Stats */}
+      <div className="dashboard-section">
+        <h3>Trajectory & Compression</h3>
+        <div className="dashboard-stat-row">
+          <span>Trajectories Compressed</span>
+          <strong>{overview.trajectory.total_compressed}</strong>
+        </div>
+        <div className="dashboard-stat-row">
+          <span>Success Rate</span>
+          <strong>{overview.trajectory.success_rate ? `${(overview.trajectory.success_rate * 100).toFixed(1)}%` : 'N/A'}</strong>
+        </div>
+        <div className="dashboard-stat-row">
+          <span>Avg Quality Score</span>
+          <strong>{overview.trajectory.avg_quality_score ? overview.trajectory.avg_quality_score.toFixed(2) : 'N/A'}</strong>
+        </div>
+      </div>
+
+      {/* Compressor Stats */}
+      {overview.compressor && overview.compressor.total_trajectories_compressed > 0 && (
+        <div className="dashboard-section">
+          <h3>Execution Patterns</h3>
+          <div className="dashboard-stat-row">
+            <span>Patterns Detected</span>
+            <strong>{overview.compressor.total_patterns_detected}</strong>
+          </div>
+          <div className="dashboard-stat-row">
+            <span>Avg Compression Ratio</span>
+            <strong>{overview.compressor.average_compression_ratio ? `${overview.compressor.average_compression_ratio.toFixed(1)}x` : 'N/A'}</strong>
+          </div>
+          <div className="dashboard-stat-row">
+            <span>Bytes Saved</span>
+            <strong>{overview.compressor.total_bytes_saved ? `${(overview.compressor.total_bytes_saved / 1024).toFixed(1)} KB` : 'N/A'}</strong>
+          </div>
+          {Object.entries(overview.compressor.patterns_by_type || {}).map(([type, count]) => (
+            <div key={type} className="dashboard-stat-row">
+              <span style={{ textTransform: 'capitalize' }}>{type.replace(/_/g, ' ')}</span>
+              <strong>{count}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* MCP Servers */}
       <div className="dashboard-section">
         <h3>MCP Servers</h3>
@@ -260,6 +305,49 @@ export default function Dashboard() {
           <strong>{overview.mcp_servers.total}</strong>
         </div>
       </div>
+
+      {/* Platform Health */}
+      {platformHealth && (
+        <div className="dashboard-section">
+          <h3>Platform Health</h3>
+          <div className="dashboard-stat-row">
+            <span>Overall Status</span>
+            <strong>
+              <span
+                className="dashboard-tier-dot"
+                style={{
+                  background:
+                    platformHealth.overall === 'healthy' ? '#22c55e' :
+                    platformHealth.overall === 'degraded' ? '#f59e0b' :
+                    '#ef4444',
+                }}
+              />
+              {platformHealth.overall}
+            </strong>
+          </div>
+          <div className="dashboard-stat-row">
+            <span>Uptime</span>
+            <strong>{platformHealth.uptime_seconds < 60
+              ? `${Math.round(platformHealth.uptime_seconds)}s`
+              : platformHealth.uptime_seconds < 3600
+              ? `${Math.round(platformHealth.uptime_seconds / 60)}m`
+              : `${Math.round(platformHealth.uptime_seconds / 3600)}h`
+            }</strong>
+          </div>
+          <div className="dashboard-stat-row">
+            <span>Subsystems Running</span>
+            <strong>{platformHealth.subsystem_count?.running || 0}/{platformHealth.subsystem_count?.total || 0}</strong>
+          </div>
+          {platformHealth.health_ratio !== undefined && (
+            <ProgressBar
+              label="Health Ratio"
+              current={Math.round(platformHealth.health_ratio * 100)}
+              total={100}
+              color={platformHealth.health_ratio >= 1 ? '#22c55e' : platformHealth.health_ratio >= 0.7 ? '#f59e0b' : '#ef4444'}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
