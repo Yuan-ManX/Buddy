@@ -65,6 +65,16 @@ class DreamEngine:
     def is_running(self) -> bool:
         return self._is_running
 
+    @property
+    def interval(self) -> int:
+        """Get the current dream cycle interval in seconds."""
+        return self._dream_interval
+
+    @property
+    def insights_count(self) -> int:
+        """Get the total number of dream insights generated."""
+        return len(self._insights)
+
     def start(self, interval: int = 3600):
         """Start periodic dream cycles (synchronous wrapper)."""
         self._dream_interval = interval
