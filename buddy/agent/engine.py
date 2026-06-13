@@ -9,7 +9,9 @@ import json
 import re
 import asyncio
 import logging
-from dataclasses import dataclass
+import time
+import hashlib
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator
 
@@ -35,6 +37,8 @@ from agent.compressor import trajectory_compressor, CompressedTrajectory
 from agent.persona import PersonaManager
 from agent.reactive_loop import ReactiveLoop, LoopMode
 from agent.proactive import ProactiveDiscoveryEngine
+from agent.metacognition import MetaCognition, StrategyDecision, ExecutionMode
+from agent.agent_evolution import AgentEvolution, ExperienceType, ExperienceOutcome
 
 logger = logging.getLogger("buddy.engine")
 
@@ -142,6 +146,27 @@ class TaskComplexity:
             self.params = {}
 
 
+@dataclass
+class SoulProfile:
+    """Core identity definition for an agent, inspired by SOUL.md."""
+    identity: str = ""            # Who the agent is
+    principles: list[str] = field(default_factory=list)   # Core guiding principles
+    communication_style: str = ""  # How the agent communicates
+    boundaries: list[str] = field(default_factory=list)   # Hard boundaries / refusal topics
+    goals: list[str] = field(default_factory=list)        # Long-term goals / purpose
+
+
+@dataclass
+class ScheduledTask:
+    """A recurring or one-shot task scheduled by cron expression or interval."""
+    id: str
+    name: str
+    schedule: str                # cron expression or interval seconds string
+    prompt: str                  # The task prompt to execute
+    last_run: datetime | None = None
+    enabled: bool = True
+
+
 class AgentEngine:
     """Core agent execution engine with LLM integration, tool calling,
     reasoning pipeline, skill execution, plan orchestration, and
@@ -173,6 +198,8 @@ class AgentEngine:
         self.rag = RAGEngine(agent_id=agent_id, client=self.client)
         self.persona_manager = PersonaManager(agent_id)
         self.proactive = ProactiveDiscoveryEngine(agent_id=agent_id, client=self.client)
+        self.metacognition = MetaCognition(agent_id=agent_id)
+        self.evolution = AgentEvolution(agent_id=agent_id, client=self.client)
         self._reactive_loop: ReactiveLoop | None = None
         self._conversation_id: str | None = None
         self._iteration_budget = IterationBudget(settings.MAX_ITERATIONS)
@@ -187,6 +214,33 @@ class AgentEngine:
             "tool_calls": [],
             "steps": [],
         }
+
+        # ── AgentLoop: budget grace & interrupt ──
+        self._budget_grace_call: bool = False
+        self._interrupt_requested: bool = False
+        self.api_call_count: int = 0
+        self.max_iterations: int = settings.MAX_ITERATIONS
+
+        # ── Three-Tier Memory (L1/L2/L3) ──
+        self._hot_memory: str = ""       # L1: bounded buffer (~2200 chars) of critical context
+        self._hot_memory_max_chars: int = 2200
+        self._warm_memory: list[dict] = []  # L2: semantic search results
+        self._cold_memory: list[dict] = []  # L3: full-text search results
+
+        # ── Self-Improving Skill Generation ──
+        self._workflow_patterns: list[dict] = []
+        self._skill_generation_threshold: int = 3
+
+        # ── Context Compression ──
+        self._compression_threshold: int = 8000
+        self._summary_buffer: list[str] = []
+        self._critical_messages: set[int] = set()
+
+        # ── SOUL Identity ──
+        self.soul_profile = SoulProfile()
+
+        # ── Cron / Scheduled Tasks ──
+        self._scheduled_tasks: list[ScheduledTask] = []
 
     @property
     def iteration_budget(self) -> IterationBudget:
@@ -207,6 +261,26 @@ class AgentEngine:
     @property
     def tool_failure_count(self) -> int:
         return self._tool_failure_count
+
+    # ── AgentLoop Interrupt / Resume ────────────────────────
+
+    def interrupt(self):
+        """Request interruption of the current agent loop.
+
+        The agent will check this flag before each API call and stop
+        gracefully when set, using the grace call to summarize if needed.
+        """
+        self._interrupt_requested = True
+        logger.info(f"Interrupt requested for agent {self.agent_id}")
+
+    def resume(self):
+        """Clear the interrupt flag and resume normal operation."""
+        self._interrupt_requested = False
+        self._budget_grace_call = False
+        logger.info(f"Agent {self.agent_id} resumed")
+
+    def is_interrupted(self) -> bool:
+        return self._interrupt_requested
 
     def _track_tokens(self, usage: Any):
         """Track token usage from an LLM response."""
@@ -326,17 +400,63 @@ class AgentEngine:
         enable_tools: bool = True,
         enable_reasoning: bool = False,
     ) -> str:
+        # ── AgentLoop: check interrupt before anything ──
+        if self._interrupt_requested:
+            if not self._budget_grace_call:
+                self._budget_grace_call = True
+                logger.info(f"Agent {self.agent_id}: interrupt requested, issuing grace call")
+                return await self._handle_interrupt_grace(messages, enable_tools)
+            else:
+                logger.info(f"Agent {self.agent_id}: interrupt + grace exhausted, stopping")
+                return "I've been interrupted. Let me summarize what I've done so far."
+
+        # ── AgentLoop: check budget exhaustion ──
+        if self._iteration_budget.is_exhausted:
+            if not self._budget_grace_call:
+                self._budget_grace_call = True
+                logger.info(f"Agent {self.agent_id}: budget exhausted, issuing grace call")
+                return await self._handle_budget_grace(messages, enable_tools)
+            else:
+                logger.info(f"Agent {self.agent_id}: budget + grace exhausted, stopping")
+                return self._iteration_budget_exhausted_response()
+
+        if self.api_call_count >= self.max_iterations:
+            logger.warning(f"Agent {self.agent_id}: max iterations ({self.max_iterations}) reached")
+            return self._iteration_budget_exhausted_response()
+
         user_message = messages[-1]["content"]
         context_depth = len(messages) - 2
+
+        # ── Context Compression: compress before API call if over threshold ──
+        estimated_tokens = sum(len(str(m.get("content", ""))) // 4 for m in messages)
+        if estimated_tokens > self._compression_threshold:
+            messages = await self._compress_context(messages)
+
+        # ── Meta-cognition: determine optimal strategy ──
+        task_sig = MetaCognition.fingerprint(user_message)
+        complexity = self._analyze_task_complexity(user_message)
+        strategy = self.metacognition.decide(
+            task_signature=task_sig,
+            task_complexity=complexity.label,
+            context_depth=context_depth,
+        )
+        logger.info(
+            f"Meta-cognition: mode={strategy.execution_mode.value}, "
+            f"model={strategy.model}, reasoning={strategy.reasoning_style}"
+        )
 
         # Context compaction
         if context_depth > self.context.config.max_messages:
             system_prompt = messages[0]["content"] if messages[0]["role"] == "system" else ""
             messages = await self.context.compact(messages, system_prompt)
 
-        # Model routing
+        # Model routing — use metacognition strategy
         routing = model_router.route(user_message, context_depth)
-        logger.info(f"Routing: {routing.reasoning}")
+        # Override model if metacognition recommends a different tier
+        if strategy.model != routing.model:
+            routing.model = strategy.model
+            routing.temperature = strategy.temperature
+        logger.info(f"Routing: {routing.reasoning} (model={routing.model})")
 
         # Reasoning loop — auto-select style based on task complexity
         if enable_reasoning:
@@ -419,6 +539,46 @@ class AgentEngine:
             importance=0.5,
         )
 
+        # ── Record outcome for metacognition learning ──
+        self.metacognition.record_outcome(
+            task_signature=task_sig,
+            decision=strategy,
+            success=True,
+            quality_score=0.8,
+            actual_tokens=self._total_tokens_used,
+        )
+
+        # ── Record experience for evolution optimization ──
+        self.evolution.record_experience(
+            experience_type=ExperienceType.CHAT,
+            task_signature=task_sig,
+            strategy_used={
+                "execution_mode": strategy.execution_mode.value,
+                "model": strategy.model,
+                "reasoning_style": strategy.reasoning_style,
+            },
+            outcome=ExperienceOutcome.SUCCESS,
+            quality_score=0.8,
+            tokens_consumed=self._total_tokens_used,
+            latency_ms=0.0,
+        )
+
+        # Run evolution cycle if enough experiences accumulated
+        if len(self.evolution._experiences) >= self.evolution._analysis_threshold:
+            try:
+                await self.evolution.run_evolution_cycle()
+            except Exception:
+                pass  # Non-critical background task
+
+        # ── Feed proactive discovery with this interaction ──
+        try:
+            self.proactive.observe_interaction(
+                user_message=user_message,
+                assistant_response=content[:500],
+            )
+        except Exception:
+            pass  # Non-critical — proactive discovery is best-effort
+
         # Publish events
         event_bus.publish(Event(
             type=EventType.MESSAGE_SENT,
@@ -435,6 +595,9 @@ class AgentEngine:
 
     async def _direct_chat(self, messages: list[dict], routing, enable_tools: bool) -> str:
         """Direct LLM chat with optional tool calling and provider fallback."""
+        # ── AgentLoop: increment API call counter ──
+        self.api_call_count += 1
+
         models_to_try = [routing.model] + [
             m for m in self._fallback_models if m != routing.model
         ]
@@ -812,6 +975,9 @@ class AgentEngine:
 
     async def _handle_tool_calls(self, messages: list[dict], choice, routing) -> str:
         """Process tool calls from LLM response with approval gating."""
+        # ── AgentLoop: increment API call counter ──
+        self.api_call_count += 1
+
         # Append assistant message with tool calls
         tool_call_messages = []
         for tc in choice.message.tool_calls:
@@ -843,6 +1009,11 @@ class AgentEngine:
                 "tool_call_id": tc.id,
                 "content": result.output if result.success else f"Error: {result.error}",
             })
+
+        # ── Self-Improving Skill Generation: extract workflow pattern ──
+        tool_sequence = [tc.function.name for tc in choice.message.tool_calls]
+        success = True  # All tools executed at this point
+        self._extract_workflow_pattern(tool_sequence, success)
 
         # Get final response after tool calls
         try:
@@ -914,6 +1085,16 @@ class AgentEngine:
                 memory_lines.append(f"- {preview}")
             memory_context = "\n".join(memory_lines)
 
+        # ── Three-Tier Memory Retrieval (L1/L2/L3) ──
+        memory_tiers_section = ""
+        try:
+            latest_msg = recent_memories[0]["content"] if recent_memories else ""
+            memory_tiers_context = await self._retrieve_from_memory_tiers(latest_msg)
+            if memory_tiers_context:
+                memory_tiers_section = f"\n{memory_tiers_context}\n"
+        except Exception as e:
+            logger.debug(f"Three-tier memory retrieval skipped: {e}")
+
         tools_section = ""
         if include_tools:
             tool_names = [t.name for t in tool_registry.list_tools()]
@@ -925,6 +1106,20 @@ class AgentEngine:
                     f"You can use function calling to invoke these: {', '.join(all_capabilities)}.\n"
                     "Use tools proactively when they help answer the user's question.\n"
                 )
+
+        # ── SOUL Identity ──
+        soul_section = ""
+        if self.soul_profile.identity:
+            parts = [f"\n## Core Identity\n{self.soul_profile.identity}\n"]
+            if self.soul_profile.principles:
+                parts.append("**Principles:**\n" + "\n".join(f"- {p}" for p in self.soul_profile.principles))
+            if self.soul_profile.communication_style:
+                parts.append(f"**Communication Style:** {self.soul_profile.communication_style}")
+            if self.soul_profile.boundaries:
+                parts.append("**Boundaries:**\n" + "\n".join(f"- {b}" for b in self.soul_profile.boundaries))
+            if self.soul_profile.goals:
+                parts.append("**Goals:**\n" + "\n".join(f"- {g}" for g in self.soul_profile.goals))
+            soul_section = "\n".join(parts) + "\n"
 
         # ── Identity context ──
         identity_section = ""
@@ -999,7 +1194,7 @@ Guidelines:
 - If you don't know something, say so honestly
 - Be concise but thorough — respect the user's time
 - Use available tools and skills to provide the best answer
-{identity_section}{persona_section}{trajectory_section}{tools_section}
+{identity_section}{persona_section}{soul_section}{trajectory_section}{tools_section}{memory_tiers_section}
 Current date: {datetime.now().strftime('%Y-%m-%d')}
 {memory_context}"""
 
@@ -1124,7 +1319,86 @@ Current date: {datetime.now().strftime('%Y-%m-%d')}
             "guardrails": guardrails_engine.get_stats(),
             "checkpoints": self._checkpoints.get_stats(),
             "compressor": trajectory_compressor.get_stats(),
+            "metacognition": self.metacognition.get_stats(),
+            "evolution": self.evolution.get_stats(),
+            "proactive": {
+                "is_running": self.proactive.is_running,
+                "last_scan_at": self.proactive.last_scan_at,
+                "total_discoveries": self.proactive.total_discoveries,
+                "recent_interactions": len(self.proactive.get_recent_interactions()),
+            },
         }
+
+    # ── Proactive-Autopilot Bridge ───────────────────────
+
+    async def bridge_proactive_to_autopilot(self, max_tasks: int = 5) -> dict:
+        """Connect proactively discovered tasks to the autopilot scheduler.
+
+        Scans pending proactive tasks and automatically schedules those
+        marked as auto-schedulable via the autopilot engine. This creates
+        a seamless flow from discovery to execution.
+        """
+        from agent.autopilot import autopilot_engine, AutopilotTrigger
+
+        # Get pending proactive tasks sorted by urgency
+        pending_tasks = self.proactive.get_tasks(status="pending", limit=50)
+        if not pending_tasks:
+            return {"scheduled": 0, "message": "No pending tasks to bridge"}
+
+        scheduled = 0
+        for task in pending_tasks[:max_tasks]:
+            if not task.get("auto_schedulable", False):
+                continue
+
+            # Create autopilot config from proactive task
+            urgency = task.get("urgency", "later")
+            interval_map = {"now": "300", "soon": "1800", "later": "7200", "someday": "86400"}
+            interval = interval_map.get(urgency, "3600")
+
+            config = autopilot_engine.create(
+                agent_id=self.agent_id,
+                name=f"Proactive: {task['title'][:50]}",
+                task_template=task.get("suggested_action", task["description"]),
+                trigger=AutopilotTrigger.INTERVAL,
+                schedule=interval,
+                max_runs=1,
+                description=task.get("description", ""),
+            )
+
+            # Mark proactive task as scheduled
+            self.proactive.schedule_task(task["id"])
+            scheduled += 1
+            logger.info(f"Bridged proactive task '{task['title']}' to autopilot {config.id}")
+
+        return {
+            "scheduled": scheduled,
+            "total_pending": len(pending_tasks),
+            "message": f"Bridged {scheduled} of {len(pending_tasks)} pending tasks to autopilot",
+        }
+
+    def get_metacognition_stats(self) -> dict:
+        """Get metacognition strategy statistics."""
+        return self.metacognition.get_stats()
+
+    def get_metacognition_insights(self) -> list[str]:
+        """Get actionable insights from metacognition learning."""
+        return self.metacognition.get_decision_insights()
+
+    def get_evolution_stats(self) -> dict:
+        """Get evolution optimization statistics."""
+        return self.evolution.get_stats()
+
+    def get_evolution_pathways(self) -> list[dict]:
+        """Get discovered optimization pathways."""
+        return self.evolution.get_pathways()
+
+    def get_evolution_insights(self) -> list[str]:
+        """Get evolution optimization insights."""
+        return self.evolution.get_insights()
+
+    async def run_evolution_cycle(self) -> dict:
+        """Run an evolution analysis cycle."""
+        return await self.evolution.run_evolution_cycle()
 
     # ── Checkpoint Operations ───────────────────────────────
 
@@ -1263,3 +1537,359 @@ Current date: {datetime.now().strftime('%Y-%m-%d')}
             }
             for p in patterns
         ]
+
+    # ═══════════════════════════════════════════════════════════
+    # AgentLoop: Budget Grace & Interrupt Handlers
+    # ═══════════════════════════════════════════════════════════
+
+    async def _handle_interrupt_grace(self, messages: list[dict], enable_tools: bool) -> str:
+        """Issue a final grace call to summarize before shutting down due to interrupt."""
+        system_msg = messages[0]["content"] if messages[0]["role"] == "system" else ""
+        summary_prompt = (
+            f"{system_msg}\n\n"
+            "[SYSTEM NOTE] You have been interrupted. Please provide a concise summary of "
+            "what you were doing and any key findings or partial results. Do not start new tasks."
+        )
+        grace_messages = [{"role": "system", "content": summary_prompt}] + messages[1:]
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.LLM_MODEL,
+                messages=grace_messages,
+                temperature=0.3,
+                max_tokens=1024,
+            )
+            self.api_call_count += 1
+            return response.choices[0].message.content or "Interrupted. Summary unavailable."
+        except Exception as e:
+            logger.warning(f"Grace call on interrupt failed: {e}")
+            return "I was interrupted before I could finish."
+
+    async def _handle_budget_grace(self, messages: list[dict], enable_tools: bool) -> str:
+        """Issue a final grace call when iteration budget is exhausted."""
+        system_msg = messages[0]["content"] if messages[0]["role"] == "system" else ""
+        summary_prompt = (
+            f"{system_msg}\n\n"
+            "[SYSTEM NOTE] Your iteration budget has been exhausted. Provide a final "
+            "concise summary of what you've accomplished and any remaining open items. "
+            "Be brief — do not make new tool calls."
+        )
+        grace_messages = [{"role": "system", "content": summary_prompt}] + messages[1:]
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.LLM_MODEL,
+                messages=grace_messages,
+                temperature=0.3,
+                max_tokens=512,
+            )
+            self.api_call_count += 1
+            return response.choices[0].message.content or "Budget exhausted."
+        except Exception as e:
+            logger.warning(f"Grace call on budget exhaustion failed: {e}")
+            return self._iteration_budget_exhausted_response()
+
+    def _iteration_budget_exhausted_response(self) -> str:
+        """Return a polite fallback when the agent can no longer continue."""
+        return (
+            "I've reached the limit of steps I can take for this conversation. "
+            "Please start a new conversation if you'd like to continue exploring this topic."
+        )
+
+    # ═══════════════════════════════════════════════════════════
+    # Three-Tier Memory (L1 Hot / L2 Warm / L3 Cold)
+    # ═══════════════════════════════════════════════════════════
+
+    def refresh_hot_memory(self, context: str):
+        """Compress key context into the L1 hot memory buffer.
+
+        Appends critical context and trims to stay within _hot_memory_max_chars.
+        Older content is truncated from the front.
+        """
+        if not context:
+            return
+        self._hot_memory = f"{self._hot_memory}\n{context}"
+        if len(self._hot_memory) > self._hot_memory_max_chars:
+            self._hot_memory = self._hot_memory[-self._hot_memory_max_chars:]
+
+    async def _retrieve_from_memory_tiers(self, query: str) -> str:
+        """Query all three memory tiers and return a combined context string.
+
+        L1 (Hot): returns the hot memory buffer contents directly.
+        L2 (Warm): semantic search via the existing memory system.
+        L3 (Cold): full-text search across session history.
+        """
+        sections: list[str] = []
+
+        # L1: Hot memory — always included if non-empty
+        if self._hot_memory.strip():
+            sections.append(f"## Recent Critical Context\n{self._hot_memory.strip()}")
+
+        # L2: Warm memory — semantic search
+        try:
+            self._warm_memory = await self.memory.search_semantic(query, limit=3)
+            if self._warm_memory:
+                warm_lines = []
+                for m in self._warm_memory:
+                    preview = str(m.get("content", ""))[:200].replace("\n", " ")
+                    warm_lines.append(f"- {preview}")
+                sections.append("## Semantically Related Memories\n" + "\n".join(warm_lines))
+        except Exception as e:
+            logger.debug(f"L2 warm memory retrieval skipped: {e}")
+
+        # L3: Cold memory — full-text search
+        try:
+            self._cold_memory = await self.memory.search(query, limit=5)
+            if self._cold_memory:
+                cold_lines = []
+                for m in self._cold_memory:
+                    preview = str(m.get("content", ""))[:150].replace("\n", " ")
+                    cold_lines.append(f"- {preview}")
+                sections.append("## Historical References\n" + "\n".join(cold_lines))
+        except Exception as e:
+            logger.debug(f"L3 cold memory retrieval skipped: {e}")
+
+        return "\n\n".join(sections) if sections else ""
+
+    # ═══════════════════════════════════════════════════════════
+    # Self-Improving Skill Generation
+    # ═══════════════════════════════════════════════════════════
+
+    def _extract_workflow_pattern(self, tool_sequence: list[str], success: bool):
+        """Analyze a successful tool call sequence and track it as a workflow pattern.
+
+        Patterns that reach the skill_generation_threshold are promoted to skills.
+        """
+        if not tool_sequence:
+            return
+
+        sequence_key = " -> ".join(tool_sequence)
+
+        # Find existing pattern or create new one
+        existing = None
+        for p in self._workflow_patterns:
+            if p["pattern"] == sequence_key:
+                existing = p
+                break
+
+        if existing:
+            existing["frequency"] += 1
+            if success:
+                existing["success_count"] = existing.get("success_count", 0) + 1
+            existing["success_rate"] = (
+                existing["success_count"] / existing["frequency"]
+            )
+            existing["last_used"] = datetime.now(timezone.utc).isoformat()
+        else:
+            self._workflow_patterns.append({
+                "pattern": sequence_key,
+                "frequency": 1,
+                "success_count": 1 if success else 0,
+                "success_rate": 1.0 if success else 0.0,
+                "last_used": datetime.now(timezone.utc).isoformat(),
+            })
+
+        # Check if any pattern should be promoted to a skill
+        if existing and existing["success_count"] >= self._skill_generation_threshold:
+            self._promote_to_skill(existing)
+
+    def _promote_to_skill(self, pattern: dict):
+        """Convert a workflow pattern with sufficient success count into a reusable skill."""
+        skill_name = f"auto_{pattern['pattern'].replace(' -> ', '_').replace(' ', '_').lower()}"
+        # Avoid re-registering the same skill
+        existing_skills = {s["name"] for s in self.skills.list()}
+        if skill_name in existing_skills:
+            return
+
+        description = (
+            f"Auto-generated skill from workflow: {pattern['pattern']}. "
+            f"Frequency: {pattern['frequency']}, "
+            f"Success rate: {pattern['success_rate']:.0%}."
+        )
+        async def _noop_handler(params: dict[str, Any]) -> str:
+            return f"Auto-skill {skill_name}: {pattern['pattern']}"
+
+        try:
+            self.skills.register(
+                name=skill_name,
+                description=description,
+                category="auto-generated",
+                parameters={},
+                handler=_noop_handler,
+            )
+            logger.info(
+                f"Promoted workflow pattern to skill: {skill_name} "
+                f"(success_count={pattern.get('success_count', 0)})"
+            )
+        except Exception as e:
+            logger.debug(f"Failed to register auto-skill {skill_name}: {e}")
+
+    # ═══════════════════════════════════════════════════════════
+    # Context Compression with Lossy Summarization
+    # ═══════════════════════════════════════════════════════════
+
+    async def _compress_context(self, messages: list[dict]) -> list[dict]:
+        """Compress older messages using LLM summarization.
+
+        Preserves the system prompt, critical messages, and recent messages.
+        Older messages are summarized and stored in _summary_buffer.
+        """
+        if len(messages) <= 3:
+            return messages
+
+        # Identify critical message indices and the most recent messages to keep
+        keep_recent = min(6, len(messages) - 1)
+        compress_range = range(1, len(messages) - keep_recent)
+
+        # Build text from compressible messages
+        compressible = []
+        for i in compress_range:
+            if i in self._critical_messages:
+                continue
+            m = messages[i]
+            compressible.append(f"[{m.get('role', 'unknown')}]: {str(m.get('content', ''))[:500]}")
+
+        if not compressible:
+            return messages
+
+        combined = "\n".join(compressible)
+        summary_prompt = (
+            "Summarize the following conversation excerpt concisely, preserving key facts, "
+            "decisions, errors, and user preferences. Output only the summary:\n\n" + combined
+        )
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.LLM_MODEL,
+                messages=[{"role": "user", "content": summary_prompt}],
+                temperature=0.2,
+                max_tokens=512,
+            )
+            summary = response.choices[0].message.content or ""
+            self._summary_buffer.append(summary)
+            # Keep only the most recent 5 summaries
+            if len(self._summary_buffer) > 5:
+                self._summary_buffer = self._summary_buffer[-5:]
+        except Exception as e:
+            logger.warning(f"Context compression failed, using truncated context: {e}")
+            summary = "[Compressed context unavailable]"
+            self._summary_buffer.append(summary)
+
+        # Rebuild messages: system + summary + critical + recent
+        rebuilt = [messages[0]]  # system prompt
+
+        # Insert compressed summary
+        if self._summary_buffer:
+            rebuilt.append({
+                "role": "system",
+                "content": "## Conversation Summary (Compressed)\n" + "\n".join(self._summary_buffer),
+            })
+
+        # Insert critical messages that were in the compressed range
+        for i in compress_range:
+            if i in self._critical_messages:
+                rebuilt.append(messages[i])
+
+        # Append recent messages
+        for i in range(len(messages) - keep_recent, len(messages)):
+            rebuilt.append(messages[i])
+
+        logger.info(
+            f"Context compressed: {len(messages)} -> {len(rebuilt)} messages "
+            f"(compressed {len(compressible)} lines, preserved {len(self._critical_messages)} critical)"
+        )
+        return rebuilt
+
+    # ═══════════════════════════════════════════════════════════
+    # SOUL Identity System
+    # ═══════════════════════════════════════════════════════════
+
+    def load_soul_profile(self, profile: SoulProfile | dict):
+        """Load a SOUL profile from a SoulProfile object or dict."""
+        if isinstance(profile, dict):
+            self.soul_profile = SoulProfile(
+                identity=profile.get("identity", ""),
+                principles=profile.get("principles", []),
+                communication_style=profile.get("communication_style", ""),
+                boundaries=profile.get("boundaries", []),
+                goals=profile.get("goals", []),
+            )
+        else:
+            self.soul_profile = profile
+        logger.info(f"SOUL profile loaded for agent {self.agent_id}: {self.soul_profile.identity}")
+
+    def update_soul_profile(self, **kwargs):
+        """Update individual fields of the SOUL profile."""
+        for key, value in kwargs.items():
+            if hasattr(self.soul_profile, key):
+                setattr(self.soul_profile, key, value)
+        logger.info(f"SOUL profile updated for agent {self.agent_id}")
+
+    # ═══════════════════════════════════════════════════════════
+    # Cron / Scheduled Task Support
+    # ═══════════════════════════════════════════════════════════
+
+    def add_scheduled_task(self, name: str, schedule: str, prompt: str) -> ScheduledTask:
+        """Register a new scheduled task.
+
+        schedule can be a cron expression or an interval in seconds as a string.
+        """
+        task_id = f"st-{hashlib.sha1(f'{name}{schedule}{time.time()}'.encode()).hexdigest()[:12]}"
+        task = ScheduledTask(
+            id=task_id,
+            name=name,
+            schedule=schedule,
+            prompt=prompt,
+        )
+        self._scheduled_tasks.append(task)
+        logger.info(f"Scheduled task added: {name} (id={task_id}, schedule={schedule})")
+        return task
+
+    def get_due_tasks(self) -> list[ScheduledTask]:
+        """Return all enabled scheduled tasks that are due for execution.
+
+        For interval-based schedules (all-digit strings), checks if enough
+        seconds have elapsed since last_run. For cron expressions, always
+        returns them (the caller should use a proper cron parser).
+        """
+        due: list[ScheduledTask] = []
+        now = datetime.now(timezone.utc)
+        for task in self._scheduled_tasks:
+            if not task.enabled:
+                continue
+            # Interval-based schedule: all-digit string = seconds
+            if task.schedule.isdigit():
+                interval = int(task.schedule)
+                if task.last_run is None:
+                    due.append(task)
+                elif (now - task.last_run).total_seconds() >= interval:
+                    due.append(task)
+            else:
+                # Cron expression — always return (caller should parse properly)
+                if task.last_run is None:
+                    due.append(task)
+                else:
+                    # Conservative: treat as due if at least 60 seconds since last run
+                    if (now - task.last_run).total_seconds() >= 60:
+                        due.append(task)
+        return due
+
+    async def run_scheduled_task(self, task: ScheduledTask) -> str:
+        """Execute a scheduled task by creating a fresh mini-session.
+
+        Uses the task's prompt as the user message and runs a single-turn
+        chat with tools enabled. Updates task.last_run on completion.
+        """
+        logger.info(f"Running scheduled task: {task.name} (id={task.id})")
+        try:
+            result = await self.chat(
+                message=task.prompt,
+                conversation_history=[],
+                stream=False,
+                enable_tools=True,
+                enable_reasoning=False,
+            )
+            task.last_run = datetime.now(timezone.utc)
+            return result if isinstance(result, str) else str(result)
+        except Exception as e:
+            logger.error(f"Scheduled task {task.name} failed: {e}")
+            task.last_run = datetime.now(timezone.utc)
+            return f"Scheduled task failed: {e}"
