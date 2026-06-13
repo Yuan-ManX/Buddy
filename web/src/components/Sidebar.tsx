@@ -30,6 +30,7 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'capability', label: 'Capability', icon: '🎯' },
   { id: 'kgraph', label: 'K-Graph', icon: '🕸️' },
   { id: 'board', label: 'Board', icon: '📋' },
+  { id: 'kanban', label: 'Kanban', icon: '📌' },
   { id: 'compounding', label: 'Compound', icon: '⚡' },
   { id: 'whitememory', label: 'W-Memory', icon: '🧠' },
   { id: 'memorysync', label: 'M-Sync', icon: '🔄' },
@@ -45,6 +46,9 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'costs', label: 'Costs', icon: '💰' },
   { id: 'workspaces', label: 'Workspaces', icon: '🗂️' },
   { id: 'agentdashboard', label: 'A-Dash', icon: '📈' },
+  { id: 'activity', label: 'Activity', icon: '📡' },
+  { id: 'runtimemonitor', label: 'Runtime', icon: '🖥️' },
+  { id: 'skillmanager', label: 'S-Manager', icon: '🎛️' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
@@ -69,6 +73,8 @@ const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'learning', label: 'Learn', icon: '📚' },
   { id: 'knowledge', label: 'Knowledge', icon: '📖' },
   { id: 'proactive', label: 'Proactive', icon: '🎯' },
+  { id: 'metacognition', label: 'Meta', icon: '🧠' },
+  { id: 'evolution', label: 'Evolution', icon: '🧬' },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({
