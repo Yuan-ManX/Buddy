@@ -18,6 +18,7 @@ Core components:
 - BuddyTrajectory: Execution trace capture and compression
 - BuddySquads: Collaborative agent teams with trust scoring
 - BuddyGuard: Safety monitoring, rate limiting, and audit system
+- GuardrailsEngine: Output safety filtering and content moderation
 - BuddyPulse: Health monitoring and metrics collection
 - WebSocketManager: Real-time streaming and event broadcast
 - SelfImprovementEngine: Autonomous skill generation from interaction patterns
@@ -28,7 +29,10 @@ Core components:
 - BuddyScheduler: Cron-based task scheduling with platform delivery
 - BuddyStudio: Project workspace system with white-box memory
 - WorkflowEngine: Agentic task lifecycle management with delegation
+- MemorySyncHub: Cross-agent memory sharing and sync groups
+- SessionSearch: Cross-session recall and recap system
 """
+from agent.session_search import SessionIndex, SessionSearcher, SessionEntry, SessionRecap, session_searcher
 from agent.engine import AgentEngine
 from agent.memory import HierarchicalMemory, MemorySystem, MemoryLayer
 from agent.orchestrator import Orchestrator
@@ -52,6 +56,11 @@ from agent.runtime_hub import RuntimeHub, runtime_hub, RuntimeBackend, RuntimeSt
 from agent.scheduler import BuddyScheduler, buddy_scheduler, ScheduleType, ScheduleStatus, ScheduledTask, CronParser, NaturalScheduleParser
 from agent.studio import BuddyStudio, buddy_studio, StudioStatus, WhiteBoxMemory, MemoryEntry, MemoryCategory, MemoryImportance, MemorySnapshot, MemorySnapshotter, StudioInfo, TemplateLibrary
 from agent.workflow import WorkflowEngine, workflow_engine, TaskState, WorkflowPriority, BlockerType, WorkflowTask, TaskBoard, ActivityTracker, Blocker
+from agent.reactive_loop import ReactiveLoop, LoopPhase, LoopMode, Observation, PendingAction, LoopCycle
+from agent.memory_sync import MemorySyncHub, SyncGroup, SharedMemory
+from agent.platform_hub import PlatformHub, platform_hub, PlatformSubsystem, SubsystemStatus, PlatformEvent
+from agent.shared import memory_sync_hub
+from agent.agent_evolution import AgentEvolution, ExperienceType, ExperienceOutcome
 
 __all__ = [
     "AgentEngine",
@@ -76,5 +85,9 @@ __all__ = [
     "BuddyScheduler", "buddy_scheduler", "ScheduleType", "ScheduleStatus", "ScheduledTask", "CronParser", "NaturalScheduleParser",
     "BuddyStudio", "buddy_studio", "StudioStatus", "WhiteBoxMemory", "MemoryEntry", "MemoryCategory", "MemoryImportance", "MemorySnapshot", "MemorySnapshotter", "StudioInfo", "TemplateLibrary",
     "WorkflowEngine", "workflow_engine", "TaskState", "WorkflowPriority", "BlockerType", "WorkflowTask", "TaskBoard", "ActivityTracker", "Blocker",
+    "ReactiveLoop", "LoopPhase", "LoopMode", "Observation", "PendingAction", "LoopCycle",
+    "MemorySyncHub", "SyncGroup", "SharedMemory", "memory_sync_hub",
+    "PlatformHub", "platform_hub", "PlatformSubsystem", "SubsystemStatus", "PlatformEvent",
+    "SessionIndex", "SessionSearcher", "SessionEntry", "SessionRecap", "session_searcher",
     "orchestrator", "skills_registry",
 ]
