@@ -1209,3 +1209,388 @@ tool_registry.register(ToolDefinition(
     timeout=5.0,
     safety=ExecutionSafety.MUTATING,
 ))
+
+# ── Tool Composition ─────────────────────────────────────
+
+class ToolComposition:
+    """Compose multiple tools into pipelines with sequential, parallel, and conditional execution."""
+
+    class PipelineMode(str, Enum):
+        SEQUENTIAL = "sequential"
+        PARALLEL = "parallel"
+        CONDITIONAL = "conditional"
+
+    @staticmethod
+    async def sequential(
+        steps: list[tuple[str, dict]],
+        registry: ToolRegistry,
+    ) -> list[ToolResult]:
+        """Execute tools sequentially, passing output of each step to the next.
+
+        Each step receives all previous step outputs in a '_previous_results' key.
+        """
+        results = []
+        for name, args in steps:
+            if results:
+                args = dict(args)
+                args["_previous_results"] = [r.output for r in results]
+            result = await registry.execute(name, args)
+            results.append(result)
+        return results
+
+    @staticmethod
+    async def parallel(
+        calls: list[tuple[str, dict]],
+        registry: ToolRegistry,
+    ) -> list[ToolResult]:
+        """Execute multiple tools in parallel with safety-aware scheduling."""
+        return await registry.execute_batch(calls)
+
+    @staticmethod
+    async def conditional(
+        condition_tool: tuple[str, dict],
+        true_branch: tuple[str, dict],
+        false_branch: tuple[str, dict] | None,
+        registry: ToolRegistry,
+    ) -> list[ToolResult]:
+        """Execute a condition-checking tool, then route to true or false branch.
+
+        The condition is considered true if the condition tool succeeds and its
+        output (parsed as JSON) has a truthy 'result' field, or if the output
+        string is non-empty and not an error.
+        """
+        results = []
+        cond_result = await registry.execute(condition_tool[0], condition_tool[1])
+        results.append(cond_result)
+
+        # Determine if condition passed
+        condition_met = cond_result.success
+        if condition_met and cond_result.output:
+            try:
+                parsed = json.loads(cond_result.output)
+                if isinstance(parsed, dict):
+                    if "result" in parsed and not parsed["result"]:
+                        condition_met = False
+                    if "error" in parsed:
+                        condition_met = False
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        if condition_met:
+            branch_result = await registry.execute(true_branch[0], true_branch[1])
+        elif false_branch:
+            branch_result = await registry.execute(false_branch[0], false_branch[1])
+        else:
+            branch_result = ToolResult(
+                name="conditional_skip",
+                success=True,
+                output=json.dumps({"skipped": True, "reason": "condition false, no false branch"}),
+            )
+        results.append(branch_result)
+        return results
+
+
+# ── Tool Rate Limiter ────────────────────────────────────
+
+class ToolRateLimiter:
+    """Per-tool rate limiting with configurable time windows."""
+
+    def __init__(self, default_window_seconds: float = 60.0, default_max_calls: int = 30):
+        self.default_window = default_window_seconds
+        self.default_max = default_max_calls
+        self._limits: dict[str, dict] = {}
+        self._call_history: dict[str, list[float]] = {}
+
+    def configure(
+        self,
+        tool_name: str,
+        max_calls: int,
+        window_seconds: float,
+    ):
+        """Configure rate limit for a specific tool."""
+        self._limits[tool_name] = {
+            "max_calls": max_calls,
+            "window": window_seconds,
+        }
+
+    def check(self, tool_name: str) -> tuple[bool, float]:
+        """Check if a tool call is allowed. Returns (allowed, wait_seconds)."""
+        import time as _time
+        now = _time.time()
+        limit = self._limits.get(
+            tool_name,
+            {"max_calls": self.default_max, "window": self.default_window},
+        )
+
+        if tool_name not in self._call_history:
+            self._call_history[tool_name] = [now]
+            return True, 0.0
+
+        # Remove expired entries
+        cutoff = now - limit["window"]
+        self._call_history[tool_name] = [
+            t for t in self._call_history[tool_name] if t > cutoff
+        ]
+
+        if len(self._call_history[tool_name]) < limit["max_calls"]:
+            self._call_history[tool_name].append(now)
+            return True, 0.0
+
+        # Calculate wait time until oldest call expires
+        oldest = min(self._call_history[tool_name])
+        wait = oldest + limit["window"] - now
+        return False, max(0.0, wait)
+
+    def get_usage(self, tool_name: str) -> dict:
+        """Get current usage stats for a tool."""
+        import time as _time
+        now = _time.time()
+        limit = self._limits.get(
+            tool_name,
+            {"max_calls": self.default_max, "window": self.default_window},
+        )
+        if tool_name not in self._call_history:
+            return {"used": 0, "limit": limit["max_calls"], "window_seconds": limit["window"]}
+        cutoff = now - limit["window"]
+        recent = [t for t in self._call_history[tool_name] if t > cutoff]
+        return {
+            "used": len(recent),
+            "limit": limit["max_calls"],
+            "window_seconds": limit["window"],
+            "remaining": max(0, limit["max_calls"] - len(recent)),
+        }
+
+
+# ── Tool Result Cache ────────────────────────────────────
+
+class ToolResultCache:
+    """LRU cache for deterministic tool results keyed by input hash."""
+
+    def __init__(self, max_size: int = 256):
+        self.max_size = max_size
+        self._cache: dict[str, ToolResult] = {}
+        self._access_order: list[str] = []
+        self._hits: int = 0
+        self._misses: int = 0
+
+    @staticmethod
+    def _make_key(tool_name: str, arguments: dict) -> str:
+        """Generate a deterministic cache key from tool name and arguments."""
+        arg_str = json.dumps(arguments, sort_keys=True, default=str)
+        return f"{tool_name}:{hash(arg_str)}"
+
+    def get(self, tool_name: str, arguments: dict) -> ToolResult | None:
+        """Retrieve a cached result if available."""
+        key = self._make_key(tool_name, arguments)
+        if key in self._cache:
+            self._hits += 1
+            # Move to end (most recently used)
+            self._access_order.remove(key)
+            self._access_order.append(key)
+            return self._cache[key]
+        self._misses += 1
+        return None
+
+    def put(self, tool_name: str, arguments: dict, result: ToolResult):
+        """Cache a tool execution result."""
+        key = self._make_key(tool_name, arguments)
+        if key in self._cache:
+            self._access_order.remove(key)
+        elif len(self._cache) >= self.max_size:
+            oldest = self._access_order.pop(0)
+            del self._cache[oldest]
+        self._cache[key] = result
+        self._access_order.append(key)
+
+    def invalidate(self, tool_name: str | None = None):
+        """Invalidate cache entries, optionally filtered by tool name."""
+        if tool_name is None:
+            self._cache.clear()
+            self._access_order.clear()
+            return
+        keys_to_remove = [k for k in self._cache if k.startswith(f"{tool_name}:")]
+        for key in keys_to_remove:
+            del self._cache[key]
+            self._access_order.remove(key)
+
+    def get_stats(self) -> dict:
+        total = self._hits + self._misses
+        return {
+            "size": len(self._cache),
+            "max_size": self.max_size,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": f"{(self._hits / max(total, 1) * 100):.1f}%",
+        }
+
+
+# ── Tool Output Validation ───────────────────────────────
+
+def validate_tool_output(
+    tool_name: str,
+    output: str,
+    expected_schema: dict | None = None,
+) -> tuple[bool, str]:
+    """Validate tool output against a schema.
+
+    Performs basic validation:
+    - Non-empty output for most tools
+    - Valid JSON for JSON-returning tools
+    - Schema compliance if expected_schema is provided
+
+    Returns (is_valid, error_message).
+    """
+    if output is None:
+        return False, "Output is None"
+
+    if not isinstance(output, str):
+        return False, f"Output is not a string (got {type(output).__name__})"
+
+    if not output.strip():
+        return False, "Output is empty"
+
+    # Check if output looks like JSON (most tools return JSON)
+    if output.strip().startswith("{"):
+        try:
+            parsed = json.loads(output)
+        except json.JSONDecodeError as e:
+            return False, f"Invalid JSON output: {str(e)}"
+
+        # Schema validation if provided
+        if expected_schema:
+            for field, field_type in expected_schema.items():
+                if field not in parsed:
+                    return False, f"Missing required field '{field}' in output"
+                actual = parsed[field]
+                expected = field_type
+                if expected == "string" and not isinstance(actual, str):
+                    return False, f"Field '{field}' expected string, got {type(actual).__name__}"
+                elif expected == "number" and not isinstance(actual, (int, float)):
+                    return False, f"Field '{field}' expected number, got {type(actual).__name__}"
+                elif expected == "boolean" and not isinstance(actual, bool):
+                    return False, f"Field '{field}' expected boolean, got {type(actual).__name__}"
+                elif expected == "array" and not isinstance(actual, list):
+                    return False, f"Field '{field}' expected array, got {type(actual).__name__}"
+                elif expected == "object" and not isinstance(actual, dict):
+                    return False, f"Field '{field}' expected object, got {type(actual).__name__}"
+
+    return True, ""
+
+
+# ── Tool Execution Metrics ───────────────────────────────
+
+class ToolExecutionMetrics:
+    """Track per-tool execution time, success rate, and token usage."""
+
+    def __init__(self):
+        self._metrics: dict[str, dict] = {}
+
+    def record(
+        self,
+        tool_name: str,
+        success: bool,
+        duration_ms: float,
+        tokens_used: int = 0,
+    ):
+        """Record a single tool execution."""
+        if tool_name not in self._metrics:
+            self._metrics[tool_name] = {
+                "total_calls": 0,
+                "successful": 0,
+                "failed": 0,
+                "total_duration_ms": 0.0,
+                "total_tokens": 0,
+                "last_called": "",
+            }
+
+        m = self._metrics[tool_name]
+        m["total_calls"] += 1
+        if success:
+            m["successful"] += 1
+        else:
+            m["failed"] += 1
+        m["total_duration_ms"] += duration_ms
+        m["total_tokens"] += tokens_used
+        m["last_called"] = datetime.now(timezone.utc).isoformat()
+
+    def get(self, tool_name: str | None = None) -> dict:
+        """Get metrics for a specific tool or all tools."""
+        if tool_name:
+            return self._format_metric(tool_name, self._metrics.get(tool_name))
+        return {
+            name: self._format_metric(name, data)
+            for name, data in self._metrics.items()
+        }
+
+    def _format_metric(self, name: str, data: dict | None) -> dict:
+        if not data:
+            return {"error": f"No metrics for tool: {name}"}
+        total = data["total_calls"]
+        return {
+            "total_calls": total,
+            "successful": data["successful"],
+            "failed": data["failed"],
+            "success_rate": f"{(data['successful'] / max(total, 1) * 100):.1f}%",
+            "avg_duration_ms": round(data["total_duration_ms"] / max(total, 1), 2),
+            "total_tokens": data["total_tokens"],
+            "last_called": data["last_called"],
+        }
+
+    def reset(self, tool_name: str | None = None):
+        """Reset metrics for a specific tool or all tools."""
+        if tool_name:
+            self._metrics.pop(tool_name, None)
+        else:
+            self._metrics.clear()
+
+
+# ── Tool Warm-Up ─────────────────────────────────────────
+
+async def warm_up_tool(registry: ToolRegistry, tool_name: str):
+    """Pre-initialize a tool before first use to reduce cold-start latency.
+
+    Sends a lightweight no-op call to initialize any lazy resources
+    (DB connections, API clients, model loading, etc.) associated with the tool.
+    """
+    tool = registry.get(tool_name)
+    if not tool:
+        logger.warning(f"Warm-up failed: tool '{tool_name}' not found")
+        return False
+
+    warm_up_args = {
+        "web_search": {"query": "__warmup__", "num_results": 0},
+        "calculate": {"expression": "0"},
+        "get_datetime": {"timezone": "UTC"},
+        "count_tokens": {"text": "warmup"},
+        "json_query": {"data": "{}", "query": ""},
+    }
+
+    args = warm_up_args.get(tool_name, {"_warmup": True})
+    try:
+        result = await registry.execute(tool_name, args)
+        logger.info(f"Tool warm-up: {tool_name} -> {'OK' if result.success else f'ERR: {result.error}'}")
+        return result.success
+    except Exception as e:
+        logger.warning(f"Tool warm-up failed for {tool_name}: {e}")
+        return False
+
+
+async def warm_up_all_tools(registry: ToolRegistry, exclude: list[str] | None = None):
+    """Warm up all registered tools in parallel."""
+    exclude = exclude or []
+    tasks = [
+        warm_up_tool(registry, name)
+        for name in registry._tools
+        if name not in exclude
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    warmed = sum(1 for r in results if r is True)
+    logger.info(f"Warmed up {warmed}/{len(tasks)} tools")
+    return warmed
+
+
+# ── Global Instances ─────────────────────────────────────
+
+tool_rate_limiter = ToolRateLimiter()
+tool_result_cache = ToolResultCache()
+tool_metrics = ToolExecutionMetrics()
