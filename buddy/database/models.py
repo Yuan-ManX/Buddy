@@ -2,7 +2,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 from sqlalchemy import String, Text, Float, Boolean, DateTime, ForeignKey, JSON, Integer, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database.db import Base
@@ -16,7 +16,7 @@ class TimestampMixin:
     """Mixin providing created_at and updated_at timestamps for all models."""
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
 
 
 class Agent(TimestampMixin, Base):
@@ -96,14 +96,14 @@ class Task(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32), default="queued")
     kind: Mapped[str] = mapped_column(String(32), default="direct")
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    conversation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    result: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     attempt: Mapped[int] = mapped_column(Integer, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, default=3)
-    parent_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    parent_task_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     agent = relationship("Agent", back_populates="tasks")
 
@@ -124,7 +124,7 @@ class Plan(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(32), default="pending")
     steps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     current_step: Mapped[int] = mapped_column(Integer, default=0)
-    result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    result: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     agent = relationship("Agent", back_populates="plans")
 
@@ -147,8 +147,8 @@ class AutopilotConfig(TimestampMixin, Base):
     max_runs: Mapped[int] = mapped_column(Integer, default=0)
     runs_completed: Mapped[int] = mapped_column(Integer, default=0)
     description: Mapped[str] = mapped_column(String(512), default="")
-    last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    next_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    next_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     agent = relationship("Agent", back_populates="autopilots")
 
@@ -168,7 +168,7 @@ class MCPServer(TimestampMixin, Base):
     command: Mapped[str] = mapped_column(Text, default="")
     env: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String(32), default="disconnected")
-    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index("idx_mcp_servers_status", "status"),
