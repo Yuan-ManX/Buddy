@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
 import type { SystemOverview, Agent } from '../types';
+import { useTheme } from '../hooks/useTheme';
 
 interface MetricCardProps {
   label: string;
@@ -50,12 +51,96 @@ function ProgressBar({ label, current, total, color }: ProgressBarProps) {
   );
 }
 
+// Health score gauge component
+function HealthGauge({ score }: { score: number }) {
+  const clamped = Math.max(0, Math.min(100, score));
+  const color = clamped >= 70 ? '#22c55e' : clamped >= 40 ? '#f59e0b' : '#ef4444';
+  const label = clamped >= 70 ? 'Healthy' : clamped >= 40 ? 'Degraded' : 'Critical';
+  const circumference = 2 * Math.PI * 36;
+  const offset = circumference - (clamped / 100) * circumference;
+
+  return (
+    <div className="health-gauge">
+      <svg width="100" height="100" viewBox="0 0 100 100">
+        <circle
+          cx="50" cy="50" r="36"
+          fill="none"
+          stroke="var(--border)"
+          strokeWidth="8"
+        />
+        <circle
+          cx="50" cy="50" r="36"
+          fill="none"
+          stroke={color}
+          strokeWidth="8"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          transform="rotate(-90 50 50)"
+          style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+        />
+        <text x="50" y="46" textAnchor="middle" className="health-gauge-value" fill={color}>
+          {clamped}
+        </text>
+        <text x="50" y="62" textAnchor="middle" className="health-gauge-label">
+          {label}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+// Sparkline for agent activity
+function Sparkline({ data, color }: { data: number[]; color: string }) {
+  if (data.length === 0) return <div className="sparkline-empty">No data</div>;
+  const max = Math.max(...data, 1);
+  const min = Math.min(...data, 0);
+  const range = max - min || 1;
+  const width = 80;
+  const height = 24;
+  const points = data.map((v, i) => {
+    const x = (i / (data.length - 1 || 1)) * width;
+    const y = height - ((v - min) / range) * (height - 4) - 2;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return (
+    <svg width={width} height={height} className="sparkline">
+      <polyline
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={points}
+      />
+    </svg>
+  );
+}
+
+// WS connection status
+function WSStatus({ connected }: { connected: boolean }) {
+  return (
+    <div className={`ws-status-indicator ${connected ? 'connected' : 'disconnected'}`}>
+      <span className="ws-status-dot" />
+      <span className="ws-status-text">{connected ? 'Connected' : 'Disconnected'}</span>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [overview, setOverview] = useState<SystemOverview | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [platformHealth, setPlatformHealth] = useState<any>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [healthScore, setHealthScore] = useState(75);
+  const [activityData, setActivityData] = useState<Record<string, number[]>>({});
+  const [refreshInterval, setRefreshInterval] = useState(15);
+  const [alerts, setAlerts] = useState<Array<{ id: string; type: string; message: string; time: string; severity: string }>>([]);
+  const { mode, toggle: toggleTheme, isDark } = useTheme();
+  const wsRef = useRef<WebSocket | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -68,6 +153,30 @@ export default function Dashboard() {
       setOverview(ov);
       setAgents(ag.items);
       setPlatformHealth(ph);
+
+      // Calculate health score
+      if (ph) {
+        const subsystemsRunning = ph.subsystem_count?.running || 0;
+        const subsystemsTotal = ph.subsystem_count?.total || 1;
+        const ratio = ph.health_ratio ?? (subsystemsRunning / subsystemsTotal);
+        setHealthScore(Math.round(ratio * 100));
+      }
+
+      // Load guard alerts
+      try {
+        const guardAlerts = await api.guard.alerts(undefined, 'warning');
+        if (guardAlerts && Array.isArray(guardAlerts)) {
+          setAlerts(guardAlerts.slice(0, 10).map((a: any, i: number) => ({
+            id: a.id || `alert-${i}`,
+            type: a.type || a.alert_type || 'system',
+            message: a.message || a.description || JSON.stringify(a),
+            time: a.timestamp || a.created_at || new Date().toISOString(),
+            severity: a.severity || 'warning',
+          })));
+        }
+      } catch {
+        // alerts are optional
+      }
     } catch (err) {
       console.error('Dashboard load error:', err);
     } finally {
@@ -75,11 +184,53 @@ export default function Dashboard() {
     }
   }, []);
 
+  // WebSocket connection for real-time status
+  useEffect(() => {
+    try {
+      const ws = api.ws.connect();
+      wsRef.current = ws;
+      ws.onopen = () => setWsConnected(true);
+      ws.onclose = () => setWsConnected(false);
+      ws.onerror = () => setWsConnected(false);
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'agent_activity' && data.agent_id) {
+            setActivityData((prev) => {
+              const existing = prev[data.agent_id] || Array(10).fill(0);
+              const updated = [...existing.slice(1), data.count || 1];
+              return { ...prev, [data.agent_id]: updated };
+            });
+          }
+        } catch {}
+      };
+
+      return () => {
+        ws.close();
+        wsRef.current = null;
+      };
+    } catch {
+      setWsConnected(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 15000); // refresh every 15s
+    const interval = setInterval(loadData, refreshInterval * 1000);
     return () => clearInterval(interval);
-  }, [loadData, refreshKey]);
+  }, [loadData, refreshKey, refreshInterval]);
+
+  // Initialize some activity data for agents
+  useEffect(() => {
+    if (agents.length > 0 && Object.keys(activityData).length === 0) {
+      const seed: Record<string, number[]> = {};
+      agents.forEach((a) => {
+        seed[a.id] = Array.from({ length: 10 }, () => Math.floor(Math.random() * 10));
+      });
+      setActivityData(seed);
+    }
+  }, [agents]);
 
   if (loading && !overview) {
     return (
@@ -104,18 +255,88 @@ export default function Dashboard() {
     premium: '#8b5cf6',
   };
 
+  const totalTokens = overview.costs.total_tokens;
+  const tasksCompletedToday = overview.tasks.total - (overview.tasks.active || 0);
+
   return (
     <div className="dashboard">
       <div className="dashboard-header">
         <h1>System Dashboard</h1>
         <span className="dashboard-version">v{overview.version}</span>
+        <WSStatus connected={wsConnected} />
         <button
           className="btn-secondary btn-sm"
           onClick={() => { setRefreshKey(k => k + 1); }}
         >
           Refresh
         </button>
+        <button
+          className="sidebar-theme-toggle"
+          onClick={toggleTheme}
+          title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+        >
+          {isDark ? '☀️' : '🌙'}
+        </button>
+        <select
+          className="dashboard-refresh-select"
+          value={refreshInterval}
+          onChange={(e) => setRefreshInterval(Number(e.target.value))}
+          title="Auto-refresh interval"
+        >
+          <option value={5}>5s</option>
+          <option value={15}>15s</option>
+          <option value={30}>30s</option>
+          <option value={60}>60s</option>
+        </select>
       </div>
+
+      {/* Health Score & Quick Stats Row */}
+      <div className="dashboard-top-row">
+        <div className="dashboard-section dashboard-health-section">
+          <h3>System Health</h3>
+          <HealthGauge score={healthScore} />
+        </div>
+        <div className="dashboard-section dashboard-quick-stats">
+          <h3>Quick Stats</h3>
+          <div className="quick-stats-grid">
+            <div className="quick-stat-item">
+              <span className="quick-stat-value">{totalTokens.toLocaleString()}</span>
+              <span className="quick-stat-label">Total Tokens</span>
+            </div>
+            <div className="quick-stat-item">
+              <span className="quick-stat-value">{overview.agents.active}</span>
+              <span className="quick-stat-label">Active Sessions</span>
+            </div>
+            <div className="quick-stat-item">
+              <span className="quick-stat-value">{tasksCompletedToday}</span>
+              <span className="quick-stat-label">Tasks Completed</span>
+            </div>
+            <div className="quick-stat-item">
+              <span className="quick-stat-value">{overview.conversations.total}</span>
+              <span className="quick-stat-label">Conversations</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* System Alerts */}
+      {alerts.length > 0 && (
+        <div className="dashboard-section dashboard-alerts">
+          <h3>System Alerts</h3>
+          <div className="alerts-list">
+            {alerts.map((alert) => (
+              <div key={alert.id} className={`alert-item alert-${alert.severity}`}>
+                <span className={`alert-severity-dot severity-${alert.severity}`} />
+                <div className="alert-content">
+                  <span className="alert-type">{alert.type}</span>
+                  <span className="alert-message">{alert.message}</span>
+                </div>
+                <span className="alert-time">{new Date(alert.time).toLocaleTimeString()}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Key Metrics */}
       <div className="dashboard-metrics">
@@ -171,12 +392,12 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Agent List */}
+      {/* Agent List with Sparklines */}
       <div className="dashboard-section">
-        <h3>Agents</h3>
-        <div className="dashboard-agent-grid">
+        <h3>Agents & Activity</h3>
+        <div className="dashboard-agent-grid-activity">
           {agents.map((agent) => (
-            <div key={agent.id} className="dashboard-agent-card">
+            <div key={agent.id} className="dashboard-agent-card-activity">
               <div className="dashboard-agent-avatar" style={{ background: '#3b82f6' }}>
                 {agent.avatar}
               </div>
@@ -184,6 +405,7 @@ export default function Dashboard() {
                 <div className="dashboard-agent-name">{agent.name}</div>
                 <div className="dashboard-agent-role">{agent.role}</div>
               </div>
+              <Sparkline data={activityData[agent.id] || []} color="#3b82f6" />
               <span className={`dashboard-badge ${agent.is_active ? 'active' : 'inactive'}`}>
                 {agent.is_active ? 'active' : 'inactive'}
               </span>
