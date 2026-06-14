@@ -231,6 +231,26 @@ export const api = {
       }),
   },
 
+  workspaces: {
+    list: () =>
+      request<Array<import('../types').Workspace>>('/workspaces'),
+    get: (id: string) =>
+      request<import('../types').Workspace>(`/workspaces/${id}`),
+    create: (data: { name: string; description: string }) =>
+      request<import('../types').Workspace>('/workspaces', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      request<void>(`/workspaces/${id}`, { method: 'DELETE' }),
+    switch: (id: string) =>
+      request<import('../types').Workspace>(`/workspaces/${id}/activate`, { method: 'POST' }),
+    stats: () =>
+      request<import('../types').WorkspaceStatsOverview>('/workspaces/stats'),
+    export: (id: string) =>
+      request<{ config: Record<string, unknown>; workspace: import('../types').Workspace }>(`/workspaces/${id}/export`),
+  },
+
   subagents: {
     execute: (agentId: string, tasks: Array<{ name: string; instructions: string; task: string }>, model?: string) =>
       request<Array<import('../types').SubAgentResult>>(`/agents/${agentId}/subagents/execute`, {
@@ -537,6 +557,8 @@ export const api = {
     failed: (limit?: number) => request<Array<import('../types').CompressedTrajectory>>(`/trajectory/failed?limit=${limit || 20}`),
     byAgent: (agentId: string, limit?: number) => request<Array<import('../types').CompressedTrajectory>>(`/trajectory/by-agent/${agentId}?limit=${limit || 50}`),
     stats: () => request('/trajectory/stats'),
+    clear: (agentId: string) =>
+      request<{ agent_id: string; cleared: boolean }>(`/agents/${agentId}/trajectory/clear`, { method: 'POST' }),
   },
 
   // ── Guard ──
@@ -873,5 +895,448 @@ export const api = {
       request<{ tasks: Array<import('../types').WorkflowTaskItem> }>(`/workflow/recent?limit=${limit}`),
     stats: () =>
       request<import('../types').WorkflowStats>('/workflow-stats'),
+  },
+
+  compressor: {
+    compress: (agentId: string, conversationId?: string) => {
+      const qs = new URLSearchParams();
+      if (conversationId) qs.set('conversation_id', conversationId);
+      return request<Record<string, unknown>>(`/agents/${agentId}/compressor/compress?${qs.toString()}`, { method: 'POST' });
+    },
+    trajectories: (agentId: string, limit?: number) => {
+      const qs = new URLSearchParams();
+      if (limit) qs.set('limit', String(limit));
+      return request<{ agent_id: string; trajectories: Array<Record<string, unknown>> }>(`/agents/${agentId}/compressor/trajectories?${qs.toString()}`);
+    },
+    patterns: (agentId: string, patternType?: string) => {
+      const qs = new URLSearchParams();
+      if (patternType) qs.set('pattern_type', patternType);
+      return request<{ agent_id: string; patterns: Array<Record<string, unknown>>; count: number }>(`/agents/${agentId}/compressor/patterns?${qs.toString()}`);
+    },
+    stats: () =>
+      request<Record<string, unknown>>('/compressor/stats'),
+    export: (agentId?: string, format?: string) => {
+      const qs = new URLSearchParams();
+      if (agentId) qs.set('agent_id', agentId);
+      if (format) qs.set('format', format);
+      return request<{ format: string; agent_id: string | null; data: string }>(`/compressor/export?${qs.toString()}`);
+    },
+  },
+
+  // ── Costs ──
+  costs: {
+    overview: () => request<any>('/costs/overview'),
+    breakdown: (period: string) => request<any>(`/costs/breakdown?period=${period}`),
+    byTier: () => request<any>('/costs/by-tier'),
+    suggestions: () => request<any>('/costs/suggestions'),
+    budgets: () => request<any>('/costs/budgets'),
+  },
+
+  checkpoints: {
+    save: (agentId: string, name?: string) => {
+      const qs = new URLSearchParams();
+      if (name) qs.set('name', name);
+      return request<{ agent_id: string; checkpoint_id: string; name: string }>(`/agents/${agentId}/checkpoints?${qs.toString()}`, { method: 'POST' });
+    },
+    list: (agentId: string) =>
+      request<{ agent_id: string; checkpoints: Array<{ id: string; name: string; timestamp: string }> }>(`/agents/${agentId}/checkpoints`),
+    restore: (agentId: string, checkpointId: string) =>
+      request<{ agent_id: string; restored: boolean; checkpoint_id: string }>(`/agents/${agentId}/checkpoints/${checkpointId}/restore`, { method: 'POST' }),
+    delete: (agentId: string, checkpointId: string) =>
+      request<{ agent_id: string; deleted: boolean }>(`/agents/${agentId}/checkpoints/${checkpointId}`, { method: 'DELETE' }),
+  },
+
+  board: {
+    getBoard: () => request<Record<string, unknown>>('/board'),
+    stats: () => request<Record<string, unknown>>('/board/stats'),
+    createIssue: (data: { title: string; description?: string; priority?: string; tags?: string[]; workspace_id?: string; context?: Record<string, unknown>; auto_assign?: boolean }) =>
+      request<Record<string, unknown>>('/board/issues', { method: 'POST', body: JSON.stringify(data) }),
+    listIssues: (params?: { state?: string; agent_id?: string; workspace_id?: string; priority?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.state) qs.set('state', params.state);
+      if (params?.agent_id) qs.set('agent_id', params.agent_id);
+      if (params?.workspace_id) qs.set('workspace_id', params.workspace_id);
+      if (params?.priority) qs.set('priority', params.priority);
+      return request<{ issues: Array<Record<string, unknown>>; count: number }>(`/board/issues?${qs.toString()}`);
+    },
+    getIssue: (issueId: string) => request<Record<string, unknown>>(`/board/issues/${issueId}`),
+    updateIssue: (issueId: string, data: Record<string, unknown>) =>
+      request<Record<string, unknown>>(`/board/issues/${issueId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteIssue: (issueId: string) =>
+      request<{ deleted: boolean }>(`/board/issues/${issueId}`, { method: 'DELETE' }),
+    moveIssue: (issueId: string, state: string) =>
+      request<Record<string, unknown>>(`/board/issues/${issueId}/move?state=${state}`, { method: 'POST' }),
+    assignIssue: (issueId: string, agentId: string) =>
+      request<Record<string, unknown>>(`/board/issues/${issueId}/assign?agent_id=${agentId}`, { method: 'POST' }),
+    claimIssue: (issueId: string, agentId: string) =>
+      request<Record<string, unknown>>(`/board/issues/${issueId}/claim?agent_id=${agentId}`, { method: 'POST' }),
+    completeIssue: (issueId: string) =>
+      request<Record<string, unknown>>(`/board/issues/${issueId}/complete`, { method: 'POST' }),
+    failIssue: (issueId: string, error?: string) => {
+      const qs = error ? `?error=${encodeURIComponent(error)}` : '';
+      return request<Record<string, unknown>>(`/board/issues/${issueId}/fail${qs}`, { method: 'POST' });
+    },
+    listAutopilot: () => request<{ rules: Array<Record<string, unknown>> }>('/board/autopilot'),
+    createAutopilot: (data: { name: string; agent_id: string; filters?: Record<string, unknown>; max_concurrent?: number }) =>
+      request<Record<string, unknown>>('/board/autopilot', { method: 'POST', body: JSON.stringify(data) }),
+    deleteAutopilot: (ruleId: string) =>
+      request<{ deleted: boolean }>(`/board/autopilot/${ruleId}`, { method: 'DELETE' }),
+  },
+
+  compounding: {
+    stats: () => request<Record<string, unknown>>('/compounding/stats'),
+    listSkills: (category?: string, minQuality?: number) => {
+      const qs = new URLSearchParams();
+      if (category) qs.set('category', category);
+      if (minQuality !== undefined) qs.set('min_quality', String(minQuality));
+      return request<{ skills: Array<Record<string, unknown>>; count: number }>(`/compounding/skills?${qs.toString()}`);
+    },
+    getSkill: (skillId: string) => request<Record<string, unknown>>(`/compounding/skills/${skillId}`),
+    feedback: (skillId: string, success: boolean, feedback?: string) => {
+      const qs = new URLSearchParams();
+      qs.set('success', String(success));
+      if (feedback) qs.set('feedback', feedback);
+      return request<Record<string, unknown>>(`/compounding/skills/${skillId}/feedback?${qs.toString()}`, { method: 'POST' });
+    },
+    deprecateSkill: (skillId: string) =>
+      request<{ deprecated: boolean }>(`/compounding/skills/${skillId}/deprecate`, { method: 'POST' }),
+    deleteSkill: (skillId: string) =>
+      request<{ deleted: boolean }>(`/compounding/skills/${skillId}`, { method: 'DELETE' }),
+    recordInteraction: (data: { agent_id: string; task_description?: string; tool_calls?: Array<Record<string, unknown>>; success?: boolean; output_summary?: string; metadata?: Record<string, unknown> }) =>
+      request<{ interaction_id: string }>('/compounding/interactions', { method: 'POST', body: JSON.stringify(data) }),
+    generateSkills: () =>
+      request<{ skills: Array<Record<string, unknown>>; count: number }>('/compounding/generate', { method: 'POST' }),
+    getPatterns: () => request<{ patterns: Array<Record<string, unknown>> }>('/compounding/patterns'),
+    searchSkills: (taskDescription: string, requiredTools?: string, limit?: number) => {
+      const qs = new URLSearchParams();
+      qs.set('task_description', taskDescription);
+      if (requiredTools) qs.set('required_tools', requiredTools);
+      if (limit) qs.set('limit', String(limit));
+      return request<{ skills: Array<Record<string, unknown>>; count: number }>(`/compounding/search?${qs.toString()}`, { method: 'POST' });
+    },
+  },
+
+  whiteboxMemory: {
+    stats: () => request<Record<string, unknown>>('/whitebox-memory/stats'),
+    listEntries: (params?: { workspace_id?: string; agent_id?: string; memory_type?: string; importance?: string; tags?: string; pinned_only?: boolean; limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.workspace_id) qs.set('workspace_id', params.workspace_id);
+      if (params?.agent_id) qs.set('agent_id', params.agent_id);
+      if (params?.memory_type) qs.set('memory_type', params.memory_type);
+      if (params?.importance) qs.set('importance', params.importance);
+      if (params?.tags) qs.set('tags', params.tags);
+      if (params?.pinned_only) qs.set('pinned_only', 'true');
+      if (params?.limit) qs.set('limit', String(params.limit));
+      if (params?.offset) qs.set('offset', String(params.offset));
+      return request<{ entries: Array<Record<string, unknown>>; count: number; total: number }>(`/whitebox-memory/entries?${qs.toString()}`);
+    },
+    createEntry: (data: { content: string; memory_type?: string; importance?: string; workspace_id?: string; agent_id?: string; tags?: string[] }) =>
+      request<Record<string, unknown>>('/whitebox-memory/entries', { method: 'POST', body: JSON.stringify(data) }),
+    getEntry: (memoryId: string) => request<Record<string, unknown>>(`/whitebox-memory/entries/${memoryId}`),
+    editContent: (memoryId: string, newContent: string) =>
+      request<Record<string, unknown>>(`/whitebox-memory/entries/${memoryId}/edit?new_content=${encodeURIComponent(newContent)}`, { method: 'PUT' }),
+    deleteEntry: (memoryId: string) =>
+      request<{ deleted: boolean }>(`/whitebox-memory/entries/${memoryId}`, { method: 'DELETE' }),
+    pinEntry: (memoryId: string) =>
+      request<{ pinned: boolean }>(`/whitebox-memory/entries/${memoryId}/pin`, { method: 'POST' }),
+    unpinEntry: (memoryId: string) =>
+      request<{ unpinned: boolean }>(`/whitebox-memory/entries/${memoryId}/unpin`, { method: 'POST' }),
+    search: (query: string, workspaceId?: string, limit?: number) => {
+      const qs = new URLSearchParams();
+      qs.set('query', query);
+      if (workspaceId) qs.set('workspace_id', workspaceId);
+      if (limit) qs.set('limit', String(limit));
+      return request<{ results: Array<Record<string, unknown>>; count: number }>(`/whitebox-memory/search?${qs.toString()}`);
+    },
+    runDream: (workspaceId?: string) => {
+      const qs = workspaceId ? `?workspace_id=${workspaceId}` : '';
+      return request<Record<string, unknown>>(`/whitebox-memory/dream${qs}`, { method: 'POST' });
+    },
+    rollbackDream: () =>
+      request<Record<string, unknown>>('/whitebox-memory/dream/rollback', { method: 'POST' }),
+    getAuditTrail: (memoryId: string) =>
+      request<{ trail: Array<Record<string, unknown>> }>(`/whitebox-memory/entries/${memoryId}/audit`),
+    export: (format?: string) => {
+      const qs = format ? `?format=${format}` : '';
+      return request<Record<string, unknown>>(`/whitebox-memory/export${qs}`);
+    },
+  },
+
+  pipelines: {
+    list: () => request<{pipelines: any[]}>('/pipelines'),
+    create: (data: {name: string; description?: string; steps: any[]}) =>
+      request<{pipeline_id: string; name: string; step_count: number}>('/pipelines', {method: 'POST', body: JSON.stringify(data)}),
+    get: (id: string) => request<any>(`/pipelines/${id}`),
+    delete: (id: string) => request<{deleted: boolean}>(`/pipelines/${id}`, {method: 'DELETE'}),
+    run: (data: {pipeline_id: string; initial_state?: Record<string, any>}) =>
+      request<any>('/pipelines/run', {method: 'POST', body: JSON.stringify(data)}),
+    getRun: (runId: string) => request<any>(`/pipelines/runs/${runId}`),
+    listRuns: (pipelineId?: string, limit?: number) =>
+      request<{runs: any[]}>(`/pipeline-runs${pipelineId ? `?pipeline_id=${pipelineId}` : ''}${limit ? `${pipelineId ? '&' : '?'}limit=${limit}` : ''}`),
+    stats: () => request<any>('/pipeline-stats'),
+  },
+
+  cache: {
+    stats: () => request<any>('/cache/stats'),
+    invalidate: (agentId?: string) =>
+      request<{invalidated: boolean}>(`/cache/invalidate${agentId ? `?agent_id=${agentId}` : ''}`, {method: 'POST'}),
+  },
+
+  capabilities: {
+    list: (domain?: string) =>
+      request<{capabilities: any[]}>(`/capabilities${domain ? `?domain=${domain}` : ''}`),
+    domains: () => request<{domains: any[]}>('/capabilities/domains'),
+    getProfile: (agentId: string) => request<any>(`/capabilities/profiles/${agentId}`),
+    updateProfile: (agentId: string, data: {agent_name?: string}) =>
+      request<any>(`/capabilities/profiles/${agentId}/update`, {method: 'POST', body: JSON.stringify(data)}),
+    addCapability: (agentId: string, capabilityId: string, score?: number) =>
+      request<any>(`/capabilities/profiles/${agentId}/capabilities?capability_id=${capabilityId}&score=${score || 0.5}`, {method: 'POST'}),
+    recordUsage: (agentId: string, capabilityId: string, success?: boolean) =>
+      request<any>(`/capabilities/profiles/${agentId}/record-usage?capability_id=${capabilityId}&success=${success !== false}`, {method: 'POST'}),
+    match: (requiredCapabilities: string, minProficiency?: string) =>
+      request<{matches: any[]}>(`/capabilities/match?required_capabilities=${requiredCapabilities}&min_proficiency=${minProficiency || 'intermediate'}`, {method: 'POST'}),
+    getGaps: (agentId: string, domain?: string) =>
+      request<{gaps: any[]}>(`/capabilities/profiles/${agentId}/gaps${domain ? `?domain=${domain}` : ''}`),
+    applyDecay: () => request<{decay_applied: boolean}>('/capabilities/decay', {method: 'POST'}),
+    stats: () => request<any>('/capability-stats'),
+  },
+
+  knowledgeGraph: {
+    stats: () => request<any>('/kg/stats'),
+    listEntities: (params?: {entity_type?: string; name_contains?: string; limit?: number}) => {
+      const qs = new URLSearchParams();
+      if (params?.entity_type) qs.set('entity_type', params.entity_type);
+      if (params?.name_contains) qs.set('name_contains', params.name_contains);
+      if (params?.limit) qs.set('limit', String(params.limit));
+      return request<{entities: any[]; count: number}>(`/kg/entities?${qs.toString()}`);
+    },
+    createEntity: (data: {name: string; entity_type?: string; properties?: Record<string, any>; confidence?: number; source?: string}) =>
+      request<{entity_id: string}>(`/kg/entities`, {method: 'POST', body: JSON.stringify(data)}),
+    getEntity: (id: string) => request<any>(`/kg/entities/${id}`),
+    updateEntity: (id: string, properties: Record<string, any>) =>
+      request<{updated: boolean}>(`/kg/entities/${id}`, {method: 'PATCH', body: JSON.stringify(properties)}),
+    deleteEntity: (id: string) =>
+      request<{deleted: boolean}>(`/kg/entities/${id}`, {method: 'DELETE'}),
+    createRelationship: (data: {source_id: string; target_id: string; relation_type?: string; weight?: number}) =>
+      request<{relationship_id: string}>(`/kg/relationships`, {method: 'POST', body: JSON.stringify(data)}),
+    getRelationships: (entityId: string) =>
+      request<{relationships: any[]; count: number}>(`/kg/entities/${entityId}/relationships`),
+    deleteRelationship: (relId: string) =>
+      request<{deleted: boolean}>(`/kg/relationships/${relId}`, {method: 'DELETE'}),
+    getNeighborhood: (entityId: string, depth?: number) =>
+      request<any>(`/kg/entities/${entityId}/neighborhood?depth=${depth || 1}`),
+    findPaths: (sourceId: string, targetId: string, maxDepth?: number) =>
+      request<{paths: any[]; count: number}>(`/kg/paths?source_id=${sourceId}&target_id=${targetId}&max_depth=${maxDepth || 5}`),
+    semanticSearch: (query: string, entityType?: string, topK?: number) =>
+      request<{results: any[]; count: number}>(`/kg/search?query=${encodeURIComponent(query)}${entityType ? `&entity_type=${entityType}` : ''}&top_k=${topK || 10}`),
+    extract: (text: string, source?: string) =>
+      request<any>('/kg/extract', {method: 'POST', body: JSON.stringify({text, source: source || 'api'})}),
+    export: (entityIds?: string, includeNeighbors?: boolean) =>
+      request<any>(`/kg/export${entityIds ? `?entity_ids=${entityIds}` : ''}${includeNeighbors ? `${entityIds ? '&' : '?'}include_neighbors=true` : ''}`),
+    clear: () => request<{cleared: boolean}>('/kg/clear', {method: 'POST'}),
+  },
+
+  // ── Memory Sync ──
+  memorySync: {
+    stats: () => request<any>('/memory-sync/stats'),
+    config: () => request<any>('/memory-sync/config'),
+    updateConfig: (params: {max_shared_per_agent?: number; max_broadcast_agents?: number; default_sync_interval?: number; auto_sync_enabled?: boolean}) => {
+      const qs = new URLSearchParams();
+      if (params.max_shared_per_agent) qs.set('max_shared_per_agent', String(params.max_shared_per_agent));
+      if (params.max_broadcast_agents) qs.set('max_broadcast_agents', String(params.max_broadcast_agents));
+      if (params.default_sync_interval) qs.set('default_sync_interval', String(params.default_sync_interval));
+      if (params.auto_sync_enabled !== undefined) qs.set('auto_sync_enabled', String(params.auto_sync_enabled));
+      return request<any>(`/memory-sync/config?${qs.toString()}`, {method: 'POST'});
+    },
+    share: (data: {source_agent_id: string; target_agent_id: string; content: string; memory_type?: string; importance?: number; tags?: string[]}) =>
+      request<any>('/memory-sync/share', {method: 'POST', body: JSON.stringify(data)}),
+    broadcast: (data: {source_agent_id: string; content: string; memory_type?: string; importance?: number; tags?: string[]; target_role?: string}) =>
+      request<any>('/memory-sync/broadcast', {method: 'POST', body: JSON.stringify(data)}),
+    search: (query: string, agentIds?: string[], limit?: number) => {
+      const qs = new URLSearchParams();
+      qs.set('query', query);
+      if (agentIds?.length) qs.set('agent_ids', agentIds.join(','));
+      if (limit) qs.set('limit', String(limit));
+      return request<{results: any[]; count: number}>(`/memory-sync/search?${qs.toString()}`);
+    },
+    getContext: (agentId: string, topic: string, maxMemories?: number) => {
+      const qs = new URLSearchParams({agent_id: agentId, topic});
+      if (maxMemories) qs.set('max_memories', String(maxMemories));
+      return request<{context: any; agent_id: string}>(`/memory-sync/context?${qs.toString()}`);
+    },
+    groups: {
+      list: () => request<{groups: any[]}>('/memory-sync/groups'),
+      create: (data: {name: string; agent_ids: string[]; sync_interval?: number; filters?: Record<string, unknown>}) =>
+        request<{group_id: string}>(`/memory-sync/groups`, {method: 'POST', body: JSON.stringify(data)}),
+      get: (groupId: string) => request<any>(`/memory-sync/groups/${groupId}`),
+      update: (groupId: string, data: {name?: string; agent_ids?: string[]; sync_interval?: number; enabled?: boolean}) =>
+        request<{updated: boolean}>(`/memory-sync/groups/${groupId}`, {method: 'PUT', body: JSON.stringify(data)}),
+      delete: (groupId: string) =>
+        request<{deleted: boolean}>(`/memory-sync/groups/${groupId}`, {method: 'DELETE'}),
+      sync: (groupId: string) =>
+        request<any>(`/memory-sync/groups/${groupId}/sync`, {method: 'POST'}),
+    },
+    records: (sourceAgentId?: string, targetAgentId?: string, limit?: number) => {
+      const qs = new URLSearchParams();
+      if (sourceAgentId) qs.set('source_agent_id', sourceAgentId);
+      if (targetAgentId) qs.set('target_agent_id', targetAgentId);
+      if (limit) qs.set('limit', String(limit));
+      return request<{records: any[]; count: number}>(`/memory-sync/records?${qs.toString()}`);
+    },
+  },
+
+  // ── Platform Hub ──
+  platformHub: {
+    health: () => request<any>('/platform/hub/health'),
+    stats: () => request<any>('/platform/hub/stats'),
+    config: () => request<any>('/platform/hub/config'),
+    updateConfig: (data: Record<string, unknown>) =>
+      request<any>('/platform/hub/config', { method: 'POST', body: JSON.stringify(data) }),
+    subsystems: () => request<any>('/platform/hub/subsystems'),
+    subsystem: (name: string) => request<any>(`/platform/hub/subsystems/${name}`),
+    events: (eventType?: string, limit?: number) => {
+      const qs = new URLSearchParams();
+      if (eventType) qs.set('event_type', eventType);
+      if (limit) qs.set('limit', String(limit));
+      return request<any>(`/platform/hub/events?${qs.toString()}`);
+    },
+    start: () => request<any>('/platform/hub/start', { method: 'POST' }),
+    stop: () => request<any>('/platform/hub/stop', { method: 'POST' }),
+  },
+
+  // ── Reactive Loop ──
+  reactiveLoop: {
+    stats: (agentId: string) => request<any>(`/reactive-loop/${agentId}/stats`),
+    start: (agentId: string, data: { mode?: string; cycle_interval_ms?: number }) =>
+      request<any>(`/reactive-loop/${agentId}/start`, { method: 'POST', body: JSON.stringify(data) }),
+    stop: (agentId: string) =>
+      request<any>(`/reactive-loop/${agentId}/stop`, { method: 'POST' }),
+    observe: (agentId: string, data: { source: string; summary: string; priority?: number; data?: Record<string, unknown> }) =>
+      request<any>(`/reactive-loop/${agentId}/observe`, { method: 'POST', body: JSON.stringify(data) }),
+    enqueue: (agentId: string, data: { description: string; priority?: number; handler?: string; payload?: Record<string, unknown>; depends_on?: string[] }) =>
+      request<any>(`/reactive-loop/${agentId}/enqueue`, { method: 'POST', body: JSON.stringify(data) }),
+    actions: (agentId: string, limit?: number) =>
+      request<{ agent_id: string; actions: any[] }>(`/reactive-loop/${agentId}/actions?limit=${limit || 20}`),
+    cycles: (agentId: string, limit?: number) =>
+      request<{ agent_id: string; cycles: any[] }>(`/reactive-loop/${agentId}/cycles?limit=${limit || 10}`),
+    setMode: (agentId: string, mode: string) => {
+      const qs = new URLSearchParams({ mode });
+      return request<any>(`/reactive-loop/${agentId}/mode?${qs}`, { method: 'POST' });
+    },
+  },
+
+  // ── Agent Dashboard ──
+  agentDashboard: {
+    overview: (agentId?: string) => {
+      const qs = agentId ? `?agent_id=${agentId}` : '';
+      return request<{ agents: any[]; total_agents: number; system_summary: any }>(`/agents/dashboard${qs}`);
+    },
+  },
+
+  // ── Proactive Discovery ──
+  proactive: {
+    status: (agentId: string) => request<any>(`/agents/${agentId}/proactive/status`),
+    tasks: (agentId: string, params?: { status?: string; source?: string; urgency?: string; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.status) qs.set('status', params.status);
+      if (params?.source) qs.set('source', params.source);
+      if (params?.urgency) qs.set('urgency', params.urgency);
+      if (params?.limit) qs.set('limit', String(params.limit));
+      const q = qs.toString();
+      return request<{ tasks: any[]; total: number }>(`/agents/${agentId}/proactive/tasks${q ? `?${q}` : ''}`);
+    },
+    insights: (agentId: string, limit?: number) => {
+      const qs = limit ? `?limit=${limit}` : '';
+      return request<{ insights: string[]; total: number }>(`/agents/${agentId}/proactive/insights${qs}`);
+    },
+    scan: (agentId: string) =>
+      request<any>(`/agents/${agentId}/proactive/scan`, { method: 'POST' }),
+    start: (agentId: string, interval?: number) => {
+      const qs = interval ? `?interval=${interval}` : '';
+      return request<{ status: string }>(`/agents/${agentId}/proactive/start${qs}`, { method: 'POST' });
+    },
+    stop: (agentId: string) =>
+      request<{ status: string }>(`/agents/${agentId}/proactive/stop`, { method: 'POST' }),
+    scheduleTask: (agentId: string, taskId: string) =>
+      request<{ status: string }>(`/agents/${agentId}/proactive/tasks/${taskId}/schedule`, { method: 'POST' }),
+    dismissTask: (agentId: string, taskId: string) =>
+      request<{ status: string }>(`/agents/${agentId}/proactive/tasks/${taskId}/dismiss`, { method: 'POST' }),
+    completeTask: (agentId: string, taskId: string) =>
+      request<{ status: string }>(`/agents/${agentId}/proactive/tasks/${taskId}/complete`, { method: 'POST' }),
+    interactions: (agentId: string, limit?: number) => {
+      const qs = limit ? `?limit=${limit}` : '';
+      return request<{ interactions: any[]; count: number }>(`/agents/${agentId}/proactive/interactions${qs}`);
+    },
+  },
+
+  // ── Meta-Cognition ──
+  metacognition: {
+    stats: (agentId: string) => request<any>(`/agents/${agentId}/metacognition/stats`),
+    insights: (agentId: string) =>
+      request<{ agent_id: string; insights: string[]; count: number }>(`/agents/${agentId}/metacognition/insights`),
+    decisions: (agentId: string, limit?: number) => {
+      const qs = limit ? `?limit=${limit}` : '';
+      return request<{ agent_id: string; decisions: any[]; count: number }>(`/agents/${agentId}/metacognition/decisions${qs}`);
+    },
+  },
+
+  // ── Proactive-Autopilot Bridge ──
+  bridge: {
+    proactiveToAutopilot: (agentId: string, maxTasks?: number) => {
+      const qs = maxTasks ? `?max_tasks=${maxTasks}` : '';
+      return request<{ scheduled: number; total_pending: number; message: string }>(`/agents/${agentId}/bridge/proactive-to-autopilot${qs}`, { method: 'POST' });
+    },
+  },
+
+  // ── Agent Evolution ──
+  evolution: {
+    stats: (agentId: string) => request<any>(`/agents/${agentId}/evolution/stats`),
+    pathways: (agentId: string) =>
+      request<{ agent_id: string; pathways: any[]; count: number }>(`/agents/${agentId}/evolution/pathways`),
+    insights: (agentId: string) =>
+      request<{ agent_id: string; insights: string[]; count: number }>(`/agents/${agentId}/evolution/insights`),
+    runCycle: (agentId: string) =>
+      request<any>(`/agents/${agentId}/evolution/run`, { method: 'POST' }),
+  },
+
+  // ── Agent Communication Protocol ──
+  comm: {
+    stats: () => request<any>('/comm/stats'),
+    messages: (limit?: number) => request<any>(`/comm/messages?limit=${limit || 50}`),
+    send: (data: { sender_id: string; recipient_id?: string; subject?: string; content: string; msg_type?: string; priority?: string }) => {
+      const qs = new URLSearchParams();
+      qs.set('sender_id', data.sender_id);
+      if (data.recipient_id) qs.set('recipient_id', data.recipient_id);
+      if (data.subject) qs.set('subject', data.subject);
+      qs.set('content', data.content);
+      qs.set('msg_type', data.msg_type || 'direct');
+      qs.set('priority', data.priority || 'normal');
+      return request<any>(`/comm/send?${qs.toString()}`, { method: 'POST' });
+    },
+    delegate: (data: { from_agent_id: string; to_agent_id: string; task_description: string; task_context?: Record<string, unknown>; required_capabilities?: string[]; priority?: string }) =>
+      request<any>('/comm/delegate', { method: 'POST', body: JSON.stringify(data) }),
+    pendingDelegations: (agentId: string) => request<any>(`/comm/delegations/pending?agent_id=${agentId}`),
+    registerAgent: (agentId: string, capabilities?: string) => {
+      const qs = new URLSearchParams({ agent_id: agentId });
+      if (capabilities) qs.set('capabilities', capabilities);
+      return request<any>(`/comm/agents/register?${qs.toString()}`, { method: 'POST' });
+    },
+    unregisterAgent: (agentId: string) =>
+      request<any>(`/comm/agents/unregister?agent_id=${agentId}`, { method: 'POST' }),
+    onlineAgents: () => request<any>('/comm/agents/online'),
+  },
+
+  // ── Resource Manager ──
+  resources: {
+    stats: () => request<any>('/resources/stats'),
+    usage: (agentId: string) => request<any>(`/resources/usage?agent_id=${agentId}`),
+    alerts: (limit?: number, severity?: string) => {
+      const qs = new URLSearchParams();
+      if (limit) qs.set('limit', String(limit));
+      if (severity) qs.set('severity', severity);
+      return request<any>(`/resources/alerts?${qs.toString()}`);
+    },
+    status: (resourceType: string) => request<any>(`/resources/status?resource_type=${resourceType}`),
+    reset: () => request<any>('/resources/reset', { method: 'POST' }),
   },
 };
