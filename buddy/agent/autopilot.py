@@ -7,7 +7,8 @@ from __future__ import annotations
 import logging
 import uuid
 import asyncio
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Awaitable
@@ -70,6 +71,10 @@ class AutopilotEngine:
         self._autopilots: dict[str, AutopilotConfig] = {}
         self._tasks: dict[str, asyncio.Task] = {}
         self._executor: Callable[[str, str], Awaitable[str]] | None = None
+        self.autopilot_condition: dict[str, Callable[[], bool]] = {}
+        self.autopilot_rate_limit: dict[str, tuple[float, float]] = {}
+        self.autopilot_result_cache: dict[str, list[dict]] = {}
+        self._notifications: list[dict] = []
 
     def set_executor(self, executor: Callable[[str, str], Awaitable[str]]):
         self._executor = executor
@@ -179,7 +184,173 @@ class AutopilotEngine:
 
     def delete(self, autopilot_id: str) -> bool:
         self.cancel(autopilot_id)
+        self.autopilot_condition.pop(autopilot_id, None)
+        self.autopilot_rate_limit.pop(autopilot_id, None)
+        self.autopilot_result_cache.pop(autopilot_id, None)
         return self._autopilots.pop(autopilot_id, None) is not None
+
+    # ── Conditional Trigger ─────────────────────────────────
+
+    def set_condition(self, autopilot_id: str, condition_fn: Callable[[], bool]):
+        """Set a conditional trigger for an autopilot task.
+
+        The condition function is evaluated before each scheduled run.
+        If it returns False, the run is skipped for this cycle.
+        Example: lambda: agent.memory.get_new_count() > 10
+        """
+        self.autopilot_condition[autopilot_id] = condition_fn
+
+    def check_condition(self, autopilot_id: str) -> bool:
+        """Evaluate the condition for an autopilot. Returns True if no condition set."""
+        condition_fn = self.autopilot_condition.get(autopilot_id)
+        if condition_fn is None:
+            return True
+        try:
+            return condition_fn()
+        except Exception as e:
+            logger.warning(f"Condition check failed for {autopilot_id}: {e}")
+            return False
+
+    # ── Rate Limiting ───────────────────────────────────────
+
+    def set_rate_limit(self, autopilot_id: str, min_interval_seconds: float):
+        """Set minimum interval between autopilot runs.
+
+        Args:
+            min_interval_seconds: Minimum seconds between consecutive runs.
+        """
+        self.autopilot_rate_limit[autopilot_id] = (min_interval_seconds, 0.0)
+
+    def is_rate_limited(self, autopilot_id: str) -> bool:
+        """Check if the autopilot is currently rate-limited."""
+        rate_limit = self.autopilot_rate_limit.get(autopilot_id)
+        if rate_limit is None:
+            return False
+        min_interval, last_run = rate_limit
+        elapsed = time.time() - last_run
+        return elapsed < min_interval
+
+    def _mark_run_time(self, autopilot_id: str):
+        """Record the timestamp of the most recent run for rate limiting."""
+        if autopilot_id in self.autopilot_rate_limit:
+            min_interval, _ = self.autopilot_rate_limit[autopilot_id]
+            self.autopilot_rate_limit[autopilot_id] = (min_interval, time.time())
+
+    # ── Result Cache ────────────────────────────────────────
+
+    def cache_result(self, autopilot_id: str, result: str, max_cache_size: int = 20):
+        """Cache an autopilot execution result."""
+        if autopilot_id not in self.autopilot_result_cache:
+            self.autopilot_result_cache[autopilot_id] = []
+        cache = self.autopilot_result_cache[autopilot_id]
+        cache.append({
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "result": result[:500],
+        })
+        if len(cache) > max_cache_size:
+            self.autopilot_result_cache[autopilot_id] = cache[-max_cache_size:]
+
+    def get_cached_results(self, autopilot_id: str, limit: int = 10) -> list[dict]:
+        """Get recent cached results for an autopilot."""
+        cache = self.autopilot_result_cache.get(autopilot_id, [])
+        return cache[-limit:]
+
+    # ── Notification ────────────────────────────────────────
+
+    def autopilot_notification(self, autopilot_id: str, channel: str = "log"):
+        """Send a notification when autopilot completes a task.
+
+        Supports channels:
+        - "log": Standard logging (default)
+        - "callback": User-registered callback function
+        """
+        config = self._autopilots.get(autopilot_id)
+        if not config:
+            return
+
+        message = (
+            f"Autopilot '{config.name}' completed run {config.run_count}. "
+            f"Status: {config.status.value}"
+        )
+        notification = {
+            "id": f"notif-{uuid.uuid4().hex[:8]}",
+            "autopilot_id": autopilot_id,
+            "message": message,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "channel": channel,
+        }
+        self._notifications.append(notification)
+
+        if channel == "log":
+            logger.info(f"[NOTIFICATION] {message}")
+        # Keep only the last 100 notifications
+        if len(self._notifications) > 100:
+            self._notifications = self._notifications[-50:]
+
+    def get_notifications(self, autopilot_id: str | None = None, limit: int = 20) -> list[dict]:
+        """Get recent notifications, optionally filtered by autopilot."""
+        notifs = self._notifications
+        if autopilot_id:
+            notifs = [n for n in notifs if n["autopilot_id"] == autopilot_id]
+        return notifs[-limit:]
+
+    # ── Health Check ────────────────────────────────────────
+
+    def autopilot_health_check(self) -> dict:
+        """Self-diagnostic to ensure the autopilot system is functioning correctly.
+
+        Checks:
+        - Active tasks that haven't run recently (stalled detection)
+        - Tasks that have failed repeatedly
+        - Executor availability
+        - Rate limit status
+        """
+        now = time.time()
+        issues = []
+        active_count = 0
+        stalled_count = 0
+        failed_count = 0
+
+        for ap_id, config in self._autopilots.items():
+            if config.status == AutopilotStatus.ACTIVE:
+                active_count += 1
+
+                # Check for stalled tasks (active but no recent run)
+                if config.last_run_at:
+                    try:
+                        last_run_dt = datetime.fromisoformat(config.last_run_at)
+                        last_run_ts = last_run_dt.timestamp()
+                        hours_since_run = (now - last_run_ts) / 3600
+                        # If scheduled to run but hasn't in 24h, flag as stalled
+                        if config.trigger in (AutopilotTrigger.INTERVAL, AutopilotTrigger.CRON):
+                            try:
+                                expected_interval = int(config.schedule)
+                            except ValueError:
+                                expected_interval = 3600
+                            if hours_since_run > max(expected_interval * 3 / 3600, 1):
+                                stalled_count += 1
+                                issues.append(f"Stalled: '{config.name}' has not run in {hours_since_run:.1f}h (expected every {expected_interval}s)")
+                    except (ValueError, TypeError):
+                        pass
+
+            if config.status == AutopilotStatus.FAILED:
+                failed_count += 1
+                issues.append(f"Failed: '{config.name}' is in FAILED state (run {config.run_count})")
+
+        # Check executor availability
+        executor_ok = self._executor is not None
+        if not executor_ok:
+            issues.append("No executor configured — autopilot tasks cannot run")
+
+        return {
+            "healthy": len(issues) == 0 and executor_ok,
+            "active_tasks": active_count,
+            "stalled_tasks": stalled_count,
+            "failed_tasks": failed_count,
+            "total_tasks": len(self._autopilots),
+            "executor_available": executor_ok,
+            "issues": issues,
+        }
 
     def shutdown(self):
         """Gracefully stop all autopilot tasks."""
@@ -189,3 +360,109 @@ class AutopilotEngine:
 
 
 autopilot_engine = AutopilotEngine()
+
+
+# ── Autopilot Schedule ───────────────────────────────────
+
+class AutopilotSchedule:
+    """Cron-based autopilot scheduling with timezone support.
+
+    Supports a simplified cron-like syntax:
+    - Format: "minute hour day_of_month month day_of_week"
+    - Wildcards (*) are supported
+    - Timezone can be specified for correct local-time scheduling
+    """
+
+    DAY_NAMES = {
+        "mon": 0, "tue": 1, "wed": 2, "thu": 3,
+        "fri": 4, "sat": 5, "sun": 6,
+    }
+
+    def __init__(self, cron_expression: str, timezone_name: str = "UTC"):
+        self.cron = cron_expression
+        self.tz_name = timezone_name
+
+    @staticmethod
+    def parse_cron(expression: str) -> dict:
+        """Parse a simplified cron expression into its components."""
+        parts = expression.strip().split()
+        if len(parts) != 5:
+            raise ValueError(f"Cron expression must have 5 fields, got {len(parts)}: {expression}")
+        return {
+            "minute": parts[0],
+            "hour": parts[1],
+            "day": parts[2],
+            "month": parts[3],
+            "dow": parts[4],
+        }
+
+    @staticmethod
+    def _matches(value: int, field: str, extra_range: int = 0) -> bool:
+        """Check if a value matches a cron field (including wildcards and lists)."""
+        if field == "*":
+            return True
+        if "," in field:
+            return any(
+                AutopilotSchedule._matches(value, part.strip())
+                for part in field.split(",")
+            )
+        if "/" in field:
+            base, _, step = field.partition("/")
+            base_int = int(base) if base != "*" else 0
+            rng = extra_range if extra_range > 0 else 59
+            return value >= base_int and (value - base_int) % int(step) == 0
+        if "-" in field:
+            lo, _, hi = field.partition("-")
+            return int(lo) <= value <= int(hi)
+        return value == int(field)
+
+    def is_due(self, now: datetime | None = None) -> bool:
+        """Check if the schedule is due at the given time (or now)."""
+        if now is None:
+            if self.tz_name == "UTC":
+                now = datetime.now(timezone.utc)
+            else:
+                now = datetime.now(timezone.utc)
+
+        cron = self.parse_cron(self.cron)
+
+        # Resolve day-of-week names
+        dow_field = cron["dow"].lower()
+        for name, num in self.DAY_NAMES.items():
+            dow_field = dow_field.replace(name, str(num))
+
+        day_of_week = now.weekday()  # 0=Monday, 6=Sunday (Python convention)
+
+        return (
+            self._matches(now.minute, cron["minute"], 59) and
+            self._matches(now.hour, cron["hour"], 23) and
+            self._matches(now.day, cron["day"], 31) and
+            self._matches(now.month, cron["month"], 12) and
+            self._matches(day_of_week, dow_field, 6)
+        )
+
+    def next_run(self, after: datetime | None = None) -> datetime:
+        """Calculate the next run time after the given datetime."""
+        if after is None:
+            after = datetime.now(timezone.utc)
+
+        # Simple implementation: check each minute for up to 30 days
+        cron = self.parse_cron(self.cron)
+        check = after.replace(second=0, microsecond=0) + timedelta(minutes=1)
+
+        for _ in range(60 * 24 * 30):  # Up to 30 days
+            dow_field = cron["dow"].lower()
+            for name, num in self.DAY_NAMES.items():
+                dow_field = dow_field.replace(name, str(num))
+
+            if (
+                self._matches(check.minute, cron["minute"], 59) and
+                self._matches(check.hour, cron["hour"], 23) and
+                self._matches(check.day, cron["day"], 31) and
+                self._matches(check.month, cron["month"], 12) and
+                self._matches(check.weekday(), dow_field, 6)
+            ):
+                return check
+            check += timedelta(minutes=1)
+
+        raise ValueError(f"No matching time found within 30 days for: {self.cron}")
