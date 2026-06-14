@@ -50,13 +50,15 @@ class ReasoningStep:
 
 @dataclass
 class ReasoningTrace:
-    """Complete trace of a reasoning cycle."""
+    """Complete trace of a reasoning cycle with detailed decision rationale."""
     steps: list[ReasoningStep] = field(default_factory=list)
     final_answer: str = ""
     total_tokens: int = 0
     total_time_ms: float = 0.0
     success: bool = True
     error: str = ""
+    alternatives_considered: list[str] = field(default_factory=list)
+    decision_rationale: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -74,6 +76,8 @@ class ReasoningTrace:
             "total_tokens": self.total_tokens,
             "total_time_ms": self.total_time_ms,
             "success": self.success,
+            "alternatives_considered": self.alternatives_considered[:10],
+            "decision_rationale": self.decision_rationale[:500],
         }
 
 
@@ -100,6 +104,14 @@ If issues found, provide a corrected response. Otherwise, confirm the answer."""
             base_url=settings.OPENAI_BASE_URL,
         )
         self._trace_store: list[ReasoningTrace] = []
+        self.reasoning_memory: dict[str, list[dict]] = {}
+        self.fallback_chain: list[str] = [
+            "simplify_query",
+            "break_down_subproblems",
+            "use_analogies",
+            "request_clarification",
+            "defer_to_heuristic",
+        ]
 
     async def execute(
         self,
@@ -894,6 +906,344 @@ When responding:
 - Use available tools to gather information before answering
 - Structure complex responses with clear sections
 - Quote sources when using external information"""
+
+    # ── Advanced Reasoning Methods ──────────────────────────
+
+    async def chain_of_verification(
+        self,
+        system_prompt: str,
+        user_message: str,
+        model: str = "gpt-4o-mini",
+    ) -> ReasoningTrace:
+        """Generate an answer, then verify it by asking the LLM to critique and fix issues.
+
+        Implements a self-verification loop: (1) generate baseline answer,
+        (2) critique the answer for factual errors and completeness,
+        (3) produce a corrected final answer incorporating the critique.
+        """
+        start = time.time()
+        trace = ReasoningTrace()
+        total_tokens = 0
+
+        try:
+            # Step 1: Generate baseline answer
+            gen_response = await self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+                max_tokens=2048,
+                temperature=0.5,
+            )
+            baseline = gen_response.choices[0].message.content or ""
+            if gen_response.usage:
+                total_tokens += gen_response.usage.total_tokens
+
+            trace.steps.append(ReasoningStep(
+                phase=ReasoningPhase.ACT,
+                content=baseline[:300],
+                confidence=0.7,
+            ))
+
+            # Step 2: Critique the baseline answer
+            critique_prompt = (
+                f"Original question: {user_message}\n\n"
+                f"Answer to critique:\n{baseline}\n\n"
+                "Critically review this answer. Identify:\n"
+                "1. Any factual errors or unsupported claims\n"
+                "2. Missing information or incomplete reasoning\n"
+                "3. Ambiguous or unclear statements\n"
+                "4. Any biases or logical flaws\n\n"
+                "Be specific. For each issue, quote the relevant part and explain the problem."
+            )
+            critique_response = await self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You are a critical reviewer. Be thorough and specific."},
+                    {"role": "user", "content": critique_prompt},
+                ],
+                max_tokens=1500,
+                temperature=0.3,
+            )
+            critique = critique_response.choices[0].message.content or ""
+            if critique_response.usage:
+                total_tokens += critique_response.usage.total_tokens
+
+            trace.steps.append(ReasoningStep(
+                phase=ReasoningPhase.REFLECT,
+                content=f"Critique: {critique[:300]}",
+                confidence=0.6,
+            ))
+
+            # Step 3: Produce corrected answer
+            correction_prompt = (
+                f"Original question: {user_message}\n\n"
+                f"Original answer:\n{baseline}\n\n"
+                f"Critique:\n{critique}\n\n"
+                "Now produce a corrected, improved final answer that addresses all the issues "
+                "identified in the critique. If no corrections are needed, explain why."
+            )
+            corrected_response = await self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": correction_prompt},
+                ],
+                max_tokens=2048,
+                temperature=0.4,
+            )
+            final_answer = corrected_response.choices[0].message.content or baseline
+            if corrected_response.usage:
+                total_tokens += corrected_response.usage.total_tokens
+
+            trace.final_answer = final_answer
+            trace.decision_rationale = f"Verified via critique: {len(critique.split())} words of analysis"
+            trace.alternatives_considered = [baseline[:200]]
+            trace.total_tokens = total_tokens
+            trace.success = True
+
+        except Exception as e:
+            logger.error(f"Chain-of-verification error: {e}")
+            trace.success = False
+            trace.error = str(e)
+            trace.final_answer = f"Verification failed: {str(e)}"
+
+        trace.total_time_ms = (time.time() - start) * 1000
+        self._trace_store.append(trace)
+        if len(self._trace_store) > 200:
+            self._trace_store = self._trace_store[-100:]
+        return trace
+
+    async def contrastive_reasoning(
+        self,
+        system_prompt: str,
+        user_message: str,
+        model: str = "gpt-4o-mini",
+    ) -> ReasoningTrace:
+        """Generate two opposing perspectives and synthesize the best answer.
+
+        Produces a thesis (argument for) and antithesis (argument against),
+        then synthesizes both into a balanced final answer that captures
+        the strongest points from each side.
+        """
+        start = time.time()
+        trace = ReasoningTrace()
+        total_tokens = 0
+
+        try:
+            # Step 1: Generate perspective A (thesis / pro position)
+            thesis_response = await self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": f"{system_prompt}\n\nTake the PRO position. Argue FOR the best-case interpretation or solution."},
+                    {"role": "user", "content": user_message},
+                ],
+                max_tokens=1500,
+                temperature=0.6,
+            )
+            thesis = thesis_response.choices[0].message.content or ""
+            if thesis_response.usage:
+                total_tokens += thesis_response.usage.total_tokens
+
+            trace.steps.append(ReasoningStep(
+                phase=ReasoningPhase.THINK,
+                content=f"[Thesis - PRO]: {thesis[:250]}",
+                confidence=0.6,
+            ))
+            trace.alternatives_considered.append(f"PRO: {thesis[:200]}")
+
+            # Step 2: Generate perspective B (antithesis / con position)
+            antithesis_response = await self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": f"{system_prompt}\n\nTake the CON position. Argue AGAINST the best-case interpretation. Identify problems, risks, and counterarguments."},
+                    {"role": "user", "content": user_message},
+                ],
+                max_tokens=1500,
+                temperature=0.6,
+            )
+            antithesis = antithesis_response.choices[0].message.content or ""
+            if antithesis_response.usage:
+                total_tokens += antithesis_response.usage.total_tokens
+
+            trace.steps.append(ReasoningStep(
+                phase=ReasoningPhase.THINK,
+                content=f"[Antithesis - CON]: {antithesis[:250]}",
+                confidence=0.6,
+            ))
+            trace.alternatives_considered.append(f"CON: {antithesis[:200]}")
+
+            # Step 3: Synthesize the best answer from both perspectives
+            synthesis_prompt = (
+                f"Original question: {user_message}\n\n"
+                f"=== Perspective A (PRO) ===\n{thesis}\n\n"
+                f"=== Perspective B (CON) ===\n{antithesis}\n\n"
+                "Synthesize these opposing viewpoints into a single balanced, well-reasoned answer. "
+                "Extract the best insights from each side, resolve contradictions, and present "
+                "a fair conclusion that acknowledges the merits of both positions while arriving "
+                "at the most defensible answer."
+            )
+            synthesis_response = await self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": synthesis_prompt},
+                ],
+                max_tokens=2048,
+                temperature=0.4,
+            )
+            final_answer = synthesis_response.choices[0].message.content or f"{thesis}\n\n---\n\n{antithesis}"
+            if synthesis_response.usage:
+                total_tokens += synthesis_response.usage.total_tokens
+
+            trace.final_answer = final_answer
+            trace.decision_rationale = "Synthesized from opposing pro/con perspectives through contrastive analysis"
+            trace.total_tokens = total_tokens
+            trace.success = True
+
+        except Exception as e:
+            logger.error(f"Contrastive reasoning error: {e}")
+            trace.success = False
+            trace.error = str(e)
+            trace.final_answer = f"Contrastive reasoning failed: {str(e)}"
+
+        trace.total_time_ms = (time.time() - start) * 1000
+        self._trace_store.append(trace)
+        if len(self._trace_store) > 200:
+            self._trace_store = self._trace_store[-100:]
+        return trace
+
+    async def stepback_reasoning(
+        self,
+        system_prompt: str,
+        user_message: str,
+        model: str = "gpt-4o-mini",
+    ) -> ReasoningTrace:
+        """Before answering, ask a more abstract/general question to prime the model.
+
+        Step 1: Derive a higher-level, more abstract question from the user query.
+        Step 2: Answer the abstract question to establish foundational principles.
+        Step 3: Ground the original question in those principles for a better answer.
+        """
+        start = time.time()
+        trace = ReasoningTrace()
+        total_tokens = 0
+
+        try:
+            # Step 1: Generate the step-back (abstract) question
+            stepback_prompt = (
+                f"Given this specific question: '{user_message}'\n\n"
+                "Think of a more general, abstract, or fundamental question that "
+                "lies behind it. What broader principle or concept does this question "
+                "relate to? Output ONLY the abstract question, nothing else."
+            )
+            stepback_response = await self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You identify the deeper, more abstract question behind specific queries."},
+                    {"role": "user", "content": stepback_prompt},
+                ],
+                max_tokens=300,
+                temperature=0.4,
+            )
+            abstract_question = stepback_response.choices[0].message.content or ""
+            if stepback_response.usage:
+                total_tokens += stepback_response.usage.total_tokens
+
+            trace.steps.append(ReasoningStep(
+                phase=ReasoningPhase.OBSERVE,
+                content=f"Step-back abstraction: {abstract_question[:250]}",
+                confidence=0.8,
+            ))
+
+            # Step 2: Answer the abstract question to establish principles
+            principles_response = await self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": f"{system_prompt}\n\nFocus on general principles and foundational concepts. Be thorough and educational."},
+                    {"role": "user", "content": abstract_question},
+                ],
+                max_tokens=1500,
+                temperature=0.5,
+            )
+            principles = principles_response.choices[0].message.content or ""
+            if principles_response.usage:
+                total_tokens += principles_response.usage.total_tokens
+
+            trace.steps.append(ReasoningStep(
+                phase=ReasoningPhase.THINK,
+                content=f"General principles: {principles[:250]}",
+                confidence=0.75,
+            ))
+
+            # Step 3: Apply principles to answer the original question
+            grounded_prompt = (
+                f"General principles and concepts:\n{principles}\n\n"
+                f"Now, apply these principles to answer this specific question:\n{user_message}\n\n"
+                "Ground your answer in the principles above. Be precise and practical."
+            )
+            grounded_response = await self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": grounded_prompt},
+                ],
+                max_tokens=2048,
+                temperature=0.4,
+            )
+            final_answer = grounded_response.choices[0].message.content or ""
+            if grounded_response.usage:
+                total_tokens += grounded_response.usage.total_tokens
+
+            trace.final_answer = final_answer
+            trace.decision_rationale = f"Used step-back reasoning: abstracted to '{abstract_question[:100]}' for foundational grounding"
+            trace.total_tokens = total_tokens
+            trace.success = True
+
+            # Record the successful abstraction pattern
+            self._record_reasoning_pattern("stepback", {
+                "original": user_message[:200],
+                "abstract_question": abstract_question[:200],
+                "success": True,
+            })
+
+        except Exception as e:
+            logger.error(f"Step-back reasoning error: {e}")
+            trace.success = False
+            trace.error = str(e)
+            trace.final_answer = f"Step-back reasoning failed: {str(e)}"
+
+        trace.total_time_ms = (time.time() - start) * 1000
+        self._trace_store.append(trace)
+        if len(self._trace_store) > 200:
+            self._trace_store = self._trace_store[-100:]
+        return trace
+
+    def _record_reasoning_pattern(self, pattern_type: str, entry: dict):
+        """Record a successful reasoning pattern for future reuse."""
+        if pattern_type not in self.reasoning_memory:
+            self.reasoning_memory[pattern_type] = []
+        self.reasoning_memory[pattern_type].append(entry)
+        # Keep at most 50 entries per pattern type
+        if len(self.reasoning_memory[pattern_type]) > 50:
+            self.reasoning_memory[pattern_type] = self.reasoning_memory[pattern_type][-25:]
+
+    def get_reasoning_memory_stats(self) -> dict:
+        """Get statistics about reasoning memory usage."""
+        return {
+            "patterns_tracked": len(self.reasoning_memory),
+            "total_entries": sum(len(v) for v in self.reasoning_memory.values()),
+            "patterns": list(self.reasoning_memory.keys()),
+        }
+
+    def get_fallback_chain(self) -> list[str]:
+        """Get the current fallback chain configuration."""
+        return list(self.fallback_chain)
+
+    def set_fallback_chain(self, chain: list[str]):
+        """Override the fallback chain with a custom ordered list of strategies."""
+        self.fallback_chain = chain
 
     def get_recent_traces(self, limit: int = 10) -> list[dict]:
         return [t.to_dict() for t in self._trace_store[-limit:]]
