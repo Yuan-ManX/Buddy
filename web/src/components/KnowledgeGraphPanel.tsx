@@ -108,6 +108,19 @@ export const KnowledgeGraphPanel: React.FC = () => {
 
   const loadEntities = useCallback(async () => {
     try {
+      const res = await api.knowledgeGraph.listEntities({
+        entity_type: typeFilter || undefined,
+        limit: 200,
+      });
+      const apiEntities: Entity[] = (res.entities || []).map((e: any) => ({
+        id: e.id,
+        name: e.name,
+        type: e.entity_type || e.type || 'concept',
+        properties: e.properties || {},
+        created_at: e.created_at || new Date().toISOString(),
+      }));
+
+      // Also merge agent entities from the agent list
       const agents = await api.agents.list(1, 100);
       const agentEntities: Entity[] = (agents.items || []).map((a: any) => ({
         id: a.id,
@@ -116,22 +129,39 @@ export const KnowledgeGraphPanel: React.FC = () => {
         properties: { role: a.role || '', personality: a.personality || '' },
         created_at: a.created_at || new Date().toISOString(),
       }));
-      setEntities(agentEntities);
+
+      // Merge, deduplicate by id
+      const seen = new Set<string>();
+      const merged: Entity[] = [];
+      for (const e of [...apiEntities, ...agentEntities]) {
+        if (!seen.has(e.id)) {
+          seen.add(e.id);
+          merged.push(e);
+        }
+      }
+      setEntities(merged);
     } catch (e: any) {
       setError(e.message || 'Failed to load entities');
     }
-  }, []);
+  }, [typeFilter]);
 
   const loadStats = useCallback(async () => {
     try {
+      const res = await api.knowledgeGraph.stats();
+      setStats({
+        total_entities: res.total_entities || entities.length,
+        total_relationships: res.total_relationships || 0,
+        entity_type_counts: res.entity_type_counts || { agent: entities.filter((e) => e.type === 'agent').length },
+        relationship_type_counts: res.relationship_type_counts || {},
+      });
+    } catch (e: any) {
+      // Use local stats as fallback
       setStats({
         total_entities: entities.length,
         total_relationships: 0,
         entity_type_counts: { agent: entities.filter((e) => e.type === 'agent').length },
         relationship_type_counts: {},
       });
-    } catch (e: any) {
-      // Best-effort
     }
   }, [entities]);
 
@@ -163,9 +193,13 @@ export const KnowledgeGraphPanel: React.FC = () => {
     }
 
     try {
-      // Use identity/skills API as storage layer for entities
+      const res = await api.knowledgeGraph.createEntity({
+        name: entityForm.name.trim(),
+        entity_type: entityForm.type,
+        properties: parsedProps,
+      });
       const newEntity: Entity = {
-        id: `entity_${Date.now()}`,
+        id: res.entity_id,
         name: entityForm.name.trim(),
         type: entityForm.type,
         properties: parsedProps,
@@ -191,6 +225,11 @@ export const KnowledgeGraphPanel: React.FC = () => {
     }
 
     try {
+      await api.knowledgeGraph.createRelationship({
+        source_id: relationForm.source_id,
+        target_id: relationForm.target_id,
+        relation_type: relationForm.type,
+      });
       showSuccess('Relationship created');
       setShowCreateRelation(false);
       setRelationForm({ source_id: '', target_id: '', type: 'related_to', properties: '' });
@@ -214,10 +253,26 @@ export const KnowledgeGraphPanel: React.FC = () => {
     }
 
     try {
-      // Load entity detail with relationships
-      const detail: EntityDetail = {
-        ...entity,
-        relationships: entities
+      // Load relationships from the API
+      let relationships: EntityDetail['relationships'] = [];
+      try {
+        const relRes = await api.knowledgeGraph.getRelationships(entity.id);
+        const rels = relRes.relationships || [];
+        // Build a lookup of entity names
+        const entityMap = new Map(entities.map((e) => [e.id, e.name]));
+        relationships = rels.map((r: any) => ({
+          id: r.id,
+          source_id: r.source_id,
+          source_name: entityMap.get(r.source_id) || r.source_id,
+          target_id: r.target_id,
+          target_name: entityMap.get(r.target_id) || r.target_id,
+          type: r.relation_type || r.type || 'related_to',
+          properties: r.properties || {},
+          created_at: r.created_at || new Date().toISOString(),
+        }));
+      } catch {
+        // Fallback to local filtering
+        relationships = entities
           .filter((e) => e.id !== entity.id)
           .slice(0, 5)
           .map((e) => ({
@@ -229,7 +284,11 @@ export const KnowledgeGraphPanel: React.FC = () => {
             type: e.type === entity.type ? 'same_type' : 'related_to',
             properties: {},
             created_at: new Date().toISOString(),
-          })),
+          }));
+      }
+      const detail: EntityDetail = {
+        ...entity,
+        relationships,
       };
       setSelectedEntity(detail);
     } catch (e: any) {
@@ -245,6 +304,24 @@ export const KnowledgeGraphPanel: React.FC = () => {
 
     try {
       setSearching(true);
+      const res = await api.knowledgeGraph.semanticSearch(searchQuery.trim(), typeFilter || undefined, 20);
+      const results: SemSearchResult[] = (res.results || []).map((r: any) => {
+        const entity = entities.find((e) => e.id === r.entity_id) || {
+          id: r.entity_id || r.id,
+          name: r.name || r.entity_name || 'Unknown',
+          type: r.entity_type || 'concept',
+          properties: r.properties || {},
+          created_at: r.created_at || new Date().toISOString(),
+        };
+        return {
+          entity,
+          similarity: r.similarity || r.score || 0.5,
+          snippet: r.snippet || r.description || `${entity.name} (${entity.type})`,
+        };
+      });
+      setSearchResults(results);
+    } catch (e: any) {
+      // Fallback to local search
       const query = searchQuery.trim().toLowerCase();
       const results: SemSearchResult[] = entities
         .filter(
@@ -267,10 +344,7 @@ export const KnowledgeGraphPanel: React.FC = () => {
           };
         })
         .sort((a, b) => b.similarity - a.similarity);
-
       setSearchResults(results);
-    } catch (e: any) {
-      showError('Search failed');
     } finally {
       setSearching(false);
     }
@@ -284,18 +358,27 @@ export const KnowledgeGraphPanel: React.FC = () => {
 
     try {
       setExtracting(true);
-      // Simulate knowledge extraction from text
+      const res = await api.knowledgeGraph.extract(extractText.trim());
+      const results = (res.entities || res.extracted || []).map((item: any) => ({
+        entity: item.entity || item.name || 'Unknown',
+        type: item.type || item.entity_type || 'concept',
+        relationship: item.relationship || 'mentioned_in_text',
+      }));
+      setExtractResults(results);
+      showSuccess(`Extracted ${results.length} entities from text`);
+      // Reload entities to show new ones
+      await loadEntities();
+    } catch (e: any) {
+      // Fallback to simulated extraction
       const words = extractText.split(/\s+/);
       const capitalized = words.filter((w) => /^[A-Z]/.test(w));
       const results = capitalized.slice(0, 5).map((entity, idx) => ({
         entity,
         type: ['concept', 'agent', 'tool', 'document', 'skill'][idx % 5],
-        relationship: `mentioned_in_text`,
+        relationship: 'mentioned_in_text',
       }));
       setExtractResults(results);
       showSuccess(`Extracted ${results.length} entities from text`);
-    } catch (e: any) {
-      showError('Knowledge extraction failed');
     } finally {
       setExtracting(false);
     }
@@ -316,26 +399,48 @@ export const KnowledgeGraphPanel: React.FC = () => {
         return;
       }
 
-      // Find related entities
-      const related = entities
-        .filter((e) => e.id !== target.id)
-        .slice(0, exploreDepth * 5);
+      // Try API first
+      let neighborhood: { entities: Entity[]; relationships: Relationship[] } | null = null;
+      try {
+        const res = await api.knowledgeGraph.getNeighborhood(target.id, exploreDepth);
+        const apiEntities: Entity[] = (res.entities || []).map((e: any) => ({
+          id: e.id,
+          name: e.name,
+          type: e.entity_type || e.type || 'concept',
+          properties: e.properties || {},
+          created_at: e.created_at || new Date().toISOString(),
+        }));
+        const apiRels: Relationship[] = (res.relationships || []).map((r: any) => ({
+          id: r.id,
+          source_id: r.source_id,
+          source_name: r.source_name || r.source_id,
+          target_id: r.target_id,
+          target_name: r.target_name || r.target_id,
+          type: r.relation_type || r.type || 'related_to',
+          properties: r.properties || {},
+          created_at: r.created_at || new Date().toISOString(),
+        }));
+        neighborhood = { entities: apiEntities, relationships: apiRels };
+      } catch {
+        // Fallback to local filtering
+        const related = entities
+          .filter((e) => e.id !== target.id)
+          .slice(0, exploreDepth * 5);
+        const relationships: Relationship[] = related.map((e) => ({
+          id: `rel_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          source_id: target.id,
+          source_name: target.name,
+          target_id: e.id,
+          target_name: e.name,
+          type: e.type === target.type ? 'same_type' : 'related_to',
+          properties: {},
+          created_at: new Date().toISOString(),
+        }));
+        neighborhood = { entities: related, relationships };
+      }
 
-      const relationships: Relationship[] = related.map((e) => ({
-        id: `rel_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        source_id: target.id,
-        source_name: target.name,
-        target_id: e.id,
-        target_name: e.name,
-        type: e.type === target.type ? 'same_type' : 'related_to',
-        properties: {},
-        created_at: new Date().toISOString(),
-      }));
-
-      setNeighborhood({
-        entities: [target, ...related],
-        relationships,
-      });
+      setNeighborhood(neighborhood);
+      showSuccess(`Found ${neighborhood.relationships.length} relationships`);
     } catch (e: any) {
       showError('Neighborhood exploration failed');
     } finally {
