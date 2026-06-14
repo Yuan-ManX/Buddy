@@ -13,6 +13,8 @@ The trajectory system handles:
   - Audit trail generation for white-box debugging
 """
 
+from __future__ import annotations
+
 import hashlib
 import logging
 import uuid
