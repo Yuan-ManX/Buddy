@@ -1,7 +1,7 @@
 """SQLAlchemy ORM models for Buddy"""
 from __future__ import annotations
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 from sqlalchemy import String, Text, Float, Boolean, DateTime, ForeignKey, JSON, Integer, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -14,8 +14,8 @@ def gen_id():
 
 class TimestampMixin:
     """Mixin providing created_at and updated_at timestamps for all models."""
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
 
 
