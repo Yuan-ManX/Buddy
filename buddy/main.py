@@ -21,6 +21,7 @@ from config.settings import settings
 from database.db import init_db
 from api.routes import router as api_router
 from api.websocket import router as ws_router
+from api.middleware import RateLimitMiddleware, SecurityHeadersMiddleware, rate_limiter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -171,6 +172,11 @@ async def lifespan(app: FastAPI):
     await seed_agents()
     await init_autopilot_executor()
     await init_dream_engines()
+
+    # Wire WebSocket manager to Platform Hub for real-time event broadcasting
+    from agent.shared import ws_manager, platform_hub
+    platform_hub.set_ws_manager(ws_manager)
+
     # MCP auto-connect runs in background, don't block startup
     import asyncio
     asyncio.create_task(init_mcp_connections())
@@ -213,6 +219,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add security and rate limiting middleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware, limiter=rate_limiter)
 
 app.include_router(api_router)
 app.include_router(ws_router)
