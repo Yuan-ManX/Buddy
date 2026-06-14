@@ -6244,92 +6244,12 @@ async def get_cost_projections(days: int = 30):
     return cost_tracker.project_costs(days)
 
 
-# ── Workspace Management APIs ────────────────────────────
-
-class CreateWorkspaceRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    description: str = Field(default="", max_length=500)
-
-
-@router.get("/workspaces")
-async def list_workspaces():
-    """List all workspaces."""
-    workspaces = enterprise_hub.list_workspaces()
-    active = enterprise_hub.get_active_workspace()
-    return {
-        "workspaces": [
-            {
-                "id": w.id,
-                "name": w.name,
-                "description": w.description,
-                "filesystem_path": str(w.filesystem_path),
-                "created_at": w.created_at,
-                "updated_at": w.updated_at,
-                "is_active": active is not None and w.id == active.id,
-            }
-            for w in workspaces
-        ]
-    }
-
+# ── Workspace Management (enterprise hub stats) ─────────
 
 @router.get("/workspaces/stats")
-async def get_workspace_stats():
-    """Get aggregate workspace statistics."""
+async def get_workspace_hub_stats():
+    """Get aggregate workspace statistics from enterprise hub."""
     return enterprise_hub.get_hub_stats()
-
-
-@router.post("/workspaces")
-async def create_workspace(data: CreateWorkspaceRequest):
-    """Create a new isolated workspace."""
-    ws = enterprise_hub.create_workspace(data.name, data.description)
-    return {
-        "id": ws.id,
-        "name": ws.name,
-        "description": ws.description,
-        "filesystem_path": str(ws.filesystem_path),
-        "created_at": ws.created_at,
-        "updated_at": ws.updated_at,
-        "is_active": True,
-    }
-
-
-@router.get("/workspaces/{workspace_id}")
-async def get_workspace(workspace_id: str):
-    """Get workspace details."""
-    ws = enterprise_hub.get_workspace(workspace_id)
-    stats = enterprise_hub.get_workspace_stats(workspace_id)
-    active = enterprise_hub.get_active_workspace()
-    return {
-        "id": ws.id,
-        "name": ws.name,
-        "description": ws.description,
-        "filesystem_path": str(ws.filesystem_path),
-        "created_at": ws.created_at,
-        "updated_at": ws.updated_at,
-        "is_active": active is not None and ws.id == active.id,
-        "stats": stats,
-    }
-
-
-@router.delete("/workspaces/{workspace_id}")
-async def delete_workspace(workspace_id: str):
-    """Delete a workspace."""
-    enterprise_hub.delete_workspace(workspace_id)
-    return {"deleted": True, "workspace_id": workspace_id}
-
-
-@router.post("/workspaces/{workspace_id}/activate")
-async def activate_workspace(workspace_id: str):
-    """Switch to a workspace."""
-    enterprise_hub.switch_context(workspace_id)
-    return {"activated": True, "workspace_id": workspace_id}
-
-
-@router.get("/workspaces/{workspace_id}/export")
-async def export_workspace(workspace_id: str):
-    """Export workspace configuration as JSON."""
-    config = enterprise_hub.export_workspace_config_json(workspace_id)
-    return config
 
 
 # ═══════════════════════════════════════════════════════════
