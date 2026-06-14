@@ -1,4 +1,4 @@
-"""Buddy WebSocket — Real-time streaming chat"""
+"""Buddy WebSocket — Real-time streaming chat and system events"""
 import json
 import logging
 import uuid
@@ -9,7 +9,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from database.db import async_session
 from database.models import Agent as AgentModel, Message as MsgModel, Conversation as ConvModel
 from sqlalchemy import select
-from agent.shared import orchestrator
+from agent.shared import orchestrator, ws_manager, platform_hub
 
 logger = logging.getLogger("buddy.ws")
 router = APIRouter()
@@ -99,3 +99,74 @@ async def ws_chat(websocket: WebSocket, agent_id: str):
             await websocket.send_json({"type": "error", "content": str(e)})
         except Exception:
             pass
+
+
+@router.websocket("/ws/system")
+async def ws_system(websocket: WebSocket):
+    """System-level WebSocket for platform events, health updates, and room subscriptions."""
+    client_id = f"sys-{uuid.uuid4().hex[:8]}"
+    current_rooms: set[str] = {"system", "broadcast"}
+
+    await websocket.accept()
+
+    try:
+        # Register with WebSocket manager
+        await ws_manager.connect(websocket, client_id, list(current_rooms))
+
+        # Send initial health status
+        health = platform_hub.get_health()
+        await websocket.send_json({
+            "type": "platform_health",
+            "payload": health,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+        while True:
+            data = await websocket.receive_json()
+            action = data.get("action", "")
+
+            if action == "subscribe":
+                room = data.get("room", "")
+                if room and room not in current_rooms:
+                    current_rooms.add(room)
+                    await ws_manager.subscribe(client_id, [room])
+                    await websocket.send_json({
+                        "type": "subscribed",
+                        "room": room,
+                        "rooms": list(current_rooms),
+                    })
+
+            elif action == "unsubscribe":
+                room = data.get("room", "")
+                if room in current_rooms and room not in ("system", "broadcast"):
+                    current_rooms.discard(room)
+                    await ws_manager.unsubscribe(client_id, [room])
+                    await websocket.send_json({
+                        "type": "unsubscribed",
+                        "room": room,
+                        "rooms": list(current_rooms),
+                    })
+
+            elif action == "ping":
+                await websocket.send_json({"type": "pong", "timestamp": datetime.now(timezone.utc).isoformat()})
+
+            elif action == "health":
+                health = platform_hub.get_health()
+                await websocket.send_json({
+                    "type": "platform_health",
+                    "payload": health,
+                })
+
+            elif action == "status":
+                stats = platform_hub.get_stats()
+                await websocket.send_json({
+                    "type": "platform_stats",
+                    "payload": stats,
+                })
+
+    except WebSocketDisconnect:
+        logger.info(f"System WebSocket disconnected: {client_id}")
+    except Exception as e:
+        logger.error(f"System WebSocket error for {client_id}: {e}")
+    finally:
+        await ws_manager.disconnect(client_id)
