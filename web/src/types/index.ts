@@ -1,4 +1,4 @@
-export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse' | 'persona' | 'learning' | 'gateway' | 'daemon' | 'swarm' | 'knowledge' | 'runtime' | 'scheduler' | 'studio' | 'workflow';
+export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse' | 'persona' | 'learning' | 'gateway' | 'daemon' | 'swarm' | 'knowledge' | 'runtime' | 'scheduler' | 'studio' | 'workflow' | 'board' | 'compounding' | 'whitememory' | 'pipeline' | 'capability' | 'kgraph' | 'memorysync' | 'phub' | 'costs' | 'workspaces' | 'agentdashboard' | 'proactive' | 'metacognition' | 'evolution' | 'kanban' | 'activity' | 'runtimemonitor' | 'skillmanager';
 
 export interface Agent {
   id: string;
@@ -121,6 +121,31 @@ export interface WorkspaceFile {
   updated_at: string;
 }
 
+export interface WorkspaceStats {
+  total_files: number;
+  total_memories: number;
+  total_skills: number;
+  last_activity: string;
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  description: string;
+  filesystem_path: string;
+  created_at: string;
+  updated_at: string;
+  is_active: boolean;
+  stats?: WorkspaceStats;
+}
+
+export interface WorkspaceStatsOverview {
+  total_workspaces: number;
+  active_workspaces: number;
+  total_files: number;
+  total_memories: number;
+}
+
 export interface SubAgentResult {
   agent_id: string;
   task: string;
@@ -154,6 +179,7 @@ export interface SystemOverview {
   forge: { total_skills: number; total_patterns: number; patterns_ready_for_promotion: number; total_executions: number; avg_success_rate: number };
   squads: { total_squads: number; total_members: number; total_tasks_processed: number; avg_trust_score: number };
   trajectory: { total_compressed: number; active_traces: number; successful: number; failed: number; success_rate: number; avg_quality_score: number };
+  compressor: { total_trajectories_compressed: number; total_patterns_detected: number; average_compression_ratio: number; average_quality_score: number; total_bytes_saved: number; patterns_by_type: Record<string, number>; stored_trajectories: number; stored_patterns: number };
 }
 
 // ── Nexus Types ──
