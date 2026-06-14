@@ -6,6 +6,9 @@ Provides WebSocket-based communication for:
 - Agent status change notifications
 - System event broadcasting (Guard alerts, Pulse health, Squad activity)
 - Sub-agent execution progress tracking
+- Activity event broadcasting (chat, tool, task, memory)
+- Agent heartbeat and status tracking
+- System-level notification broadcasting
 
 The WebSocket manager maintains per-client connections and supports
 room-based broadcasting for targeted message delivery.
@@ -15,6 +18,7 @@ import asyncio
 import json
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable
@@ -32,13 +36,38 @@ class MessageType(str, Enum):
     TASK_COMPLETE = "task_complete"
     AGENT_STATUS = "agent_status"
     SYSTEM_EVENT = "system_event"
+    PLATFORM_EVENT = "platform_event"
+    PLATFORM_HEALTH = "platform_health"
     GUARD_ALERT = "guard_alert"
     PULSE_HEALTH = "pulse_health"
     SQUAD_UPDATE = "squad_update"
     SUBAGENT_PROGRESS = "subagent_progress"
+    ACTIVITY_EVENT = "activity_event"
+    SYSTEM_NOTIFICATION = "system_notification"
+    AGENT_HEARTBEAT = "agent_heartbeat"
     ERROR = "error"
     PING = "ping"
     PONG = "pong"
+
+
+@dataclass
+class WebSocketMessageData:
+    """Lightweight dataclass for external serialization of WebSocket messages.
+
+    Attributes:
+        type: The message type as a string.
+        payload: The message payload dictionary.
+        timestamp: ISO 8601 timestamp of when the message was created.
+        sender: The sender identifier (defaults to "system").
+    """
+    type: str
+    payload: dict
+    timestamp: str = ""
+    sender: str = "system"
+
+    def __post_init__(self):
+        if not self.timestamp:
+            self.timestamp = datetime.now(timezone.utc).isoformat()
 
 
 class WebSocketMessage:
@@ -360,6 +389,181 @@ class WebSocketManager:
                 "detail": detail,
             }),
         )
+
+    async def broadcast_platform_event(self, event: dict):
+        """Broadcast a platform hub event to system subscribers."""
+        await self.send_to_room(
+            "system",
+            WebSocketMessage(MessageType.PLATFORM_EVENT, event),
+        )
+        await self.send_to_room(
+            "broadcast",
+            WebSocketMessage(MessageType.PLATFORM_EVENT, event),
+        )
+
+    async def broadcast_platform_health(self, health_data: dict):
+        """Broadcast platform health status to system subscribers."""
+        await self.send_to_room(
+            "system",
+            WebSocketMessage(MessageType.PLATFORM_HEALTH, health_data),
+        )
+
+    # ── Agent Status Broadcasting ────────────────────────
+
+    async def broadcast_agent_status(self, agent_id: str, status: str, detail: dict | None = None):
+        """Broadcast agent status changes to all connected clients.
+
+        Sends to both the agent-specific room and the broadcast/system rooms
+        so all clients can see agent status changes.
+
+        Args:
+            agent_id: The agent's unique identifier.
+            status: Status string (online, offline, busy, idle, error).
+            detail: Optional extra status details.
+        """
+        payload = {
+            "agent_id": agent_id,
+            "status": status,
+            "detail": detail or {},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        await self.send_to_room(
+            f"agent:{agent_id}",
+            WebSocketMessage(MessageType.AGENT_STATUS, payload),
+        )
+        await self.send_to_room(
+            "broadcast",
+            WebSocketMessage(MessageType.AGENT_STATUS, payload),
+        )
+
+    async def broadcast_activity(self, activity_type: str, agent_id: str, data: dict | None = None):
+        """Broadcast activity events (chat, tool, task, memory) to subscribed clients.
+
+        Sends activity events to the agent's room and all subscribers of the
+        activity type room.
+
+        Args:
+            activity_type: Type of activity (chat, tool, task, memory, reasoning).
+            agent_id: The agent that generated the activity.
+            data: Activity-specific payload data.
+        """
+        payload = {
+            "activity_type": activity_type,
+            "agent_id": agent_id,
+            "data": data or {},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        await self.send_to_room(
+            f"agent:{agent_id}",
+            WebSocketMessage(MessageType.ACTIVITY_EVENT, payload),
+        )
+        await self.send_to_room(
+            f"activity:{activity_type}",
+            WebSocketMessage(MessageType.ACTIVITY_EVENT, payload),
+        )
+
+    async def broadcast_system_notification(self, title: str, message: str, level: str = "info", data: dict | None = None):
+        """Broadcast system-level notifications to all connected clients.
+
+        Args:
+            title: Notification title.
+            message: Notification body text.
+            level: Severity level (info, warning, error, success).
+            data: Optional extra data payload.
+        """
+        payload = {
+            "title": title,
+            "message": message,
+            "level": level,
+            "data": data or {},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        await self.send_to_room(
+            "broadcast",
+            WebSocketMessage(MessageType.SYSTEM_NOTIFICATION, payload),
+        )
+
+    async def agent_heartbeat(self, agent_id: str, status: str = "online", metrics: dict | None = None):
+        """Handle periodic heartbeat from agents, updating their status.
+
+        Agents should call this every 30-60 seconds to signal they are alive.
+        Automatically updates the agent's online status and broadcasts to
+        subscribers.
+
+        Args:
+            agent_id: The agent's unique identifier.
+            status: Current agent status (online, busy, idle).
+            metrics: Optional performance metrics (cpu, memory, active_tasks).
+        """
+        payload = {
+            "agent_id": agent_id,
+            "status": status,
+            "metrics": metrics or {},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        await self.send_to_room(
+            f"agent:{agent_id}",
+            WebSocketMessage(MessageType.AGENT_HEARTBEAT, payload),
+        )
+        await self.send_to_room(
+            "system",
+            WebSocketMessage(MessageType.AGENT_HEARTBEAT, payload),
+        )
+
+    # ── Agent Subscription Management ────────────────────
+
+    async def subscribe_to_agent(self, agent_id: str, ws: WebSocket):
+        """Subscribe a client to specific agent events.
+
+        Looks up the client by WebSocket connection and adds them to the
+        agent's event room. All future agent events (chat, task, status)
+        will be delivered to this client.
+
+        Args:
+            agent_id: The agent's unique identifier to subscribe to.
+            ws: The WebSocket connection to subscribe.
+        """
+        for cid, conn in self._connections.items():
+            if conn.ws is ws:
+                room = f"agent:{agent_id}"
+                conn.subscribed_rooms.add(room)
+                self._add_to_room(cid, room)
+                await conn.send(WebSocketMessage(
+                    MessageType.SYSTEM_EVENT,
+                    {"event": "subscribed_to_agent", "agent_id": agent_id},
+                ))
+                return
+        logger.warning("subscribe_to_agent: WebSocket not found in connections")
+
+    async def unsubscribe_from_agent(self, agent_id: str, ws: WebSocket):
+        """Unsubscribe a client from specific agent events.
+
+        Looks up the client by WebSocket connection and removes them from
+        the agent's event room.
+
+        Args:
+            agent_id: The agent's unique identifier to unsubscribe from.
+            ws: The WebSocket connection to unsubscribe.
+        """
+        for cid, conn in self._connections.items():
+            if conn.ws is ws:
+                room = f"agent:{agent_id}"
+                conn.subscribed_rooms.discard(room)
+                self._remove_from_room(cid, room)
+                await conn.send(WebSocketMessage(
+                    MessageType.SYSTEM_EVENT,
+                    {"event": "unsubscribed_from_agent", "agent_id": agent_id},
+                ))
+                return
+        logger.warning("unsubscribe_from_agent: WebSocket not found in connections")
+
+    def get_connected_clients(self) -> list[str]:
+        """Return list of currently connected client IDs.
+
+        Returns:
+            A list of client identifier strings for all active connections.
+        """
+        return list(self._connections.keys())
 
     # ── Heartbeat / Ping ────────────────────────────────────
 
