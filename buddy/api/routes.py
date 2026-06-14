@@ -5,6 +5,7 @@ memories, tools, routing, autopilot, workspace, sub-agents, plans, MCP,
 nexus, forge, identity, trajectory, squads, and system.
 """
 from __future__ import annotations
+import asyncio
 import logging
 import uuid
 import json
@@ -30,9 +31,10 @@ from agent.shared import (
     nexus, forge, identity, trajectory, squads,
     guard_system, pulse_system,
     ws_manager, self_improvement, gateway_hub, daemon_manager,
-    swarm_engine,
+    swarm_engine, platform_hub, PlatformSubsystem,
+    cost_tracker, enterprise_hub, session_searcher,
 )
-from agent.cost import cost_tracker
+from agent.cost import cost_tracker as cost_tracker_legacy
 from agent.templates import template_registry
 from agent.task import task_lifecycle, TaskStatus, TaskKind
 from agent.autopilot import AutopilotTrigger, AutopilotStatus
@@ -141,6 +143,64 @@ class ShellExecute(BaseModel):
     timeout: int = Field(default=30, ge=1, le=120)
 
 
+# ── Workspace Isolation Models ─────────────────────────────
+
+class WorkspaceCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    description: str = Field(default="", max_length=512)
+    owner_id: str = Field(default="")
+
+
+class WorkspaceUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=512)
+
+
+class WorkspaceImport(BaseModel):
+    data: dict = Field(...)
+
+
+# ── Soul Profile Models ────────────────────────────────────
+
+class SoulProfileUpdate(BaseModel):
+    identity: str | None = Field(default=None, max_length=1024)
+    principles: list[str] | None = None
+    communication_style: str | None = Field(default=None, max_length=512)
+    boundaries: list[str] | None = None
+    goals: list[str] | None = None
+
+
+# ── Scheduled Task Models ──────────────────────────────────
+
+class ScheduledTaskCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    prompt: str = Field(..., min_length=1, max_length=4096)
+    cron_expression: str = Field(default="")
+    interval_seconds: int = Field(default=0, ge=0)
+    description: str = Field(default="", max_length=512)
+
+
+# ── Skill Models ───────────────────────────────────────────
+
+class SkillCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    description: str = Field(default="", max_length=512)
+    category: str = Field(default="general", max_length=32)
+    parameters: dict = Field(default_factory=dict)
+
+
+class SkillUpdate(BaseModel):
+    description: str | None = Field(default=None, max_length=512)
+    category: str | None = Field(default=None, max_length=32)
+    parameters: dict | None = None
+
+
+# ── Context Models ─────────────────────────────────────────
+
+class ContextPinRequest(BaseModel):
+    entry_index: int = Field(..., ge=0)
+
+
 class SubAgentTask(BaseModel):
     name: str = Field(default="Worker")
     instructions: str = Field(default="Complete the assigned task efficiently.")
@@ -160,6 +220,14 @@ class MemoryTagRequest(BaseModel):
 class MemoryUpdateRequest(BaseModel):
     content: str | None = None
     importance: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class MemoryCreateRequest(BaseModel):
+    content: str = Field(..., min_length=1)
+    memory_type: str = Field(default="event")
+    importance: float = Field(default=0.5, ge=0.0, le=1.0)
+    tags: list[str] = Field(default_factory=list)
+    conversation_id: str | None = None
 
 
 class ToolExecuteRequest(BaseModel):
@@ -278,6 +346,100 @@ class AgentUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=64)
     personality: str | None = Field(default=None, max_length=256)
     instructions: str | None = Field(default=None, max_length=4096)
+
+
+@router.get("/agents/dashboard")
+async def agent_dashboard(agent_id: str | None = None):
+    """Get comprehensive agent dashboard data with real-time status for all agents or a specific agent."""
+    from database.db import async_session as _async_session
+    from database.models import Agent as AgentModel, Task as TaskModel, Memory as MemModel
+    from sqlalchemy import select, func
+
+    async with _async_session() as session:
+        if agent_id:
+            result = await session.execute(select(AgentModel).where(AgentModel.id == agent_id))
+            agents = result.scalars().all()
+        else:
+            result = await session.execute(select(AgentModel).where(AgentModel.is_active == True))
+            agents = result.scalars().all()
+
+        dashboard_agents = []
+        for agent in agents:
+            task_counts = await session.execute(
+                select(TaskModel.status, func.count(TaskModel.id))
+                .where(TaskModel.agent_id == agent.id)
+                .group_by(TaskModel.status)
+            )
+            task_stats = {row[0]: row[1] for row in task_counts.all()}
+
+            mem_count = await session.execute(
+                select(func.count(MemModel.id)).where(MemModel.agent_id == agent.id)
+            )
+
+            engine = orchestrator.get_engine(
+                agent_id=agent.id,
+                agent_name=agent.name,
+                instructions=agent.instructions or "",
+            )
+
+            dream_status = {
+                "is_running": engine.dream.is_running,
+                "interval_seconds": engine.dream.interval,
+                "total_insights": engine.dream.insights_count,
+            }
+
+            tool_stats = {
+                "total_executions": getattr(engine, 'tool_execution_count', 0),
+                "successful": getattr(engine, 'tool_success_count', 0),
+                "failed": getattr(engine, 'tool_failure_count', 0),
+            }
+
+            iteration_info = {
+                "remaining": engine.iteration_budget.remaining,
+                "is_exhausted": engine.iteration_budget.is_exhausted,
+                "usage_ratio": engine.iteration_budget.usage_ratio,
+                "total_tokens": engine.total_tokens,
+            }
+
+            try:
+                agent_costs = cost_tracker.get_agent_costs(agent.id)
+            except Exception:
+                agent_costs = {"total_cost": 0, "total_tokens": 0, "request_count": 0}
+
+            dashboard_agents.append({
+                "id": agent.id,
+                "name": agent.name,
+                "role": agent.role,
+                "personality": agent.personality,
+                "avatar": agent.avatar,
+                "is_active": agent.is_active,
+                "created_at": agent.created_at.isoformat() if agent.created_at else None,
+                "tasks": {
+                    "total": sum(task_stats.values()),
+                    "by_status": task_stats,
+                },
+                "memory": {
+                    "total": mem_count.scalar() or 0,
+                },
+                "dream": dream_status,
+                "iteration": iteration_info,
+                "tools": tool_stats,
+                "costs": {
+                    "total_cost": agent_costs.get("total_cost", 0) if isinstance(agent_costs, dict) else 0,
+                    "total_tokens": agent_costs.get("total_tokens", 0) if isinstance(agent_costs, dict) else 0,
+                },
+            })
+
+    return {
+        "agents": dashboard_agents,
+        "total_agents": len(dashboard_agents),
+        "system_summary": {
+            "total_tasks": sum(a["tasks"]["total"] for a in dashboard_agents),
+            "total_memories": sum(a["memory"]["total"] for a in dashboard_agents),
+            "active_dream_engines": sum(1 for a in dashboard_agents if a["dream"]["is_running"]),
+            "total_tokens_used": sum(a["costs"].get("total_tokens", 0) for a in dashboard_agents),
+        },
+    }
 
 
 @router.get("/agents/{agent_id}")
@@ -669,6 +831,133 @@ async def chat_with_plan(data: PlanChatRequest):
     }
 
 
+# SSE streaming endpoint with proper event types
+@router.post("/agents/{agent_id}/chat/stream")
+async def agent_chat_stream(agent_id: str, data: ChatRequest):
+    """Stream chat response as Server-Sent Events for a specific agent.
+
+    Emits structured SSE events:
+    - thinking: Reasoning steps from the agent
+    - tool_call: Tool invocation events
+    - tool_result: Tool execution outputs
+    - message: Partial text chunks
+    - done: Final summary with conversation_id
+    - error: Failure event
+    """
+    async with async_session() as session:
+        result = await session.execute(select(AgentModel).where(AgentModel.id == agent_id))
+        agent = result.scalars().first()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+
+        conv_id = data.conversation_id
+        if not conv_id:
+            conv_id = f"conv-{uuid.uuid4().hex[:8]}"
+            conv = ConvModel(id=conv_id, title=f"Chat with {agent.name}", agent_ids=[agent.id])
+            session.add(conv)
+            await session.commit()
+
+    history_result = None
+    if conv_id:
+        async with async_session() as s2:
+            msgs = await s2.execute(
+                select(MsgModel)
+                .where(MsgModel.conversation_id == conv_id)
+                .order_by(MsgModel.created_at)
+                .limit(30)
+            )
+            history_result = [
+                {"role": m.role, "content": m.content}
+                for m in msgs.scalars().all()
+            ]
+
+    async def event_stream():
+        full_response = ""
+        try:
+            # Emit connected event
+            yield f"data: {json.dumps({'type': 'connected', 'agent_id': agent_id})}\n\n"
+
+            async for token in orchestrator.chat_stream(
+                agent_id=agent.id,
+                agent_name=agent.name,
+                instructions=agent.instructions or f"You are {agent.name}, a {agent.role} agent.",
+                message=data.content,
+                history=history_result,
+                enable_tools=data.enable_tools,
+                enable_reasoning=data.enable_reasoning,
+            ):
+                full_response += token
+
+                # Detect thinking/reasoning markers
+                if token.startswith("\n[Thinking:") or token.startswith("[Thinking:"):
+                    thinking_content = token.replace("\n[Thinking:", "").replace("[Thinking:", "").rstrip("]\n").rstrip("]")
+                    yield f"data: {json.dumps({'type': 'thinking', 'content': thinking_content.strip()})}\n\n"
+                # Detect tool call markers
+                elif token.startswith("\n[Tool:") and token.endswith("]\n"):
+                    tool_name = token.strip()[6:-1].strip()
+                    tc_id = f"tc-{uuid.uuid4().hex[:6]}"
+                    yield f"data: {json.dumps({'type': 'tool_call', 'id': tc_id, 'name': tool_name})}\n\n"
+                elif token.startswith("[Tool:") and token.endswith("]\n"):
+                    tool_name = token[6:-1].strip()
+                    tc_id = f"tc-{uuid.uuid4().hex[:6]}"
+                    yield f"data: {json.dumps({'type': 'tool_call', 'id': tc_id, 'name': tool_name})}\n\n"
+                # Detect tool result (error)
+                elif token.startswith("Error:") and "[Tool:" in full_response.split(token)[0] if token in full_response.split(token)[0] else False:
+                    yield f"data: {json.dumps({'type': 'tool_result', 'error': True, 'content': token})}\n\n"
+                else:
+                    # Regular message chunk
+                    yield f"data: {json.dumps({'type': 'message', 'content': token})}\n\n"
+
+                # Send keepalive comment every 15 seconds
+                yield ": keepalive\n\n"
+
+            # If reasoning was enabled, add reasoning summary
+            if data.enable_reasoning:
+                try:
+                    engine = orchestrator.get_engine(agent.id, agent.name, agent.instructions or "")
+                    reasoning_stats = engine.get_reasoning_stats()
+                    if reasoning_stats.get("total_traces", 0) > 0:
+                        avg_time = reasoning_stats.get("avg_time_ms", 0)
+                        success_rate = reasoning_stats.get("success_rate", "N/A")
+                        yield f"data: {json.dumps({'type': 'thinking', 'content': f'Reasoning completed: {success_rate} success rate, {avg_time:.0f}ms avg time'})}\n\n"
+                except Exception:
+                    pass
+
+            # Save messages
+            async with async_session() as s3:
+                user_msg = MsgModel(
+                    id=f"msg-{uuid.uuid4().hex[:8]}",
+                    agent_id=agent.id, conversation_id=conv_id,
+                    role="user", content=data.content,
+                )
+                assistant_msg = MsgModel(
+                    id=f"msg-{uuid.uuid4().hex[:8]}",
+                    agent_id=agent.id, conversation_id=conv_id,
+                    role="assistant", content=full_response,
+                )
+                s3.add_all([user_msg, assistant_msg])
+                conv = await s3.execute(select(ConvModel).where(ConvModel.id == conv_id))
+                c = conv.scalars().first()
+                if c:
+                    c.updated_at = datetime.now(timezone.utc)
+                await s3.commit()
+
+            # Final summary
+            yield f"data: {json.dumps({'type': 'done', 'conversation_id': conv_id, 'agent_id': agent_id, 'summary': full_response[:200]})}\n\n"
+        except Exception as e:
+            logger.error(f"SSE stream error for agent {agent_id}: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
 # ═══════════════════════════════════════════════════════════
 # Tasks
 # ═══════════════════════════════════════════════════════════
@@ -928,6 +1217,21 @@ async def get_agent_memories(
             }
             for m in result.scalars().all()
         ]
+
+
+@router.post("/agents/{agent_id}/memories", status_code=201)
+async def create_agent_memory(agent_id: str, data: MemoryCreateRequest):
+    """Create a new memory entry for an agent."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    memory_id = await engine.memory.store(
+        content=data.content,
+        memory_type=data.memory_type,
+        importance=data.importance,
+        conversation_id=data.conversation_id,
+    )
+    if data.tags:
+        await engine.memory.tag(memory_id, data.tags)
+    return {"id": memory_id, "agent_id": agent_id, "content": data.content, "status": "stored"}
 
 
 @router.get("/agents/{agent_id}/memories/stats")
@@ -1256,6 +1560,203 @@ async def execute_shell(agent_id: str, data: ShellExecute):
         "error": result.error, "exit_code": result.exit_code,
         "execution_time": result.execution_time,
     }
+
+
+# ═══════════════════════════════════════════════════════════
+# Workspace Isolation API
+# ═══════════════════════════════════════════════════════════
+
+from agent.workspace_isolation import workspace_isolation
+
+
+@router.post("/workspaces", status_code=201)
+async def create_workspace(data: WorkspaceCreate):
+    """Create a new fully isolated workspace with sandbox, memory, skills, and context."""
+    try:
+        workspace_id = workspace_isolation.create_workspace(
+            name=data.name,
+            description=data.description,
+            owner_id=data.owner_id,
+        )
+        ws = workspace_isolation.get_workspace(workspace_id)
+        return {
+            "id": workspace_id,
+            "name": ws["name"],
+            "description": ws["description"],
+            "owner_id": ws["owner_id"],
+            "created_at": ws["created_at"],
+        }
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/workspaces")
+async def list_workspaces():
+    """List all workspaces with summary information."""
+    workspaces = workspace_isolation.list_workspaces()
+    return {"workspaces": workspaces, "count": len(workspaces)}
+
+
+@router.get("/workspaces/{workspace_id}")
+async def get_workspace(workspace_id: str):
+    """Get detailed information about a specific workspace."""
+    try:
+        ws = workspace_isolation.get_workspace(workspace_id)
+        return {
+            "id": ws["id"],
+            "name": ws["name"],
+            "description": ws["description"],
+            "owner_id": ws["owner_id"],
+            "created_at": ws["created_at"],
+            "updated_at": ws["updated_at"],
+            "is_active": ws["id"] == workspace_isolation._active_workspace_id,
+        }
+    except KeyError:
+        raise HTTPException(404, "Workspace not found")
+
+
+@router.delete("/workspaces/{workspace_id}", status_code=204)
+async def delete_workspace(workspace_id: str):
+    """Permanently delete a workspace and all its isolated data."""
+    try:
+        workspace_isolation.delete_workspace(workspace_id)
+    except KeyError:
+        raise HTTPException(404, "Workspace not found")
+
+
+@router.post("/workspaces/{workspace_id}/switch")
+async def switch_workspace(workspace_id: str):
+    """Switch the active workspace context."""
+    try:
+        workspace_isolation.switch_workspace(workspace_id)
+        return {"active_workspace_id": workspace_id, "switched": True}
+    except KeyError:
+        raise HTTPException(404, "Workspace not found")
+
+
+@router.get("/workspaces/{workspace_id}/stats")
+async def get_workspace_stats(workspace_id: str):
+    """Get resource usage statistics for a workspace."""
+    try:
+        stats = workspace_isolation.get_workspace_stats(workspace_id)
+        return stats
+    except KeyError:
+        raise HTTPException(404, "Workspace not found")
+
+
+@router.post("/workspaces/{workspace_id}/export")
+async def export_workspace(workspace_id: str):
+    """Export the entire workspace state as a serializable dictionary."""
+    try:
+        data = workspace_isolation.export_workspace(workspace_id)
+        return data
+    except KeyError:
+        raise HTTPException(404, "Workspace not found")
+
+
+@router.post("/workspaces/import", status_code=201)
+async def import_workspace(data: WorkspaceImport):
+    """Import a workspace from an exported state dictionary."""
+    try:
+        workspace_id = workspace_isolation.import_workspace(data.data)
+        return {"workspace_id": workspace_id, "imported": True}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/workspaces/{workspace_id}/skills")
+async def list_workspace_skills(workspace_id: str):
+    """List all skills registered in a workspace."""
+    try:
+        ws = workspace_isolation.get_workspace(workspace_id)
+        skills = ws["skills"].list()
+        return {"workspace_id": workspace_id, "skills": skills, "count": len(skills)}
+    except KeyError:
+        raise HTTPException(404, "Workspace not found")
+
+
+@router.post("/workspaces/{workspace_id}/skills", status_code=201)
+async def add_workspace_skill(workspace_id: str, data: SkillCreate):
+    """Add a new skill to a workspace."""
+    try:
+        ws = workspace_isolation.get_workspace(workspace_id)
+        skill_id = ws["skills"].register(
+            name=data.name,
+            description=data.description,
+            category=data.category,
+            parameters=data.parameters,
+        )
+        return {"skill_id": skill_id, "name": data.name, "workspace_id": workspace_id}
+    except KeyError:
+        raise HTTPException(404, "Workspace not found")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.delete("/workspaces/{workspace_id}/skills/{skill_id}", status_code=204)
+async def remove_workspace_skill(workspace_id: str, skill_id: str):
+    """Remove a skill from a workspace by skill name."""
+    try:
+        ws = workspace_isolation.get_workspace(workspace_id)
+        removed = ws["skills"].remove(skill_id)
+        if not removed:
+            raise HTTPException(404, "Skill not found in workspace")
+    except KeyError:
+        raise HTTPException(404, "Workspace not found")
+
+
+@router.get("/workspaces/{workspace_id}/memories")
+async def list_workspace_memories(workspace_id: str):
+    """List all memories stored in a workspace."""
+    try:
+        ws = workspace_isolation.get_workspace(workspace_id)
+        recent = ws["memory"].recall_recent(limit=50)
+        long_term = ws["memory"].recall_long_term(limit=50)
+        return {
+            "workspace_id": workspace_id,
+            "recent": recent,
+            "long_term": long_term,
+            "stats": ws["memory"].get_stats(),
+        }
+    except KeyError:
+        raise HTTPException(404, "Workspace not found")
+
+
+@router.get("/workspaces/{workspace_id}/context")
+async def get_workspace_context(workspace_id: str):
+    """Get the current context window state for a workspace."""
+    try:
+        ws = workspace_isolation.get_workspace(workspace_id)
+        usage = ws["context"].get_usage()
+        return usage
+    except KeyError:
+        raise HTTPException(404, "Workspace not found")
+
+
+@router.post("/workspaces/{workspace_id}/context/pin")
+async def pin_context_entry(workspace_id: str, data: ContextPinRequest):
+    """Pin a context entry so it cannot be evicted."""
+    try:
+        ws = workspace_isolation.get_workspace(workspace_id)
+        ws["context"].pin_entry(data.entry_index)
+        return {"workspace_id": workspace_id, "pinned_index": data.entry_index}
+    except KeyError:
+        raise HTTPException(404, "Workspace not found")
+    except IndexError:
+        raise HTTPException(400, "Invalid entry index")
+
+
+@router.post("/workspaces/{workspace_id}/context/unpin")
+async def unpin_context_entry(workspace_id: str, data: ContextPinRequest):
+    """Unpin a previously pinned context entry."""
+    try:
+        ws = workspace_isolation.get_workspace(workspace_id)
+        ws["context"].unpin_entry(data.entry_index)
+        return {"workspace_id": workspace_id, "unpinned_index": data.entry_index}
+    except KeyError:
+        raise HTTPException(404, "Workspace not found")
+    except IndexError:
+        raise HTTPException(400, "Invalid entry index")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1635,17 +2136,17 @@ async def dismiss_nudge(agent_id: str, nudge_id: str):
 
 @router.get("/costs/system")
 async def get_system_costs():
-    return cost_tracker.get_system_summary()
+    return cost_tracker_legacy.get_system_summary()
 
 
 @router.get("/costs/agents/{agent_id}")
 async def get_agent_costs(agent_id: str):
-    return cost_tracker.get_agent_summary(agent_id)
+    return cost_tracker_legacy.get_agent_summary(agent_id)
 
 
 @router.get("/costs/tasks/{task_id}")
 async def get_task_cost(task_id: str):
-    cost = cost_tracker.get_task_cost(task_id)
+    cost = cost_tracker_legacy.get_task_cost(task_id)
     if not cost:
         raise HTTPException(404, "Task cost record not found")
     return cost
@@ -1702,7 +2203,7 @@ async def system_overview():
 
     return {
         "service": "Buddy Platform",
-        "version": "0.3.0",
+        "version": settings.VERSION,
         "agents": {"total": agent_count, "active": orchestrator.active_agents},
         "tasks": {"total": task_count, "active": active_tasks},
         "conversations": {"total": conv_count},
@@ -1711,7 +2212,7 @@ async def system_overview():
         "plans": {"total": len(planning_engine.list_plans())},
         "mcp_servers": {"total": len(mcp_registry.get_server_states())},
         "templates": {"total": len(template_registry.list_all())},
-        "costs": cost_tracker.get_system_summary(),
+        "costs": cost_tracker_legacy.get_system_summary(),
         "routing": model_router.get_usage_stats(),
         "tools": tool_registry.get_execution_stats(),
         "orchestrator": orchestrator.get_orchestrator_stats(),
@@ -1719,6 +2220,11 @@ async def system_overview():
         "forge": forge.get_stats(),
         "squads": squads.get_stats(),
         "trajectory": trajectory.get_stats(),
+        "compressor": trajectory_compressor.get_stats(),
+        "issue_board": issue_board.get_stats(),
+        "skill_compounding": skill_compounding.get_stats(),
+        "whitebox_memory": whitebox_memory.get_stats(),
+        "platform_health": platform_hub.get_health(),
     }
 
 
@@ -2133,6 +2639,112 @@ async def get_trajectory(trace_id: str):
     if not trace:
         raise HTTPException(404, "Trace not found")
     return trace.dict()
+
+
+# ═══════════════════════════════════════════════════════════
+# Compressor — Execution History Compression & Pattern Detection
+# ═══════════════════════════════════════════════════════════
+
+from agent.compressor import trajectory_compressor
+
+
+@router.post("/agents/{agent_id}/compressor/compress")
+async def compress_agent_trajectory(
+    agent_id: str,
+    conversation_id: str = Query(default=""),
+):
+    """Compress the current execution trajectory for an agent."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    compressed = engine.compress_execution(session_id=conversation_id)
+    return compressed.to_dict()
+
+
+@router.get("/agents/{agent_id}/compressor/trajectories")
+async def list_compressed_trajectories(
+    agent_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """List compressed trajectories for an agent."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    return {
+        "agent_id": agent_id,
+        "trajectories": engine.get_compressed_trajectories(limit),
+    }
+
+
+@router.get("/agents/{agent_id}/compressor/patterns")
+async def get_agent_execution_patterns(
+    agent_id: str,
+    pattern_type: str | None = None,
+):
+    """Get detected execution patterns for an agent."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    patterns = engine.get_detected_patterns(pattern_type)
+    return {"agent_id": agent_id, "patterns": patterns, "count": len(patterns)}
+
+
+@router.get("/compressor/stats")
+async def get_compressor_stats():
+    """Get global compressor statistics."""
+    return trajectory_compressor.get_stats()
+
+
+@router.get("/compressor/export")
+async def export_training_data(
+    agent_id: str | None = None,
+    format: str = Query(default="jsonl"),
+):
+    """Export compressed trajectories as training data."""
+    data = trajectory_compressor.export_training_data(agent_id=agent_id, format=format)
+    return {"format": format, "agent_id": agent_id, "data": data}
+
+
+# ═══════════════════════════════════════════════════════════
+# Checkpoint — Agent State Preservation & Rollback
+# ═══════════════════════════════════════════════════════════
+
+
+@router.post("/agents/{agent_id}/checkpoints")
+async def save_agent_checkpoint(agent_id: str, name: str = Query(default="manual")):
+    """Save a checkpoint of the agent's current state."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    checkpoint_id = engine.save_checkpoint(name)
+    return {"agent_id": agent_id, "checkpoint_id": checkpoint_id, "name": name}
+
+
+@router.get("/agents/{agent_id}/checkpoints")
+async def list_agent_checkpoints(agent_id: str):
+    """List all checkpoints for an agent."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    return {"agent_id": agent_id, "checkpoints": engine.list_checkpoints()}
+
+
+@router.post("/agents/{agent_id}/checkpoints/{checkpoint_id}/restore")
+async def restore_agent_checkpoint(agent_id: str, checkpoint_id: str):
+    """Restore agent state from a checkpoint."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    success = engine.restore_checkpoint(checkpoint_id)
+    if not success:
+        raise HTTPException(404, "Checkpoint not found")
+    return {"agent_id": agent_id, "restored": True, "checkpoint_id": checkpoint_id}
+
+
+@router.delete("/agents/{agent_id}/checkpoints/{checkpoint_id}")
+async def delete_agent_checkpoint(agent_id: str, checkpoint_id: str):
+    """Delete an agent checkpoint."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    success = engine.delete_checkpoint(checkpoint_id)
+    if not success:
+        raise HTTPException(404, "Checkpoint not found")
+    return {"agent_id": agent_id, "deleted": True}
+
+
+@router.post("/agents/{agent_id}/trajectory/clear")
+async def clear_agent_trajectory(agent_id: str):
+    """Reset the agent's execution trajectory buffer."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    engine.clear_trajectory()
+    return {"agent_id": agent_id, "cleared": True}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -2937,11 +3549,15 @@ async def system_health():
             "squads": _subsystem_status("squads", squads, "get_stats"),
             "guard": _subsystem_status("guard", guard_system, "get_stats"),
             "pulse": _subsystem_status("pulse", pulse_system, "get_system_health"),
-            "cost_tracker": _subsystem_status("cost_tracker", cost_tracker, "get_system_summary"),
+            "cost_tracker": _subsystem_status("cost_tracker", cost_tracker_legacy, "get_system_summary"),
             "self_improvement": _subsystem_status("self_improvement", self_improvement, "get_cycle_history"),
             "gateway": _subsystem_status("gateway", gateway_hub, "get_stats"),
             "daemon": _subsystem_status("daemon", daemon_manager, "get_stats"),
             "swarm": _subsystem_status("swarm", swarm_engine, "get_stats"),
+            "compressor": _subsystem_status("compressor", trajectory_compressor, "get_stats"),
+            "issue_board": _subsystem_status("issue_board", issue_board, "get_stats"),
+            "skill_compounding": _subsystem_status("skill_compounding", skill_compounding, "get_stats"),
+            "whitebox_memory": _subsystem_status("whitebox_memory", whitebox_memory, "get_stats"),
         },
     }
 
@@ -4017,3 +4633,2555 @@ async def workflow_recent_activity(limit: int = Query(default=20)):
 async def workflow_stats():
     """Get workflow board statistics."""
     return workflow_engine.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Issue Board — Kanban Task Management
+# ═══════════════════════════════════════════════════════════
+
+from agent.issue_board import issue_board, IssueState, IssuePriority
+
+
+class IssueCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=256)
+    description: str = Field(default="", max_length=4096)
+    priority: str = Field(default="medium")
+    tags: list[str] = Field(default_factory=list)
+    workspace_id: str = Field(default="")
+    context: dict = Field(default_factory=dict)
+    auto_assign: bool = Field(default=True)
+
+
+class IssueUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    priority: str | None = None
+    tags: list[str] | None = None
+    assigned_agent: str | None = None
+    workspace_id: str | None = None
+
+
+class AutopilotRuleCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    agent_id: str = Field(..., min_length=1)
+    filters: dict = Field(default_factory=dict)
+    max_concurrent: int = Field(default=3, ge=1, le=10)
+
+
+@router.get("/board")
+async def get_board():
+    """Get the full Kanban board state."""
+    return issue_board.get_board()
+
+
+@router.get("/board/stats")
+async def get_board_stats():
+    """Get board statistics."""
+    return issue_board.get_stats()
+
+
+@router.post("/board/issues")
+async def create_board_issue(data: IssueCreate):
+    """Create a new issue on the board."""
+    try:
+        priority = IssuePriority(data.priority)
+    except ValueError:
+        raise HTTPException(400, f"Invalid priority. Valid: {[p.value for p in IssuePriority]}")
+    issue = issue_board.create_issue(
+        title=data.title,
+        description=data.description,
+        priority=priority,
+        tags=data.tags,
+        workspace_id=data.workspace_id,
+        context=data.context,
+        auto_assign=data.auto_assign,
+    )
+    return issue.to_dict()
+
+
+@router.get("/board/issues")
+async def list_board_issues(
+    state: str | None = None,
+    agent_id: str | None = None,
+    workspace_id: str | None = None,
+    priority: str | None = None,
+):
+    """List issues with optional filtering."""
+    issue_state = IssueState(state) if state else None
+    issue_priority = IssuePriority(priority) if priority else None
+    issues = issue_board.list_issues(
+        state=issue_state,
+        agent_id=agent_id,
+        workspace_id=workspace_id,
+        priority=issue_priority,
+    )
+    return {"issues": [i.to_dict() for i in issues], "count": len(issues)}
+
+
+@router.get("/board/issues/{issue_id}")
+async def get_board_issue(issue_id: str):
+    """Get a single issue by ID."""
+    issue = issue_board.get_issue(issue_id)
+    if not issue:
+        raise HTTPException(404, "Issue not found")
+    return issue.to_dict()
+
+
+@router.patch("/board/issues/{issue_id}")
+async def update_board_issue(issue_id: str, data: IssueUpdate):
+    """Update issue fields."""
+    kwargs = {k: v for k, v in data.model_dump(exclude_none=True).items()}
+    if "priority" in kwargs:
+        try:
+            kwargs["priority"] = IssuePriority(kwargs["priority"])
+        except ValueError:
+            raise HTTPException(400, "Invalid priority")
+    issue = issue_board.update_issue(issue_id, **kwargs)
+    if not issue:
+        raise HTTPException(404, "Issue not found")
+    return issue.to_dict()
+
+
+@router.delete("/board/issues/{issue_id}")
+async def delete_board_issue(issue_id: str):
+    """Delete an issue."""
+    if not issue_board.delete_issue(issue_id):
+        raise HTTPException(404, "Issue not found")
+    return {"deleted": True}
+
+
+@router.post("/board/issues/{issue_id}/move")
+async def move_board_issue(issue_id: str, state: str = Query(..., min_length=1)):
+    """Move an issue to a new column."""
+    try:
+        new_state = IssueState(state)
+    except ValueError:
+        raise HTTPException(400, f"Invalid state. Valid: {[s.value for s in IssueState]}")
+    if not issue_board.move_issue(issue_id, new_state):
+        raise HTTPException(400, "Invalid state transition")
+    issue = issue_board.get_issue(issue_id)
+    return issue.to_dict() if issue else {}
+
+
+@router.post("/board/issues/{issue_id}/assign")
+async def assign_board_issue(issue_id: str, agent_id: str = Query(..., min_length=1)):
+    """Assign an issue to an agent."""
+    if not issue_board.assign_issue(issue_id, agent_id):
+        raise HTTPException(404, "Issue not found")
+    issue = issue_board.get_issue(issue_id)
+    return issue.to_dict() if issue else {}
+
+
+@router.post("/board/issues/{issue_id}/claim")
+async def claim_board_issue(issue_id: str, agent_id: str = Query(..., min_length=1)):
+    """Agent claims an issue."""
+    if not issue_board.claim_issue(issue_id, agent_id):
+        raise HTTPException(400, "Cannot claim issue")
+    issue = issue_board.get_issue(issue_id)
+    return issue.to_dict() if issue else {}
+
+
+@router.post("/board/issues/{issue_id}/complete")
+async def complete_board_issue(issue_id: str, result: dict | None = None):
+    """Mark an issue as completed."""
+    if not issue_board.complete_issue(issue_id, result):
+        raise HTTPException(400, "Cannot complete issue")
+    issue = issue_board.get_issue(issue_id)
+    return issue.to_dict() if issue else {}
+
+
+@router.post("/board/issues/{issue_id}/fail")
+async def fail_board_issue(issue_id: str, error: str = Query(default="")):
+    """Mark an issue as failed."""
+    if not issue_board.fail_issue(issue_id, error):
+        raise HTTPException(400, "Cannot fail issue")
+    issue = issue_board.get_issue(issue_id)
+    return issue.to_dict() if issue else {}
+
+
+@router.get("/board/autopilot")
+async def list_autopilot_rules():
+    """List autopilot rules."""
+    return {"rules": issue_board.list_autopilot_rules()}
+
+
+@router.post("/board/autopilot")
+async def create_autopilot_rule(data: AutopilotRuleCreate):
+    """Create an autopilot rule."""
+    rule = issue_board.add_autopilot_rule(
+        name=data.name,
+        agent_id=data.agent_id,
+        filters=data.filters,
+        max_concurrent=data.max_concurrent,
+    )
+    return rule.to_dict()
+
+
+@router.delete("/board/autopilot/{rule_id}")
+async def delete_autopilot_rule(rule_id: str):
+    """Remove an autopilot rule."""
+    if not issue_board.remove_autopilot_rule(rule_id):
+        raise HTTPException(404, "Rule not found")
+    return {"deleted": True}
+
+
+# ═══════════════════════════════════════════════════════════
+# Skill Compounding — Self-Improving Skill System
+# ═══════════════════════════════════════════════════════════
+
+from agent.skill_compounding import skill_compounding, CompoundedSkill
+
+
+class CompoundingInteraction(BaseModel):
+    agent_id: str = Field(..., min_length=1)
+    task_description: str = Field(default="")
+    tool_calls: list[dict] = Field(default_factory=list)
+    success: bool = Field(default=True)
+    output_summary: str = Field(default="")
+    metadata: dict = Field(default_factory=dict)
+
+
+@router.get("/compounding/stats")
+async def get_compounding_stats():
+    """Get skill compounding engine statistics."""
+    return skill_compounding.get_stats()
+
+
+@router.get("/compounding/skills")
+async def list_compounded_skills(
+    category: str | None = None,
+    min_quality: float = Query(default=0.0, ge=0.0, le=1.0),
+):
+    """List compounded skills."""
+    skills = skill_compounding.list_skills(category=category, min_quality=min_quality)
+    return {"skills": [s.to_dict() for s in skills], "count": len(skills)}
+
+
+@router.get("/compounding/skills/{skill_id}")
+async def get_compounded_skill(skill_id: str):
+    """Get a single compounded skill."""
+    skill = skill_compounding.get_skill(skill_id)
+    if not skill:
+        raise HTTPException(404, "Skill not found")
+    return skill.to_dict()
+
+
+@router.post("/compounding/skills/{skill_id}/feedback")
+async def skill_feedback(
+    skill_id: str,
+    success: bool = Query(default=True),
+    feedback: str = Query(default=""),
+):
+    """Update skill quality based on usage feedback."""
+    skill_compounding.update_skill_quality(skill_id, success, feedback)
+    skill = skill_compounding.get_skill(skill_id)
+    return skill.to_dict() if skill else {}
+
+
+@router.post("/compounding/skills/{skill_id}/deprecate")
+async def deprecate_skill(skill_id: str):
+    """Deprecate a skill."""
+    if not skill_compounding.deprecate_skill(skill_id):
+        raise HTTPException(404, "Skill not found")
+    return {"deprecated": True}
+
+
+@router.delete("/compounding/skills/{skill_id}")
+async def delete_compounded_skill(skill_id: str):
+    """Delete a skill."""
+    if not skill_compounding.delete_skill(skill_id):
+        raise HTTPException(404, "Skill not found")
+    return {"deleted": True}
+
+
+@router.post("/compounding/interactions")
+async def record_compounding_interaction(data: CompoundingInteraction):
+    """Record an agent interaction for pattern analysis."""
+    interaction_id = skill_compounding.record_interaction(
+        agent_id=data.agent_id,
+        task_description=data.task_description,
+        tool_calls=data.tool_calls,
+        success=data.success,
+        output_summary=data.output_summary,
+        metadata=data.metadata,
+    )
+    return {"interaction_id": interaction_id}
+
+
+@router.post("/compounding/generate")
+async def generate_skills():
+    """Generate skills from all qualified patterns."""
+    new_skills = skill_compounding.generate_all_skills()
+    return {"skills": [s.to_dict() for s in new_skills], "count": len(new_skills)}
+
+
+@router.get("/compounding/patterns")
+async def get_compounding_patterns():
+    """Get detected interaction patterns."""
+    return {"patterns": skill_compounding.get_patterns()}
+
+
+@router.post("/compounding/search")
+async def search_skills_for_task(
+    task_description: str = Query(..., min_length=1),
+    required_tools: str | None = None,
+    limit: int = Query(default=5, ge=1, le=20),
+):
+    """Find relevant skills for a task."""
+    tools_list = required_tools.split(",") if required_tools else None
+    skills = skill_compounding.find_skills_for_task(
+        task_description=task_description,
+        required_tools=tools_list,
+        limit=limit,
+    )
+    return {"skills": [s.to_dict() for s in skills], "count": len(skills)}
+
+
+@router.get("/compounding/export")
+async def export_skills(format: str = Query(default="json")):
+    """Export all skills."""
+    data = skill_compounding.export_skills(format)
+    return {"format": format, "data": data}
+
+
+@router.post("/compounding/import")
+async def import_skills(data: str = Query(..., min_length=1), format: str = Query(default="json")):
+    """Import skills from serialized data."""
+    count = skill_compounding.import_skills(data, format)
+    return {"imported": count}
+
+
+# ═══════════════════════════════════════════════════════════
+# White-box Memory — Transparent Memory Management
+# ═══════════════════════════════════════════════════════════
+
+from agent.whitebox_memory import whitebox_memory, MemoryType, MemoryImportance
+
+
+class WhiteboxMemoryCreate(BaseModel):
+    content: str = Field(..., min_length=1)
+    memory_type: str = Field(default="episodic")
+    importance: str = Field(default="medium")
+    workspace_id: str = Field(default="")
+    session_id: str = Field(default="")
+    agent_id: str = Field(default="")
+    tags: list[str] = Field(default_factory=list)
+    source: str = Field(default="api")
+    source_detail: dict = Field(default_factory=dict)
+    summary: str = Field(default="")
+    expires_in_hours: int | None = None
+
+
+class WhiteboxMemoryUpdate(BaseModel):
+    content: str | None = None
+    importance: str | None = None
+    memory_type: str | None = None
+    summary: str | None = None
+
+
+@router.get("/whitebox-memory/stats")
+async def get_whitebox_memory_stats():
+    """Get white-box memory statistics."""
+    return whitebox_memory.get_stats()
+
+
+@router.get("/whitebox-memory/entries")
+async def list_whitebox_memories(
+    workspace_id: str | None = None,
+    agent_id: str | None = None,
+    memory_type: str | None = None,
+    importance: str | None = None,
+    tags: str | None = None,
+    pinned_only: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """List memory entries with filtering."""
+    try:
+        mtype = MemoryType(memory_type) if memory_type else None
+    except ValueError:
+        mtype = None
+    try:
+        mimportance = MemoryImportance(importance) if importance else None
+    except ValueError:
+        mimportance = None
+
+    tag_list = tags.split(",") if tags else None
+    entries = whitebox_memory.list_memories(
+        workspace_id=workspace_id,
+        agent_id=agent_id,
+        memory_type=mtype,
+        importance=mimportance,
+        tags=tag_list,
+        pinned_only=pinned_only,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "entries": [e.to_dict() for e in entries],
+        "count": len(entries),
+        "total": whitebox_memory.get_stats()["total"],
+    }
+
+
+@router.post("/whitebox-memory/entries")
+async def create_whitebox_memory(data: WhiteboxMemoryCreate):
+    """Store a new memory entry."""
+    try:
+        mtype = MemoryType(data.memory_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid memory type. Valid: {[t.value for t in MemoryType]}")
+    try:
+        mimportance = MemoryImportance(data.importance)
+    except ValueError:
+        raise HTTPException(400, f"Invalid importance. Valid: {[i.value for i in MemoryImportance]}")
+
+    entry = whitebox_memory.store(
+        content=data.content,
+        memory_type=mtype,
+        importance=mimportance,
+        workspace_id=data.workspace_id,
+        session_id=data.session_id,
+        agent_id=data.agent_id,
+        tags=data.tags,
+        source=data.source,
+        source_detail=data.source_detail,
+        summary=data.summary,
+        expires_in_hours=data.expires_in_hours,
+    )
+    return entry.to_dict()
+
+
+@router.get("/whitebox-memory/entries/{memory_id}")
+async def get_whitebox_memory_entry(memory_id: str):
+    """Get a single memory entry."""
+    entry = whitebox_memory.get(memory_id)
+    if not entry:
+        raise HTTPException(404, "Memory entry not found")
+    return entry.to_dict()
+
+
+@router.patch("/whitebox-memory/entries/{memory_id}")
+async def update_whitebox_memory_entry(memory_id: str, data: WhiteboxMemoryUpdate):
+    """Update a memory entry."""
+    kwargs = {k: v for k, v in data.model_dump(exclude_none=True).items()}
+    entry = whitebox_memory.update(memory_id, **kwargs)
+    if not entry:
+        raise HTTPException(404, "Memory entry not found")
+    return entry.to_dict()
+
+
+@router.put("/whitebox-memory/entries/{memory_id}/edit")
+async def edit_whitebox_memory_content(
+    memory_id: str,
+    new_content: str = Query(..., min_length=1),
+    edited_by: str = Query(default="user"),
+):
+    """Edit memory content with audit trail."""
+    if not whitebox_memory.edit_content(memory_id, new_content, edited_by):
+        raise HTTPException(404, "Memory entry not found")
+    entry = whitebox_memory.get(memory_id)
+    return entry.to_dict() if entry else {}
+
+
+@router.delete("/whitebox-memory/entries/{memory_id}")
+async def delete_whitebox_memory_entry(memory_id: str):
+    """Delete a memory entry."""
+    if not whitebox_memory.delete(memory_id):
+        raise HTTPException(404, "Memory entry not found")
+    return {"deleted": True}
+
+
+@router.post("/whitebox-memory/entries/{memory_id}/pin")
+async def pin_whitebox_memory_entry(memory_id: str):
+    """Pin a memory entry."""
+    if not whitebox_memory.pin(memory_id):
+        raise HTTPException(404, "Memory entry not found")
+    return {"pinned": True}
+
+
+@router.post("/whitebox-memory/entries/{memory_id}/unpin")
+async def unpin_whitebox_memory_entry(memory_id: str):
+    """Unpin a memory entry."""
+    if not whitebox_memory.unpin(memory_id):
+        raise HTTPException(404, "Memory entry not found")
+    return {"unpinned": True}
+
+
+@router.get("/whitebox-memory/search")
+async def search_whitebox_memories(
+    query: str = Query(..., min_length=1),
+    workspace_id: str | None = None,
+    limit: int = Query(default=10, ge=1, le=50),
+):
+    """Search memories by keyword."""
+    results = whitebox_memory.search(query=query, workspace_id=workspace_id, limit=limit)
+    return {"results": results, "count": len(results), "query": query}
+
+
+@router.get("/whitebox-memory/entries/{memory_id}/audit")
+async def get_memory_audit_trail(memory_id: str):
+    """Get the full edit history for a memory entry."""
+    trail = whitebox_memory.get_audit_trail(memory_id)
+    if not trail:
+        raise HTTPException(404, "Memory entry not found")
+    return {"audit_trail": trail}
+
+
+@router.post("/whitebox-memory/dream")
+async def run_dream_mode(workspace_id: str | None = None):
+    """Run Dream Mode memory consolidation."""
+    result = whitebox_memory.dream_consolidate(workspace_id)
+    return result
+
+
+@router.post("/whitebox-memory/dream/rollback")
+async def rollback_dream_mode(dream_id: str | None = None):
+    """Rollback the last Dream Mode consolidation."""
+    result = whitebox_memory.rollback_dream(dream_id or "")
+    return result
+
+
+@router.get("/whitebox-memory/export")
+async def export_whitebox_memories(
+    workspace_id: str | None = None,
+    format: str = Query(default="json"),
+):
+    """Export memories for backup or transfer."""
+    data = whitebox_memory.export_memories(workspace_id, format)
+    return {"format": format, "data": data}
+
+
+@router.post("/whitebox-memory/import")
+async def import_whitebox_memories(
+    data: str = Query(..., min_length=1),
+    format: str = Query(default="json"),
+):
+    """Import memories from serialized data."""
+    count = whitebox_memory.import_memories(data, format)
+    return {"imported": count}
+
+
+# ═══════════════════════════════════════════════════════════
+# Pipeline Engine — Composable Agent Execution Pipelines
+# ═══════════════════════════════════════════════════════════
+
+from agent.pipeline import pipeline_engine, StepKind, ErrorPolicy
+
+
+class PipelineCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    description: str = Field(default="")
+    steps: list[dict] = Field(..., min_length=1)
+
+
+class PipelineExecute(BaseModel):
+    pipeline_id: str = Field(..., min_length=1)
+    initial_state: dict = Field(default_factory=dict)
+
+
+@router.get("/pipelines")
+async def list_pipelines():
+    """List all defined pipelines."""
+    return {"pipelines": pipeline_engine.list_pipelines()}
+
+
+@router.post("/pipelines", status_code=201)
+async def create_pipeline(data: PipelineCreate):
+    """Define a new pipeline."""
+    from agent.pipeline import PipelineDefinition, StepConfig
+    steps = []
+    for s in data.steps:
+        steps.append(StepConfig(
+            kind=StepKind(s.get("kind", "chat")),
+            name=s.get("name", f"step_{len(steps)}"),
+            config=s.get("config", {}),
+            depends_on=s.get("depends_on", []),
+            error_policy=ErrorPolicy(s.get("error_policy", "abort")),
+            max_retries=s.get("max_retries", 2),
+            timeout_seconds=s.get("timeout_seconds", 120.0),
+            condition=s.get("condition", ""),
+            fallback_step=s.get("fallback_step", ""),
+        ))
+    definition = PipelineDefinition(
+        id=f"pipeline-{uuid.uuid4().hex[:12]}",
+        name=data.name,
+        description=data.description,
+        steps=steps,
+    )
+    pipeline_id = pipeline_engine.define_pipeline(definition)
+    return {"pipeline_id": pipeline_id, "name": data.name, "step_count": len(steps)}
+
+
+@router.get("/pipelines/{pipeline_id}")
+async def get_pipeline(pipeline_id: str):
+    """Get pipeline definition."""
+    pipeline = pipeline_engine.get_pipeline(pipeline_id)
+    if not pipeline:
+        raise HTTPException(404, "Pipeline not found")
+    return {
+        "id": pipeline.id,
+        "name": pipeline.name,
+        "description": pipeline.description,
+        "steps": [
+            {"name": s.name, "kind": s.kind.value, "config": s.config,
+             "depends_on": s.depends_on, "error_policy": s.error_policy.value}
+            for s in pipeline.steps
+        ],
+        "created_at": pipeline.created_at,
+    }
+
+
+@router.delete("/pipelines/{pipeline_id}")
+async def delete_pipeline(pipeline_id: str):
+    """Delete a pipeline definition."""
+    if not pipeline_engine.delete_pipeline(pipeline_id):
+        raise HTTPException(404, "Pipeline not found")
+    return {"deleted": True}
+
+
+@router.post("/pipelines/run")
+async def run_pipeline(data: PipelineExecute):
+    """Execute a pipeline."""
+    try:
+        run = await pipeline_engine.run(data.pipeline_id, data.initial_state)
+        return {
+            "run_id": run.id,
+            "pipeline_id": run.pipeline_id,
+            "status": run.status.value,
+            "progress": run.progress,
+            "steps": {k: {"status": v.status.value, "output": str(v.output)[:500] if v.output else None, "error": v.error}
+                      for k, v in run.steps.items()},
+            "total_duration_ms": run.total_duration_ms,
+        }
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Pipeline execution failed: {str(e)}")
+
+
+@router.get("/pipelines/runs/{run_id}")
+async def get_pipeline_run(run_id: str):
+    """Get a pipeline run status."""
+    run = pipeline_engine.get_run(run_id)
+    if not run:
+        raise HTTPException(404, "Pipeline run not found")
+    return {
+        "run_id": run.id,
+        "pipeline_id": run.pipeline_id,
+        "status": run.status.value,
+        "progress": run.progress,
+        "state": run.state,
+        "steps": {k: {"status": v.status.value, "output": str(v.output)[:500] if v.output else None,
+                     "error": v.error, "duration_ms": v.duration_ms}
+                  for k, v in run.steps.items()},
+        "total_duration_ms": run.total_duration_ms,
+        "started_at": run.started_at,
+        "completed_at": run.completed_at,
+    }
+
+
+@router.get("/pipeline-runs")
+async def list_pipeline_runs(pipeline_id: str | None = None, limit: int = 20):
+    """List pipeline run history."""
+    return {"runs": pipeline_engine.list_runs(pipeline_id, limit)}
+
+
+@router.get("/pipeline-stats")
+async def pipeline_stats():
+    """Get pipeline engine statistics."""
+    return pipeline_engine.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Semantic Cache — Intent-Aware Response Caching
+# ═══════════════════════════════════════════════════════════
+
+from agent.semantic_cache import semantic_cache
+
+
+@router.get("/cache/stats")
+async def cache_stats():
+    """Get semantic cache statistics."""
+    return semantic_cache.get_stats()
+
+
+@router.post("/cache/invalidate")
+async def invalidate_cache(agent_id: str = Query(default="")):
+    """Invalidate cache entries."""
+    semantic_cache.invalidate(agent_id)
+    return {"invalidated": True, "agent_id": agent_id or "all"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Capability Registry — Agent Skill Profiling
+# ═══════════════════════════════════════════════════════════
+
+from agent.capability import capability_registry, ProficiencyLevel, CapabilityDomain
+
+
+class CapabilityProfileUpdate(BaseModel):
+    agent_name: str = Field(default="")
+
+
+@router.get("/capabilities")
+async def list_capabilities(domain: str | None = None):
+    """List all capabilities, optionally filtered by domain."""
+    cap_domain = CapabilityDomain(domain) if domain else None
+    return {"capabilities": capability_registry.list_capabilities(cap_domain)}
+
+
+@router.get("/capabilities/domains")
+async def list_capability_domains():
+    """List all capability domains."""
+    return {"domains": capability_registry.list_domains()}
+
+
+@router.get("/capabilities/profiles/{agent_id}")
+async def get_capability_profile(agent_id: str):
+    """Get an agent's capability profile."""
+    summary = capability_registry.get_profile_summary(agent_id)
+    if not summary:
+        raise HTTPException(404, "Agent profile not found")
+    return summary
+
+
+@router.post("/capabilities/profiles/{agent_id}/update")
+async def update_capability_profile(agent_id: str, data: CapabilityProfileUpdate):
+    """Create or update agent capability profile."""
+    profile = capability_registry.get_or_create_profile(agent_id, data.agent_name)
+    summary = capability_registry.get_profile_summary(agent_id)
+    return summary or {}
+
+
+@router.post("/capabilities/profiles/{agent_id}/capabilities")
+async def add_agent_capability(
+    agent_id: str,
+    capability_id: str = Query(..., min_length=1),
+    score: float = Query(default=0.5, ge=0.0, le=1.0),
+):
+    """Add a capability to an agent."""
+    proficiency = capability_registry._score_to_level(score)
+    capability_registry.add_capability(agent_id, capability_id, proficiency, score)
+    return {"added": True, "capability_id": capability_id, "score": score}
+
+
+@router.post("/capabilities/profiles/{agent_id}/record-usage")
+async def record_capability_usage(
+    agent_id: str,
+    capability_id: str = Query(..., min_length=1),
+    success: bool = Query(default=True),
+):
+    """Record capability usage."""
+    capability_registry.record_usage(agent_id, capability_id, success)
+    return {"recorded": True}
+
+
+@router.post("/capabilities/match")
+async def match_agents_for_requirements(
+    required_capabilities: str = Query(..., min_length=1),
+    min_proficiency: str = Query(default="intermediate"),
+):
+    """Find agents matching capability requirements."""
+    caps = [c.strip() for c in required_capabilities.split(",") if c.strip()]
+    proficiency = ProficiencyLevel(min_proficiency)
+    results = capability_registry.find_agents_for_requirements(caps, proficiency)
+    return {"matches": results, "required": caps}
+
+
+@router.get("/capabilities/profiles/{agent_id}/gaps")
+async def get_capability_gaps(agent_id: str, domain: str | None = None):
+    """Get capability gaps for an agent."""
+    cap_domain = CapabilityDomain(domain) if domain else None
+    gaps = capability_registry.find_capability_gaps(agent_id, cap_domain)
+    return {"gaps": gaps, "agent_id": agent_id}
+
+
+@router.post("/capabilities/decay")
+async def apply_capability_decay():
+    """Apply time-based decay to all capability profiles."""
+    capability_registry.apply_decay()
+    return {"decay_applied": True}
+
+
+@router.get("/capability-stats")
+async def capability_stats():
+    """Get capability registry statistics."""
+    return capability_registry.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Knowledge Graph — Entity-Relationship Modeling
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import knowledge_graph, memory_sync_hub
+
+
+class EntityCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=256)
+    entity_type: str = Field(default="concept", max_length=64)
+    properties: dict = Field(default_factory=dict)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    source: str = Field(default="api")
+
+
+class RelationshipCreate(BaseModel):
+    source_id: str = Field(..., min_length=1)
+    target_id: str = Field(..., min_length=1)
+    relation_type: str = Field(default="related_to", max_length=64)
+    weight: float = Field(default=1.0, ge=0.0, le=10.0)
+    properties: dict = Field(default_factory=dict)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class KnowledgeExtractRequest(BaseModel):
+    text: str = Field(..., min_length=1)
+    source: str = Field(default="api")
+
+
+@router.get("/kg/stats")
+async def kg_stats():
+    """Get knowledge graph statistics."""
+    return knowledge_graph.get_stats()
+
+
+@router.get("/kg/entities")
+async def list_kg_entities(
+    entity_type: str | None = None,
+    name_contains: str = Query(default=""),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """List entities in the knowledge graph."""
+    entities = knowledge_graph.find_entities(
+        entity_type=entity_type,
+        name_contains=name_contains,
+        limit=limit,
+    )
+    return {
+        "entities": [
+            {"id": e.id, "name": e.name, "type": e.entity_type,
+             "properties": e.properties, "confidence": e.confidence}
+            for e in entities
+        ],
+        "count": len(entities),
+    }
+
+
+@router.post("/kg/entities", status_code=201)
+async def create_kg_entity(data: EntityCreate):
+    """Add an entity to the knowledge graph."""
+    from agent.knowledge_graph import Entity
+    entity = Entity(
+        id=f"ent-{uuid.uuid4().hex[:12]}",
+        name=data.name,
+        entity_type=data.entity_type,
+        properties=data.properties,
+        confidence=data.confidence,
+        source=data.source,
+    )
+    entity_id = knowledge_graph.add_entity(entity)
+    return {"entity_id": entity_id, "name": data.name, "type": data.entity_type}
+
+
+@router.get("/kg/entities/{entity_id}")
+async def get_kg_entity(entity_id: str):
+    """Get an entity by ID."""
+    entity = knowledge_graph.get_entity(entity_id)
+    if not entity:
+        raise HTTPException(404, "Entity not found")
+    return {
+        "id": entity.id,
+        "name": entity.name,
+        "type": entity.entity_type,
+        "properties": entity.properties,
+        "confidence": entity.confidence,
+        "source": entity.source,
+        "created_at": entity.created_at,
+    }
+
+
+class EntityUpdate(BaseModel):
+    properties: dict = Field(default_factory=dict)
+
+
+@router.patch("/kg/entities/{entity_id}")
+async def update_kg_entity(entity_id: str, data: EntityUpdate):
+    """Update entity properties."""
+    if not knowledge_graph.update_entity(entity_id, **data.properties):
+        raise HTTPException(404, "Entity not found")
+    return {"updated": True}
+
+
+@router.delete("/kg/entities/{entity_id}")
+async def delete_kg_entity(entity_id: str):
+    """Delete an entity and its relationships."""
+    if not knowledge_graph.remove_entity(entity_id):
+        raise HTTPException(404, "Entity not found")
+    return {"deleted": True}
+
+
+@router.post("/kg/relationships", status_code=201)
+async def create_kg_relationship(data: RelationshipCreate):
+    """Add a relationship between entities."""
+    from agent.knowledge_graph import Relationship
+    rel = Relationship(
+        id=f"rel-{uuid.uuid4().hex[:12]}",
+        source_id=data.source_id,
+        target_id=data.target_id,
+        relation_type=data.relation_type,
+        weight=data.weight,
+        properties=data.properties,
+        confidence=data.confidence,
+    )
+    rel_id = knowledge_graph.add_relationship(rel)
+    if not rel_id:
+        raise HTTPException(400, "One or both entities not found")
+    return {"relationship_id": rel_id, "type": data.relation_type}
+
+
+@router.get("/kg/entities/{entity_id}/relationships")
+async def get_entity_relationships(entity_id: str):
+    """Get all relationships for an entity."""
+    rels = knowledge_graph.get_relationships(entity_id)
+    return {
+        "relationships": [
+            {"id": r.id, "source": r.source_id, "target": r.target_id,
+             "type": r.relation_type, "weight": r.weight}
+            for r in rels
+        ],
+        "count": len(rels),
+    }
+
+
+@router.delete("/kg/relationships/{rel_id}")
+async def delete_kg_relationship(rel_id: str):
+    """Delete a relationship."""
+    if not knowledge_graph.remove_relationship(rel_id):
+        raise HTTPException(404, "Relationship not found")
+    return {"deleted": True}
+
+
+@router.get("/kg/entities/{entity_id}/neighborhood")
+async def get_kg_neighborhood(
+    entity_id: str,
+    depth: int = Query(default=1, ge=1, le=5),
+    max_entities: int = Query(default=50, ge=1, le=200),
+):
+    """Get the neighborhood around an entity."""
+    return knowledge_graph.get_neighborhood(entity_id, depth, max_entities)
+
+
+@router.get("/kg/paths")
+async def find_kg_paths(
+    source_id: str = Query(..., min_length=1),
+    target_id: str = Query(..., min_length=1),
+    max_depth: int = Query(default=5, ge=1, le=10),
+):
+    """Find paths between two entities."""
+    paths = knowledge_graph.find_paths(source_id, target_id, max_depth)
+    return {
+        "paths": [
+            {
+                "entities": [e.name for e in p.entities],
+                "relationship_types": [r.relation_type for r in p.relationships],
+                "path_length": p.path_length,
+                "total_weight": p.total_weight,
+            }
+            for p in paths
+        ],
+        "count": len(paths),
+    }
+
+
+@router.get("/kg/search")
+async def semantic_search_kg(
+    query: str = Query(..., min_length=1),
+    entity_type: str | None = None,
+    top_k: int = Query(default=10, ge=1, le=50),
+):
+    """Search entities semantically."""
+    results = await knowledge_graph.semantic_search(query, top_k, entity_type)
+    return {"results": results, "count": len(results), "query": query}
+
+
+@router.post("/kg/extract")
+async def extract_knowledge(data: KnowledgeExtractRequest):
+    """Extract entities and relationships from text."""
+    result = await knowledge_graph.extract_from_text(data.text, data.source)
+    return result
+
+
+@router.get("/kg/export")
+async def export_kg_subgraph(
+    entity_ids: str = Query(default=""),
+    include_neighbors: bool = Query(default=False),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    """Export subgraph or visualization data."""
+    if entity_ids:
+        ids = [e.strip() for e in entity_ids.split(",")]
+        return knowledge_graph.export_subgraph(ids, include_neighbors)
+    return knowledge_graph.get_visualization_data(limit)
+
+
+@router.post("/kg/clear")
+async def clear_knowledge_graph():
+    """Clear the knowledge graph."""
+    knowledge_graph.clear()
+    return {"cleared": True}
+
+
+# ═══════════════════════════════════════════════════════════
+# Memory Sync — Cross-Agent Memory Synchronization
+# ═══════════════════════════════════════════════════════════
+
+
+class SyncGroupCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    agent_ids: list[str] = Field(..., min_length=1)
+    sync_interval: int = Field(default=600, ge=60, le=86400)
+    filters: dict = Field(default_factory=dict)
+
+
+class SyncGroupUpdate(BaseModel):
+    name: str | None = None
+    agent_ids: list[str] | None = None
+    sync_interval: int | None = None
+    enabled: bool | None = None
+
+
+class ShareMemoryRequest(BaseModel):
+    source_agent_id: str = Field(..., min_length=1)
+    target_agent_id: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1)
+    memory_type: str = Field(default="event")
+    importance: float = Field(default=0.5, ge=0.0, le=1.0)
+    tags: list[str] = Field(default_factory=list)
+
+
+class BroadcastMemoryRequest(BaseModel):
+    source_agent_id: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1)
+    memory_type: str = Field(default="event")
+    importance: float = Field(default=0.5, ge=0.0, le=1.0)
+    tags: list[str] = Field(default_factory=list)
+    target_role: str = Field(default="")
+
+
+@router.get("/memory-sync/stats")
+async def memory_sync_stats():
+    """Get memory sync hub statistics."""
+    return memory_sync_hub.get_stats()
+
+
+@router.get("/memory-sync/config")
+async def memory_sync_config():
+    """Get memory sync configuration."""
+    return memory_sync_hub.get_config()
+
+
+@router.post("/memory-sync/config")
+async def update_memory_sync_config(
+    max_shared_per_agent: int | None = None,
+    max_broadcast_agents: int | None = None,
+    default_sync_interval: int | None = None,
+    auto_sync_enabled: bool | None = None,
+):
+    """Update memory sync configuration."""
+    memory_sync_hub.update_config(
+        max_shared_per_agent=max_shared_per_agent,
+        max_broadcast_agents=max_broadcast_agents,
+        default_sync_interval=default_sync_interval,
+        auto_sync_enabled=auto_sync_enabled,
+    )
+    return memory_sync_hub.get_config()
+
+
+@router.post("/memory-sync/share")
+async def share_memory_between_agents(data: ShareMemoryRequest):
+    """Share a memory from one agent to another."""
+    memory_id = await memory_sync_hub.share_memory(
+        source_agent_id=data.source_agent_id,
+        target_agent_id=data.target_agent_id,
+        content=data.content,
+        memory_type=data.memory_type,
+        importance=data.importance,
+        tags=data.tags,
+    )
+    if not memory_id:
+        raise HTTPException(500, "Failed to share memory")
+    return {
+        "shared": True,
+        "memory_id": memory_id,
+        "source": data.source_agent_id,
+        "target": data.target_agent_id,
+    }
+
+
+@router.post("/memory-sync/broadcast")
+async def broadcast_memory(data: BroadcastMemoryRequest):
+    """Broadcast a memory to multiple agents."""
+    result = await memory_sync_hub.broadcast_memory(
+        source_agent_id=data.source_agent_id,
+        content=data.content,
+        memory_type=data.memory_type,
+        importance=data.importance,
+        tags=data.tags,
+        target_role=data.target_role,
+    )
+    return result
+
+
+@router.get("/memory-sync/search")
+async def search_across_agents(
+    query: str = Query(..., min_length=1),
+    agent_ids: str = Query(default=""),
+    limit: int = Query(default=10, ge=1, le=50),
+):
+    """Search across multiple agents' memories."""
+    id_list = [a.strip() for a in agent_ids.split(",") if a.strip()] if agent_ids else None
+    results = await memory_sync_hub.search_across_agents(
+        query=query,
+        agent_ids=id_list,
+        limit=limit,
+    )
+    return {"results": results, "count": len(results), "query": query}
+
+
+@router.get("/memory-sync/context")
+async def get_shared_context(
+    agent_id: str = Query(..., min_length=1),
+    topic: str = Query(..., min_length=1),
+    max_memories: int = Query(default=10, ge=1, le=50),
+):
+    """Get relevant shared memories for a topic."""
+    context = await memory_sync_hub.get_shared_context(
+        agent_id=agent_id,
+        topic=topic,
+        max_memories=max_memories,
+    )
+    return {"context": context, "agent_id": agent_id, "topic": topic}
+
+
+@router.get("/memory-sync/groups")
+async def list_sync_groups():
+    """List all memory sync groups."""
+    return {"groups": memory_sync_hub.list_sync_groups()}
+
+
+@router.post("/memory-sync/groups", status_code=201)
+async def create_sync_group(data: SyncGroupCreate):
+    """Create a new memory sync group."""
+    group_id = memory_sync_hub.create_sync_group(
+        name=data.name,
+        agent_ids=data.agent_ids,
+        sync_interval=data.sync_interval,
+        filters=data.filters,
+    )
+    return {"group_id": group_id, "name": data.name, "agent_count": len(data.agent_ids)}
+
+
+@router.get("/memory-sync/groups/{group_id}")
+async def get_sync_group(group_id: str):
+    """Get a sync group by ID."""
+    group = memory_sync_hub.get_sync_group(group_id)
+    if not group:
+        raise HTTPException(404, "Sync group not found")
+    return {
+        "id": group.id,
+        "name": group.name,
+        "agent_ids": group.agent_ids,
+        "sync_interval": group.sync_interval,
+        "last_sync": group.last_sync,
+        "enabled": group.enabled,
+        "filters": group.filters,
+    }
+
+
+@router.put("/memory-sync/groups/{group_id}")
+async def update_sync_group(group_id: str, data: SyncGroupUpdate):
+    """Update a sync group."""
+    success = memory_sync_hub.update_sync_group(
+        group_id=group_id,
+        name=data.name,
+        agent_ids=data.agent_ids,
+        sync_interval=data.sync_interval,
+        enabled=data.enabled,
+    )
+    if not success:
+        raise HTTPException(404, "Sync group not found")
+    return {"updated": True, "group_id": group_id}
+
+
+@router.delete("/memory-sync/groups/{group_id}")
+async def delete_sync_group(group_id: str):
+    """Delete a sync group."""
+    if not memory_sync_hub.remove_sync_group(group_id):
+        raise HTTPException(404, "Sync group not found")
+    return {"deleted": True}
+
+
+@router.post("/memory-sync/groups/{group_id}/sync")
+async def trigger_group_sync(group_id: str):
+    """Manually trigger sync for a group."""
+    result = await memory_sync_hub.sync_group_memories(group_id)
+    return result
+
+
+@router.get("/memory-sync/records")
+async def list_shared_records(
+    source_agent_id: str | None = None,
+    target_agent_id: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """List shared memory records."""
+    records = memory_sync_hub.list_shared_memories(
+        source_agent_id=source_agent_id,
+        target_agent_id=target_agent_id,
+        limit=limit,
+    )
+    return {
+        "records": [
+            {
+                "id": r.id,
+                "source_agent_id": r.source_agent_id,
+                "target_agent_id": r.target_agent_id,
+                "content": r.content[:200],
+                "memory_type": r.memory_type,
+                "importance": r.importance,
+                "tags": r.tags,
+                "shared_at": r.shared_at,
+                "access_count": r.access_count,
+            }
+            for r in records
+        ],
+        "count": len(records),
+    }
+
+
+# ── Reactive Loop APIs ──────────────────────────────────
+
+class ReactiveLoopStartRequest(BaseModel):
+    agent_id: str
+    mode: str = Field(default="reactive")
+    cycle_interval_ms: int = Field(default=5000, ge=1000, le=60000)
+
+
+class ReactiveLoopObserveRequest(BaseModel):
+    source: str = Field(..., min_length=1)
+    summary: str = Field(..., min_length=1)
+    priority: float = Field(default=0.5, ge=0.0, le=1.0)
+    data: dict = Field(default_factory=dict)
+
+
+class ReactiveLoopEnqueueRequest(BaseModel):
+    description: str = Field(..., min_length=1)
+    priority: float = Field(default=0.5, ge=0.0, le=1.0)
+    handler: str = Field(default="")
+    payload: dict = Field(default_factory=dict)
+    depends_on: list[str] = Field(default_factory=list)
+
+
+@router.get("/reactive-loop/{agent_id}/stats")
+async def get_reactive_loop_stats(agent_id: str):
+    """Get reactive loop statistics for an agent."""
+    engine = orchestrator._engines.get(agent_id)
+    if not engine or not hasattr(engine, '_reactive_loop'):
+        raise HTTPException(404, "Reactive loop not found for this agent")
+
+    loop = engine._reactive_loop
+    if not loop:
+        raise HTTPException(404, "Reactive loop not initialized")
+
+    return loop.get_stats()
+
+
+@router.post("/reactive-loop/{agent_id}/start")
+async def start_reactive_loop(agent_id: str, data: ReactiveLoopStartRequest):
+    """Start the reactive loop for an agent."""
+    engine = orchestrator._engines.get(agent_id)
+    if not engine:
+        raise HTTPException(404, "Agent engine not found")
+
+    from agent.reactive_loop import ReactiveLoop, LoopMode
+    if not hasattr(engine, '_reactive_loop') or engine._reactive_loop is None:
+        engine._reactive_loop = ReactiveLoop(
+            agent_id=agent_id,
+            mode=LoopMode(data.mode) if data.mode in [m.value for m in LoopMode] else LoopMode.REACTIVE,
+            cycle_interval_ms=data.cycle_interval_ms,
+        )
+
+    if not engine._reactive_loop.is_running:
+        await engine._reactive_loop.start()
+
+    return {
+        "agent_id": agent_id,
+        "started": True,
+        "mode": engine._reactive_loop.mode.value,
+    }
+
+
+@router.post("/reactive-loop/{agent_id}/stop")
+async def stop_reactive_loop(agent_id: str):
+    """Stop the reactive loop for an agent."""
+    engine = orchestrator._engines.get(agent_id)
+    if not engine or not hasattr(engine, '_reactive_loop'):
+        raise HTTPException(404, "Reactive loop not found")
+
+    loop = engine._reactive_loop
+    if loop and loop.is_running:
+        await loop.stop()
+
+    return {"agent_id": agent_id, "stopped": True}
+
+
+@router.post("/reactive-loop/{agent_id}/observe")
+async def reactive_loop_observe(agent_id: str, data: ReactiveLoopObserveRequest):
+    """Feed an observation into the reactive loop."""
+    engine = orchestrator._engines.get(agent_id)
+    if not engine or not hasattr(engine, '_reactive_loop'):
+        raise HTTPException(404, "Reactive loop not found")
+
+    loop = engine._reactive_loop
+    if not loop:
+        raise HTTPException(404, "Reactive loop not initialized")
+
+    loop.observe(
+        source=data.source,
+        summary=data.summary,
+        priority=data.priority,
+        data=data.data,
+    )
+
+    return {"agent_id": agent_id, "observed": True}
+
+
+@router.post("/reactive-loop/{agent_id}/enqueue")
+async def reactive_loop_enqueue(agent_id: str, data: ReactiveLoopEnqueueRequest):
+    """Enqueue an action into the reactive loop."""
+    engine = orchestrator._engines.get(agent_id)
+    if not engine or not hasattr(engine, '_reactive_loop'):
+        raise HTTPException(404, "Reactive loop not found")
+
+    loop = engine._reactive_loop
+    if not loop:
+        raise HTTPException(404, "Reactive loop not initialized")
+
+    action_id = loop.enqueue_action(
+        description=data.description,
+        priority=data.priority,
+        handler=data.handler,
+        payload=data.payload,
+        depends_on=data.depends_on,
+    )
+
+    return {"agent_id": agent_id, "action_id": action_id, "enqueued": True}
+
+
+@router.get("/reactive-loop/{agent_id}/actions")
+async def reactive_loop_actions(agent_id: str, limit: int = Query(default=20, ge=1, le=100)):
+    """Get pending/recent actions from the reactive loop."""
+    engine = orchestrator._engines.get(agent_id)
+    if not engine or not hasattr(engine, '_reactive_loop'):
+        raise HTTPException(404, "Reactive loop not found")
+
+    loop = engine._reactive_loop
+    if not loop:
+        raise HTTPException(404, "Reactive loop not initialized")
+
+    return {
+        "agent_id": agent_id,
+        "actions": loop.get_pending_actions(limit),
+    }
+
+
+@router.get("/reactive-loop/{agent_id}/cycles")
+async def reactive_loop_cycles(agent_id: str, limit: int = Query(default=10, ge=1, le=100)):
+    """Get recent cycle history from the reactive loop."""
+    engine = orchestrator._engines.get(agent_id)
+    if not engine or not hasattr(engine, '_reactive_loop'):
+        raise HTTPException(404, "Reactive loop not found")
+
+    loop = engine._reactive_loop
+    if not loop:
+        raise HTTPException(404, "Reactive loop not initialized")
+
+    return {
+        "agent_id": agent_id,
+        "cycles": loop.get_recent_cycles(limit),
+    }
+
+
+@router.post("/reactive-loop/{agent_id}/mode")
+async def set_reactive_loop_mode(agent_id: str, mode: str = Query(..., description="Operating mode: passive, reactive, proactive, autonomous")):
+    """Change the operating mode of the reactive loop."""
+    from agent.reactive_loop import LoopMode
+
+    engine = orchestrator._engines.get(agent_id)
+    if not engine or not hasattr(engine, '_reactive_loop'):
+        raise HTTPException(404, "Reactive loop not found")
+
+    loop = engine._reactive_loop
+    if not loop:
+        raise HTTPException(404, "Reactive loop not initialized")
+
+    valid_modes = [m.value for m in LoopMode]
+    if mode not in valid_modes:
+        raise HTTPException(400, f"Invalid mode. Must be one of: {', '.join(valid_modes)}")
+
+    loop.set_mode(LoopMode(mode))
+
+    return {"agent_id": agent_id, "mode": mode}
+
+
+# ── Platform Hub APIs ──────────────────────────────────
+
+class PlatformConfigUpdate(BaseModel):
+    auto_restart_subsystems: bool | None = None
+    health_check_interval_ms: int | None = Field(default=None, ge=5000, le=300000)
+    max_subsystem_restarts: int | None = Field(default=None, ge=1, le=20)
+
+
+@router.get("/platform/hub/health")
+async def get_platform_health():
+    """Get comprehensive platform health status."""
+    return platform_hub.get_health()
+
+
+@router.get("/platform/hub/stats")
+async def get_platform_stats():
+    """Get platform hub statistics."""
+    return platform_hub.get_stats()
+
+
+@router.get("/platform/hub/config")
+async def get_platform_config():
+    """Get platform hub configuration."""
+    return platform_hub.get_config()
+
+
+@router.post("/platform/hub/config")
+async def update_platform_config(data: PlatformConfigUpdate):
+    """Update platform hub configuration."""
+    updates = {k: v for k, v in data.model_dump().items() if v is not None}
+    platform_hub.update_config(updates)
+    return {"updated": True, "config": platform_hub.get_config()}
+
+
+@router.get("/platform/hub/subsystems")
+async def list_platform_subsystems():
+    """List all platform subsystems and their status."""
+    subsystems = {}
+    for name in PlatformSubsystem.__members__.values():
+        subsystems[name.value] = platform_hub.get_subsystem_info(name.value)
+    return {"subsystems": subsystems}
+
+
+@router.get("/platform/hub/subsystems/{subsystem_name}")
+async def get_platform_subsystem(subsystem_name: str):
+    """Get detailed info for a specific subsystem."""
+    info = platform_hub.get_subsystem_info(subsystem_name)
+    if not info:
+        raise HTTPException(404, f"Subsystem not found: {subsystem_name}")
+    return info
+
+
+@router.get("/platform/hub/events")
+async def get_platform_events(
+    limit: int = Query(default=50, ge=1, le=200),
+    event_type: str | None = None,
+):
+    """Get recent platform events."""
+    return {
+        "events": platform_hub.get_recent_events(limit=limit, event_type=event_type),
+    }
+
+
+@router.post("/platform/hub/start")
+async def start_platform_hub():
+    """Start the platform hub and all subsystems."""
+    if platform_hub.is_running:
+        return {"started": False, "message": "Platform hub is already running"}
+
+    await platform_hub.start()
+    return {
+        "started": True,
+        "health": platform_hub.get_health(),
+    }
+
+
+@router.post("/platform/hub/stop")
+async def stop_platform_hub():
+    """Stop the platform hub and all subsystems."""
+    if not platform_hub.is_running:
+        return {"stopped": False, "message": "Platform hub is not running"}
+
+    await platform_hub.stop()
+    return {"stopped": True}
+
+
+# ── Platform Hub SSE Event Stream ─────────────────────────
+
+@router.get("/platform/hub/stream")
+async def platform_event_stream():
+    """SSE stream for real-time platform events."""
+    import asyncio
+
+    async def event_generator():
+        # Send initial health status
+        health = platform_hub.get_health()
+        yield f"data: {json.dumps({'type': 'health', 'data': health})}\n\n"
+
+        stats = platform_hub.get_stats()
+        yield f"data: {json.dumps({'type': 'stats', 'data': stats})}\n\n"
+
+        recent_events = platform_hub.get_recent_events(limit=20)
+        yield f"data: {json.dumps({'type': 'events', 'data': recent_events})}\n\n"
+
+        # Stream new events every 2 seconds
+        last_event_idx = len(platform_hub._event_history)
+        while True:
+            await asyncio.sleep(2)
+            current_events = platform_hub._event_history
+            if len(current_events) > last_event_idx:
+                new_events = current_events[last_event_idx:]
+                last_event_idx = len(current_events)
+                for event in new_events:
+                    yield f"data: {json.dumps({'type': 'event', 'data': {'id': event.id, 'source': event.source, 'event_type': event.event_type, 'severity': event.severity, 'data': event.data, 'timestamp': event.timestamp}})}\n\n"
+
+            # Send heartbeat to keep connection alive
+            yield f": heartbeat\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ── Platform Hub Agent Routing ───────────────────────────
+
+@router.post("/platform/hub/routing/register")
+async def register_agent_route(task_type: str = Query(..., min_length=1), agent_id: str = Query(..., min_length=1)):
+    """Register an agent as the handler for a specific task type."""
+    platform_hub.register_agent_route(task_type, agent_id)
+    return {"task_type": task_type, "agent_id": agent_id, "registered": True}
+
+
+@router.get("/platform/hub/routing/table")
+async def get_agent_routing_table():
+    """Get the complete agent routing table."""
+    return platform_hub.get_routing_table()
+
+
+@router.get("/platform/hub/routing/resolve")
+async def resolve_agent_route(task_type: str = Query(..., min_length=1)):
+    """Resolve which agent should handle a given task type."""
+    agent_id = platform_hub.resolve_agent_route(task_type)
+    return {"task_type": task_type, "agent_id": agent_id}
+
+
+# ── Platform Hub Performance Metrics ──────────────────────
+
+@router.get("/platform/hub/metrics")
+async def get_platform_metrics():
+    """Get aggregated performance metrics for all subsystems."""
+    return platform_hub.get_performance_metrics()
+
+
+@router.post("/platform/hub/metrics/record")
+async def record_platform_metric(subsystem: str = Query(..., min_length=1), latency_ms: float = Query(..., ge=0)):
+    """Record a performance metric for a subsystem."""
+    platform_hub.record_metric(subsystem, latency_ms)
+    return {"subsystem": subsystem, "latency_ms": latency_ms, "recorded": True}
+
+
+@router.get("/platform/hub/dependencies")
+async def get_subsystem_dependencies():
+    """Get the subsystem dependency graph."""
+    return platform_hub.get_dependency_graph()
+
+
+# ── Cost Analytics APIs ──────────────────────────────────
+
+@router.get("/costs/overview")
+async def get_cost_overview():
+    """Get overall cost summary across all agents."""
+    return cost_tracker.get_system_overview()
+
+
+@router.get("/costs/breakdown")
+async def get_cost_breakdown(period: str = "daily"):
+    """Get cost breakdown by period (daily, weekly, monthly)."""
+    return cost_tracker.get_cost_breakdown(period)
+
+
+@router.get("/costs/by-tier")
+async def get_cost_by_tier():
+    """Get cost breakdown by model tier (light/standard/premium)."""
+    return cost_tracker.get_cost_by_tier()
+
+
+@router.get("/costs/suggestions")
+async def get_cost_suggestions():
+    """Get optimization suggestions for cost reduction."""
+    return cost_tracker.get_optimization_suggestions()
+
+
+@router.get("/costs/budgets")
+async def get_cost_budgets():
+    """Get current budget status and alerts."""
+    return cost_tracker.get_budget_status()
+
+
+@router.get("/costs/projections")
+async def get_cost_projections(days: int = 30):
+    """Get cost projections for the specified number of days."""
+    return cost_tracker.project_costs(days)
+
+
+# ── Workspace Management APIs ────────────────────────────
+
+class CreateWorkspaceRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: str = Field(default="", max_length=500)
+
+
+@router.get("/workspaces")
+async def list_workspaces():
+    """List all workspaces."""
+    workspaces = enterprise_hub.list_workspaces()
+    active = enterprise_hub.get_active_workspace()
+    return {
+        "workspaces": [
+            {
+                "id": w.id,
+                "name": w.name,
+                "description": w.description,
+                "filesystem_path": str(w.filesystem_path),
+                "created_at": w.created_at,
+                "updated_at": w.updated_at,
+                "is_active": active is not None and w.id == active.id,
+            }
+            for w in workspaces
+        ]
+    }
+
+
+@router.get("/workspaces/stats")
+async def get_workspace_stats():
+    """Get aggregate workspace statistics."""
+    return enterprise_hub.get_hub_stats()
+
+
+@router.post("/workspaces")
+async def create_workspace(data: CreateWorkspaceRequest):
+    """Create a new isolated workspace."""
+    ws = enterprise_hub.create_workspace(data.name, data.description)
+    return {
+        "id": ws.id,
+        "name": ws.name,
+        "description": ws.description,
+        "filesystem_path": str(ws.filesystem_path),
+        "created_at": ws.created_at,
+        "updated_at": ws.updated_at,
+        "is_active": True,
+    }
+
+
+@router.get("/workspaces/{workspace_id}")
+async def get_workspace(workspace_id: str):
+    """Get workspace details."""
+    ws = enterprise_hub.get_workspace(workspace_id)
+    stats = enterprise_hub.get_workspace_stats(workspace_id)
+    active = enterprise_hub.get_active_workspace()
+    return {
+        "id": ws.id,
+        "name": ws.name,
+        "description": ws.description,
+        "filesystem_path": str(ws.filesystem_path),
+        "created_at": ws.created_at,
+        "updated_at": ws.updated_at,
+        "is_active": active is not None and ws.id == active.id,
+        "stats": stats,
+    }
+
+
+@router.delete("/workspaces/{workspace_id}")
+async def delete_workspace(workspace_id: str):
+    """Delete a workspace."""
+    enterprise_hub.delete_workspace(workspace_id)
+    return {"deleted": True, "workspace_id": workspace_id}
+
+
+@router.post("/workspaces/{workspace_id}/activate")
+async def activate_workspace(workspace_id: str):
+    """Switch to a workspace."""
+    enterprise_hub.switch_context(workspace_id)
+    return {"activated": True, "workspace_id": workspace_id}
+
+
+@router.get("/workspaces/{workspace_id}/export")
+async def export_workspace(workspace_id: str):
+    """Export workspace configuration as JSON."""
+    config = enterprise_hub.export_workspace_config_json(workspace_id)
+    return config
+
+
+# ═══════════════════════════════════════════════════════════
+# Proactive Discovery
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/agents/{agent_id}/proactive/status")
+async def get_proactive_status(agent_id: str):
+    """Get proactive discovery engine status."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    return engine.proactive.get_stats()
+
+
+@router.get("/agents/{agent_id}/proactive/tasks")
+async def get_proactive_tasks(
+    agent_id: str,
+    status: str | None = None,
+    source: str | None = None,
+    urgency: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Get proactively discovered tasks with optional filtering."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    tasks = engine.proactive.get_tasks(
+        status=status,
+        source=source,
+        urgency=urgency,
+        limit=limit,
+    )
+    return {"tasks": tasks, "total": len(tasks)}
+
+
+@router.get("/agents/{agent_id}/proactive/insights")
+async def get_proactive_insights(agent_id: str, limit: int = Query(20, ge=1, le=100)):
+    """Get discovery insights."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    insights = engine.proactive.get_insights(limit=limit)
+    return {"insights": insights, "total": len(insights)}
+
+
+@router.post("/agents/{agent_id}/proactive/scan")
+async def run_proactive_scan(agent_id: str):
+    """Run an immediate proactive discovery scan."""
+    async with async_session() as session:
+        result = await session.execute(select(AgentModel).where(AgentModel.id == agent_id))
+        agent = result.scalars().first()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+
+    engine = orchestrator.get_engine(
+        agent_id=agent.id,
+        agent_name=agent.name,
+        instructions=agent.instructions or "",
+    )
+
+    scan_result = await engine.proactive.scan(
+        memory_system=engine.memory,
+    )
+
+    return {
+        "tasks_discovered": len(scan_result.tasks),
+        "insights": scan_result.insights,
+        "patterns_detected": scan_result.patterns_detected,
+        "scan_duration_ms": scan_result.scan_duration_ms,
+        "scanned_at": scan_result.scanned_at,
+        "tasks": [t.to_dict() for t in scan_result.tasks],
+    }
+
+
+@router.post("/agents/{agent_id}/proactive/start")
+async def start_proactive_discovery(agent_id: str, interval: int = Query(600, ge=60, le=86400)):
+    """Start the always-on proactive discovery loop."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    await engine.proactive.start(interval=interval)
+    return {"status": "started", "agent_id": agent_id, "interval": interval}
+
+
+@router.post("/agents/{agent_id}/proactive/stop")
+async def stop_proactive_discovery(agent_id: str):
+    """Stop the proactive discovery loop."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    await engine.proactive.stop()
+    return {"status": "stopped", "agent_id": agent_id}
+
+
+@router.post("/agents/{agent_id}/proactive/tasks/{task_id}/schedule")
+async def schedule_proactive_task(agent_id: str, task_id: str):
+    """Schedule a discovered task for execution."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    success = engine.proactive.schedule_task(task_id)
+    if not success:
+        raise HTTPException(400, "Task cannot be scheduled")
+    return {"status": "scheduled", "task_id": task_id}
+
+
+@router.post("/agents/{agent_id}/proactive/tasks/{task_id}/dismiss")
+async def dismiss_proactive_task(agent_id: str, task_id: str):
+    """Dismiss a discovered task."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    success = engine.proactive.dismiss_task(task_id)
+    if not success:
+        raise HTTPException(404, "Task not found")
+    return {"status": "dismissed", "task_id": task_id}
+
+
+@router.post("/agents/{agent_id}/proactive/tasks/{task_id}/complete")
+async def complete_proactive_task(agent_id: str, task_id: str):
+    """Mark a discovered task as completed."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    success = engine.proactive.complete_task(task_id)
+    if not success:
+        raise HTTPException(404, "Task not found")
+    return {"status": "completed", "task_id": task_id}
+
+
+# ═══════════════════════════════════════════════════════════
+# Meta-Cognition
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/agents/{agent_id}/metacognition/stats")
+async def get_metacognition_stats(agent_id: str):
+    """Get meta-cognition strategy statistics."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    return engine.get_metacognition_stats()
+
+
+@router.get("/agents/{agent_id}/metacognition/insights")
+async def get_metacognition_insights(agent_id: str):
+    """Get actionable insights from metacognition learning."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    insights = engine.get_metacognition_insights()
+    return {"agent_id": agent_id, "insights": insights, "count": len(insights)}
+
+
+@router.get("/agents/{agent_id}/metacognition/decisions")
+async def get_metacognition_decisions(agent_id: str, limit: int = Query(20, ge=1, le=100)):
+    """Get recent strategy decisions with their outcomes."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    decisions = engine.metacognition.get_recent_decisions(limit=limit)
+    return {"agent_id": agent_id, "decisions": decisions, "count": len(decisions)}
+
+
+# ═══════════════════════════════════════════════════════════
+# Proactive-Autopilot Bridge
+# ═══════════════════════════════════════════════════════════
+
+@router.post("/agents/{agent_id}/bridge/proactive-to-autopilot")
+async def bridge_proactive_to_autopilot(agent_id: str, max_tasks: int = Query(5, ge=1, le=50)):
+    """Bridge proactively discovered tasks to the autopilot scheduler."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    result = await engine.bridge_proactive_to_autopilot(max_tasks=max_tasks)
+    return result
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Evolution
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/agents/{agent_id}/evolution/stats")
+async def get_evolution_stats(agent_id: str):
+    """Get agent evolution optimization statistics."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    return engine.get_evolution_stats()
+
+
+@router.get("/agents/{agent_id}/evolution/pathways")
+async def get_evolution_pathways(agent_id: str):
+    """Get discovered optimization pathways."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    pathways = engine.get_evolution_pathways()
+    return {"agent_id": agent_id, "pathways": pathways, "count": len(pathways)}
+
+
+@router.get("/agents/{agent_id}/evolution/insights")
+async def get_evolution_insights(agent_id: str):
+    """Get evolution optimization insights."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    insights = engine.get_evolution_insights()
+    return {"agent_id": agent_id, "insights": insights, "count": len(insights)}
+
+
+@router.post("/agents/{agent_id}/evolution/run")
+async def run_evolution_cycle(agent_id: str):
+    """Run an evolution analysis cycle."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    result = await engine.run_evolution_cycle()
+    return result
+
+
+# ═══════════════════════════════════════════════════════════
+# Proactive Interactions
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/agents/{agent_id}/proactive/interactions")
+async def get_proactive_interactions(agent_id: str, limit: int = Query(20, ge=1, le=100)):
+    """Get recent interactions observed by the proactive discovery engine."""
+    engine = orchestrator.get_engine(agent_id, "", "")
+    interactions = engine.proactive.get_recent_interactions(limit=limit)
+    return {"agent_id": agent_id, "interactions": interactions, "count": len(interactions)}
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Communication Protocol
+# ═══════════════════════════════════════════════════════════
+
+from agent.comm_protocol import agent_comm, AgentMessage, MessageType, MessagePriority, DelegationRequest, ContextShare
+
+
+@router.get("/comm/stats")
+async def get_comm_stats():
+    """Get agent communication protocol statistics."""
+    return agent_comm.get_stats()
+
+
+@router.get("/comm/messages")
+async def get_recent_messages(limit: int = Query(50, ge=1, le=200)):
+    """Get recent inter-agent messages."""
+    messages = agent_comm.get_recent_messages(limit=limit)
+    return {"messages": messages, "count": len(messages)}
+
+
+@router.post("/comm/send")
+async def send_agent_message(
+    sender_id: str = Query(..., min_length=1),
+    recipient_id: str = Query(default=""),
+    subject: str = Query(default=""),
+    content: str = Query(..., min_length=1),
+    msg_type: str = Query(default="direct"),
+    priority: str = Query(default="normal"),
+):
+    """Send a message between agents."""
+    if msg_type == "broadcast":
+        msg = await agent_comm.broadcast(
+            sender_id=sender_id,
+            subject=subject,
+            content=content,
+            priority=MessagePriority(priority) if priority in [p.value for p in MessagePriority] else MessagePriority.NORMAL,
+        )
+    else:
+        msg = await agent_comm.direct_message(
+            sender_id=sender_id,
+            recipient_id=recipient_id,
+            subject=subject,
+            content=content,
+            priority=MessagePriority(priority) if priority in [p.value for p in MessagePriority] else MessagePriority.NORMAL,
+        )
+    return {
+        "id": msg.id,
+        "type": msg.msg_type.value,
+        "status": msg.status.value,
+        "sender": msg.sender_id,
+        "recipient": msg.recipient_id,
+        "subject": msg.subject,
+        "created_at": msg.created_at,
+    }
+
+
+@router.post("/comm/delegate")
+async def delegate_task(request: dict):
+    """Delegate a task from one agent to another."""
+    delegation = DelegationRequest(
+        from_agent_id=request.get("from_agent_id", ""),
+        to_agent_id=request.get("to_agent_id", ""),
+        task_description=request.get("task_description", ""),
+        task_context=request.get("task_context", {}),
+        required_capabilities=request.get("required_capabilities", []),
+        priority=MessagePriority(request.get("priority", "normal")),
+    )
+    result = await agent_comm.delegate_task(delegation)
+    return {
+        "id": result.id,
+        "status": result.status,
+        "from_agent_id": result.from_agent_id,
+        "to_agent_id": result.to_agent_id,
+        "response_reason": result.response_reason,
+    }
+
+
+@router.get("/comm/delegations/pending")
+async def get_pending_delegations(agent_id: str = Query(..., min_length=1)):
+    """Get pending delegations for an agent."""
+    delegations = agent_comm.get_pending_delegations(agent_id)
+    return {
+        "agent_id": agent_id,
+        "delegations": [
+            {
+                "id": d.id,
+                "from_agent_id": d.from_agent_id,
+                "task_description": d.task_description,
+                "priority": d.priority.value,
+                "status": d.status,
+                "created_at": d.created_at,
+            }
+            for d in delegations
+        ],
+        "count": len(delegations),
+    }
+
+
+@router.post("/comm/agents/register")
+async def register_comm_agent(
+    agent_id: str = Query(..., min_length=1),
+    capabilities: str = Query(default=""),
+):
+    """Register an agent with the communication protocol."""
+    caps = [c.strip() for c in capabilities.split(",") if c.strip()] if capabilities else None
+    agent_comm.register_agent(agent_id, caps)
+    return {"agent_id": agent_id, "registered": True, "capabilities": caps or []}
+
+
+@router.post("/comm/agents/unregister")
+async def unregister_comm_agent(agent_id: str = Query(..., min_length=1)):
+    """Unregister an agent from the communication protocol."""
+    agent_comm.unregister_agent(agent_id)
+    return {"agent_id": agent_id, "unregistered": True}
+
+
+@router.get("/comm/agents/online")
+async def get_online_agents():
+    """Get all online agents."""
+    online = [
+        {"agent_id": aid, "capabilities": agent_comm.get_agent_capabilities(aid)}
+        for aid, is_online in agent_comm._agent_online_status.items()
+        if is_online
+    ]
+    return {"agents": online, "count": len(online)}
+
+
+# ═══════════════════════════════════════════════════════════
+# Resource Manager
+# ═══════════════════════════════════════════════════════════
+
+from agent.resource_manager import resource_manager
+
+
+@router.get("/resources/stats")
+async def get_resource_stats():
+    """Get comprehensive resource management statistics."""
+    return resource_manager.get_stats()
+
+
+@router.get("/resources/usage")
+async def get_agent_resource_usage(agent_id: str = Query(..., min_length=1)):
+    """Get resource usage summary for a specific agent."""
+    return resource_manager.get_agent_usage(agent_id)
+
+
+@router.get("/resources/alerts")
+async def get_resource_alerts(limit: int = Query(20, ge=1, le=100), severity: str = Query(default="")):
+    """Get recent resource alerts."""
+    alerts = resource_manager.get_alerts(limit=limit, severity=severity or None)
+    return {"alerts": alerts, "count": len(alerts)}
+
+
+@router.get("/resources/status")
+async def get_resource_status(resource_type: str = Query(..., min_length=1)):
+    """Get the current availability status of a resource type."""
+    from agent.resource_manager import ResourceType
+    try:
+        rt = ResourceType(resource_type)
+        status = resource_manager.get_status(rt)
+        quota = resource_manager.get_quota(rt)
+        return {
+            "resource_type": rt.value,
+            "status": status.value,
+            "max_limit": quota.max_limit,
+            "soft_limit": quota.soft_limit,
+            "current_usage": quota.current_usage,
+            "usage_fraction": round(quota.current_usage / max(quota.max_limit, 1), 3),
+        }
+    except ValueError:
+        return {"error": f"Unknown resource type: {resource_type}"}
+
+
+@router.post("/resources/reset")
+async def reset_all_resources():
+    """Reset all resource quotas."""
+    resource_manager.reset_all_quotas()
+    return {"reset": True, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+# ═══════════════════════════════════════════════════════════
+# Activity Events API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/events")
+async def get_recent_events(
+    agent_id: str | None = None,
+    type: str | None = None,
+    limit: int = Query(50, ge=1, le=500),
+    since: str | None = None,
+):
+    """Get recent events with optional filtering by agent_id, type, and time range.
+
+    Args:
+        agent_id: Filter events by agent ID.
+        type: Filter by event type (e.g., 'agent.created', 'task.completed').
+        limit: Maximum number of events to return.
+        since: ISO 8601 timestamp to filter events after.
+    """
+    events = event_bus.get_history(limit=limit * 2)  # Get more to allow client-side filtering
+
+    # Apply filters
+    if agent_id:
+        events = [e for e in events if e.get("source", "") == agent_id]
+    if type:
+        events = [e for e in events if e.get("type", "") == type]
+    if since:
+        events = [e for e in events if e.get("timestamp", "") >= since]
+
+    events = events[:limit]
+
+    return {"events": events, "count": len(events), "limit": limit}
+
+
+@router.get("/events/stream")
+async def stream_events(
+    agent_id: str | None = None,
+    type: str | None = None,
+):
+    """SSE stream of live events from the event bus.
+
+    Clients connect to this endpoint to receive real-time event notifications
+    as they occur in the system. Events are filtered by agent_id and type
+    if provided.
+
+    Args:
+        agent_id: Only stream events for this agent.
+        type: Only stream events of this type.
+    """
+    async def event_generator():
+        event_queue: asyncio.Queue = asyncio.Queue()
+
+        async def event_handler(event: Event):
+            data = event.to_dict()
+            # Apply filters
+            if agent_id and data.get("source", "") != agent_id:
+                return
+            if type and data.get("type", "") != type:
+                return
+            await event_queue.put(data)
+
+        event_bus.subscribe_all(event_handler)
+
+        try:
+            # Send initial connection event
+            yield f"data: {json.dumps({'type': 'connected', 'message': 'Event stream started'})}\n\n"
+
+            while True:
+                try:
+                    event_data = await asyncio.wait_for(event_queue.get(), timeout=15.0)
+                    yield f"data: {json.dumps(event_data)}\n\n"
+                except asyncio.TimeoutError:
+                    # Send keepalive
+                    yield ": keepalive\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+        finally:
+            event_bus.unsubscribe(None, event_handler)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@router.get("/events/stats")
+async def get_event_stats():
+    """Get event statistics by type and agent."""
+    bus_stats = event_bus.get_stats()
+    return {
+        "total_events": bus_stats["total_events"],
+        "type_counts": bus_stats["type_counts"],
+        "listener_count": bus_stats["listener_count"],
+        "pending_tasks": bus_stats["pending_tasks"],
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Runtime Status API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/runtime/status")
+async def get_runtime_status():
+    """Get status of all running agents and system components."""
+    agents_status = []
+    async with async_session() as session:
+        result = await session.execute(
+            select(AgentModel).where(AgentModel.is_active == True)
+        )
+        agents = result.scalars().all()
+        for a in agents:
+            try:
+                engine = orchestrator.get_engine(
+                    agent_id=a.id,
+                    agent_name=a.name,
+                    instructions=a.instructions or "",
+                )
+                agents_status.append({
+                    "agent_id": a.id,
+                    "name": a.name,
+                    "role": a.role,
+                    "is_active": a.is_active,
+                    "dream_running": engine.dream.is_running,
+                    "iteration_remaining": engine.iteration_budget.remaining,
+                    "total_tokens": engine.total_tokens,
+                    "tool_executions": getattr(engine, 'tool_execution_count', 0),
+                })
+            except Exception:
+                agents_status.append({
+                    "agent_id": a.id,
+                    "name": a.name,
+                    "role": a.role,
+                    "is_active": a.is_active,
+                    "error": "Failed to get engine status",
+                })
+
+    ws_stats = ws_manager.get_stats()
+
+    return {
+        "agents": agents_status,
+        "total_agents": len(agents_status),
+        "websocket": {
+            "active_connections": ws_stats["active_connections"],
+            "total_rooms": ws_stats["total_rooms"],
+            "max_connections": ws_stats["max_connections"],
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/runtime/agents/{agent_id}/status")
+async def get_agent_runtime_status(agent_id: str):
+    """Get specific agent runtime status."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(AgentModel).where(AgentModel.id == agent_id)
+        )
+        a = result.scalars().first()
+        if not a:
+            raise HTTPException(404, "Agent not found")
+
+    try:
+        engine = orchestrator.get_engine(
+            agent_id=a.id,
+            agent_name=a.name,
+            instructions=a.instructions or "",
+        )
+        return {
+            "agent_id": a.id,
+            "name": a.name,
+            "role": a.role,
+            "is_active": a.is_active,
+            "dream": {
+                "is_running": engine.dream.is_running,
+                "interval_seconds": engine.dream.interval,
+                "total_insights": engine.dream.insights_count,
+            },
+            "iteration": {
+                "remaining": engine.iteration_budget.remaining,
+                "is_exhausted": engine.iteration_budget.is_exhausted,
+                "usage_ratio": engine.iteration_budget.usage_ratio,
+            },
+            "tokens": {
+                "total": engine.total_tokens,
+            },
+            "tools": {
+                "executions": getattr(engine, 'tool_execution_count', 0),
+                "successful": getattr(engine, 'tool_success_count', 0),
+                "failed": getattr(engine, 'tool_failure_count', 0),
+            },
+            "soul_profile": {
+                "identity": engine.soul_profile.identity,
+                "principles": engine.soul_profile.principles,
+                "communication_style": engine.soul_profile.communication_style,
+                "boundaries": engine.soul_profile.boundaries,
+                "goals": engine.soul_profile.goals,
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        return {
+            "agent_id": a.id,
+            "name": a.name,
+            "error": f"Failed to get engine status: {str(e)}",
+        }
+
+
+@router.post("/runtime/agents/{agent_id}/restart")
+async def restart_agent(agent_id: str):
+    """Restart an agent's runtime engine."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(AgentModel).where(AgentModel.id == agent_id)
+        )
+        a = result.scalars().first()
+        if not a:
+            raise HTTPException(404, "Agent not found")
+
+    try:
+        engine = orchestrator.get_engine(
+            agent_id=a.id,
+            agent_name=a.name,
+            instructions=a.instructions or "",
+        )
+        # Reset iteration budget and clear state
+        engine.iteration_budget.reset()
+        engine.total_tokens = 0
+        engine.tool_execution_count = 0
+        engine.tool_success_count = 0
+        engine.tool_failure_count = 0
+
+        # Broadcast status change
+        await ws_manager.broadcast_agent_status(agent_id, "restarted")
+
+        return {
+            "agent_id": agent_id,
+            "restarted": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to restart agent: {str(e)}")
+
+
+@router.post("/runtime/agents/{agent_id}/pause")
+async def pause_agent(agent_id: str):
+    """Pause an agent's background processes (dream, autopilot)."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(AgentModel).where(AgentModel.id == agent_id)
+        )
+        a = result.scalars().first()
+        if not a:
+            raise HTTPException(404, "Agent not found")
+
+    try:
+        engine = orchestrator.get_engine(
+            agent_id=a.id,
+            agent_name=a.name,
+            instructions=a.instructions or "",
+        )
+        if engine.dream.is_running:
+            await engine.dream.stop()
+        await ws_manager.broadcast_agent_status(agent_id, "paused")
+
+        return {
+            "agent_id": agent_id,
+            "paused": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to pause agent: {str(e)}")
+
+
+@router.post("/runtime/agents/{agent_id}/resume")
+async def resume_agent(agent_id: str):
+    """Resume an agent's background processes."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(AgentModel).where(AgentModel.id == agent_id)
+        )
+        a = result.scalars().first()
+        if not a:
+            raise HTTPException(404, "Agent not found")
+
+    try:
+        engine = orchestrator.get_engine(
+            agent_id=a.id,
+            agent_name=a.name,
+            instructions=a.instructions or "",
+        )
+        if not engine.dream.is_running:
+            await engine.dream.start()
+        await ws_manager.broadcast_agent_status(agent_id, "resumed")
+
+        return {
+            "agent_id": agent_id,
+            "resumed": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to resume agent: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════════
+# Soul Profile API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/agents/{agent_id}/soul")
+async def get_agent_soul(agent_id: str):
+    """Get agent's soul profile."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(AgentModel).where(AgentModel.id == agent_id)
+        )
+        a = result.scalars().first()
+        if not a:
+            raise HTTPException(404, "Agent not found")
+
+    engine = orchestrator.get_engine(
+        agent_id=a.id,
+        agent_name=a.name,
+        instructions=a.instructions or "",
+    )
+
+    return {
+        "agent_id": agent_id,
+        "soul": {
+            "identity": engine.soul_profile.identity,
+            "principles": engine.soul_profile.principles,
+            "communication_style": engine.soul_profile.communication_style,
+            "boundaries": engine.soul_profile.boundaries,
+            "goals": engine.soul_profile.goals,
+        },
+    }
+
+
+@router.put("/agents/{agent_id}/soul")
+async def update_agent_soul(agent_id: str, data: SoulProfileUpdate):
+    """Update agent's soul profile."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(AgentModel).where(AgentModel.id == agent_id)
+        )
+        a = result.scalars().first()
+        if not a:
+            raise HTTPException(404, "Agent not found")
+
+    engine = orchestrator.get_engine(
+        agent_id=a.id,
+        agent_name=a.name,
+        instructions=a.instructions or "",
+    )
+
+    update_kwargs = {}
+    if data.identity is not None:
+        update_kwargs["identity"] = data.identity
+    if data.principles is not None:
+        update_kwargs["principles"] = data.principles
+    if data.communication_style is not None:
+        update_kwargs["communication_style"] = data.communication_style
+    if data.boundaries is not None:
+        update_kwargs["boundaries"] = data.boundaries
+    if data.goals is not None:
+        update_kwargs["goals"] = data.goals
+
+    if update_kwargs:
+        engine.update_soul_profile(**update_kwargs)
+
+    return {
+        "agent_id": agent_id,
+        "soul": {
+            "identity": engine.soul_profile.identity,
+            "principles": engine.soul_profile.principles,
+            "communication_style": engine.soul_profile.communication_style,
+            "boundaries": engine.soul_profile.boundaries,
+            "goals": engine.soul_profile.goals,
+        },
+    }
+
+
+@router.get("/agents/{agent_id}/scheduled-tasks")
+async def list_scheduled_tasks(agent_id: str):
+    """List scheduled tasks for an agent."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(AgentModel).where(AgentModel.id == agent_id)
+        )
+        if not result.scalars().first():
+            raise HTTPException(404, "Agent not found")
+
+    all_tasks = buddy_scheduler.list_tasks()
+    agent_tasks = [t for t in all_tasks if t.get("agent_id", "") == agent_id]
+
+    return {
+        "agent_id": agent_id,
+        "tasks": agent_tasks,
+        "count": len(agent_tasks),
+    }
+
+
+@router.post("/agents/{agent_id}/scheduled-tasks", status_code=201)
+async def create_scheduled_task(agent_id: str, data: ScheduledTaskCreate):
+    """Create a new scheduled task for an agent."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(AgentModel).where(AgentModel.id == agent_id)
+        )
+        if not result.scalars().first():
+            raise HTTPException(404, "Agent not found")
+
+    try:
+        task = buddy_scheduler.schedule(
+            name=data.name,
+            prompt=data.prompt,
+            agent_id=agent_id,
+            cron_expression=data.cron_expression,
+            interval_seconds=data.interval_seconds,
+            description=data.description,
+        )
+        return task.to_dict()
+    except Exception as e:
+        raise HTTPException(400, f"Failed to create scheduled task: {str(e)}")
+
+
+@router.delete("/agents/{agent_id}/scheduled-tasks/{task_id}", status_code=204)
+async def delete_scheduled_task(agent_id: str, task_id: str):
+    """Delete a scheduled task."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(AgentModel).where(AgentModel.id == agent_id)
+        )
+        if not result.scalars().first():
+            raise HTTPException(404, "Agent not found")
+
+    task = buddy_scheduler.get_task(task_id)
+    if not task:
+        raise HTTPException(404, "Scheduled task not found")
+
+    removed = buddy_scheduler.registry.remove_task(task_id)
+    if not removed:
+        raise HTTPException(404, "Failed to remove scheduled task")
+
+
+@router.post("/agents/{agent_id}/scheduled-tasks/{task_id}/run")
+async def run_scheduled_task_now(agent_id: str, task_id: str):
+    """Run a scheduled task immediately."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(AgentModel).where(AgentModel.id == agent_id)
+        )
+        if not result.scalars().first():
+            raise HTTPException(404, "Agent not found")
+
+    task = buddy_scheduler.get_task(task_id)
+    if not task:
+        raise HTTPException(404, "Scheduled task not found")
+
+    try:
+        # Trigger immediate execution via the engine
+        await buddy_scheduler.engine._execute_task(task)
+        return {
+            "task_id": task_id,
+            "agent_id": agent_id,
+            "executed": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to execute task: {str(e)}")
+
+
