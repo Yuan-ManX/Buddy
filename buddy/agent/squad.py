@@ -13,6 +13,8 @@ Key concepts:
   - Team discussion: Members can discuss and coordinate on shared tasks
 """
 
+from __future__ import annotations
+
 import logging
 import uuid
 from dataclasses import dataclass, field
