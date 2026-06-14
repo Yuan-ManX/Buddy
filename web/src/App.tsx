@@ -13,6 +13,7 @@ import { DreamPanel } from './components/DreamPanel';
 import { MCPServerPanel } from './components/MCPServerPanel';
 import { CollaborationPanel } from './components/CollaborationPanel';
 import { SystemOverview } from './components/SystemOverview';
+import { AgentComparison } from './components/AgentComparison';
 import ApprovalPanel from './components/ApprovalPanel';
 import EventMonitor from './components/EventMonitor';
 import Dashboard from './components/Dashboard';
@@ -441,8 +442,9 @@ export default function App() {
         )}
 
         {/* Global panels — no agent required */}
-          {activeTab === 'overview' && <SystemOverview />}
+          {activeTab === 'overview' && <SystemOverview onNavigate={setActiveTab} />}
           {activeTab === 'dashboard' && <Dashboard />}
+          {activeTab === 'agent-comparison' && <AgentComparison agents={agents} />}
           {activeTab === 'nexus' && <NexusPanel />}
           {activeTab === 'forge' && <ForgePanel />}
           {activeTab === 'guard' && <GuardPanel />}
@@ -544,9 +546,6 @@ export default function App() {
               {activeTab === 'learning' && (
             <LearningPanel agent={selectedAgent} />
           )}
-          {activeTab === 'swarm' && (
-            <SwarmPanel agents={agents} />
-          )}
           {activeTab === 'knowledge' && (
             <KnowledgeBasePanel agent={selectedAgent} />
           )}
@@ -554,7 +553,7 @@ export default function App() {
     )}
 
         {/* Empty state — no agent and no global panel selected */}
-        {!selectedAgent && !['overview', 'dashboard', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'proactive', 'metacognition', 'evolution', 'activity', 'runtimemonitor', 'skillmanager'].includes(activeTab) && (
+        {!selectedAgent && !['overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager'].includes(activeTab) && (
           <div className="main-empty">
             <div className="main-empty-icon">B</div>
             <h2>Welcome to Buddy</h2>
