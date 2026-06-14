@@ -33,9 +33,29 @@ import { RuntimeHubPanel } from './components/RuntimeHubPanel';
 import { SchedulerPanel } from './components/SchedulerPanel';
 import { StudioPanel } from './components/StudioPanel';
 import { WorkflowPanel } from './components/WorkflowPanel';
+import { IssueBoardPanel } from './components/IssueBoardPanel';
+import { CompoundingPanel } from './components/CompoundingPanel';
+import { WhiteboxMemoryPanel } from './components/WhiteboxMemoryPanel';
+import { PipelinePanel } from './components/PipelinePanel';
+import { CapabilityPanel } from './components/CapabilityPanel';
+import { KnowledgeGraphPanel } from './components/KnowledgeGraphPanel';
+import { MemorySyncPanel } from './components/MemorySyncPanel';
+import { PlatformHubPanel } from './components/PlatformHubPanel';
+import { CostAnalyticsPanel } from './components/CostAnalyticsPanel';
+import { WorkspacePanel } from './components/WorkspacePanel';
+import { AgentDashboard } from './components/AgentDashboard';
+import { ProactiveDiscoveryPanel } from './components/ProactiveDiscoveryPanel';
+import { MetaCognitionPanel } from './components/MetaCognitionPanel';
+import { EvolutionPanel } from './components/EvolutionPanel';
+import { KanbanBoard } from './components/KanbanBoard';
+import { ActivityTimeline } from './components/ActivityTimeline';
+import { RuntimeMonitor } from './components/RuntimeMonitor';
+import { SkillManager } from './components/SkillManager';
+import { StatusBar } from './components/StatusBar';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { CommandPalette } from './components/CommandPalette';
+import { ThemeProvider, useTheme } from './hooks/useTheme';
 import { api } from './api/client';
 import type { Agent, Conversation, Message as MsgType, Task, TabView } from './types';
 import './App.css';
@@ -276,6 +296,7 @@ export default function App() {
           actions={commandActions}
         />
         <div className="app">
+      <StatusBar />
       <Sidebar
         agents={agents}
         conversations={conversations}
@@ -433,6 +454,24 @@ export default function App() {
         {activeTab === 'scheduler' && <SchedulerPanel />}
         {activeTab === 'studio' && <StudioPanel />}
         {activeTab === 'workflow' && <WorkflowPanel />}
+        {activeTab === 'board' && <IssueBoardPanel />}
+        {activeTab === 'kanban' && <KanbanBoard />}
+        {activeTab === 'compounding' && <CompoundingPanel />}
+        {activeTab === 'whitememory' && <WhiteboxMemoryPanel />}
+        {activeTab === 'pipeline' && <PipelinePanel />}
+        {activeTab === 'capability' && <CapabilityPanel />}
+        {activeTab === 'kgraph' && <KnowledgeGraphPanel />}
+        {activeTab === 'memorysync' && <MemorySyncPanel />}
+        {activeTab === 'phub' && <PlatformHubPanel />}
+        {activeTab === 'costs' && <CostAnalyticsPanel />}
+        {activeTab === 'workspaces' && <WorkspacePanel />}
+        {activeTab === 'agentdashboard' && <AgentDashboard />}
+        {activeTab === 'proactive' && selectedAgent && <ProactiveDiscoveryPanel agent={selectedAgent} />}
+        {activeTab === 'metacognition' && selectedAgent && <MetaCognitionPanel agent={selectedAgent} />}
+        {activeTab === 'evolution' && selectedAgent && <EvolutionPanel agent={selectedAgent} />}
+        {activeTab === 'activity' && <ActivityTimeline />}
+        {activeTab === 'runtimemonitor' && <RuntimeMonitor />}
+        {activeTab === 'skillmanager' && <SkillManager />}
 
         {/* Agent-specific panels */}
         {selectedAgent && (
@@ -515,7 +554,7 @@ export default function App() {
     )}
 
         {/* Empty state — no agent and no global panel selected */}
-        {!selectedAgent && !['overview', 'dashboard', 'nexus', 'forge', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow'].includes(activeTab) && (
+        {!selectedAgent && !['overview', 'dashboard', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'proactive', 'metacognition', 'evolution', 'activity', 'runtimemonitor', 'skillmanager'].includes(activeTab) && (
           <div className="main-empty">
             <div className="main-empty-icon">B</div>
             <h2>Welcome to Buddy</h2>
