@@ -1,167 +1,376 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
+import type { TabView } from '../types';
 
-interface SystemOverview {
-  service: string;
-  version: string;
-  agents: { total: number; active: number };
-  tasks: { total: number; active: number };
-  conversations: { total: number };
-  memories: { total: number };
-  autopilots: { total: number };
-  plans: { total: number };
-  mcp_servers: { total: number };
-  routing: { total_requests: number; tier_distribution: Record<string, number>; average_cost: string };
-  tools: { total_executions: number; successful: number; failed: number; success_rate: string };
-  orchestrator: { active_agents: number; trust_relationships: number; collaboration_threads: number };
+interface SubsystemInfo {
+  name: string;
+  label: string;
+  tabId: TabView | null;
+  status: 'online' | 'offline' | 'degraded' | 'unknown';
+  lastHeartbeat: string | null;
+  uptime: number;
+  description: string;
 }
 
-export const SystemOverview: React.FC = () => {
-  const [overview, setOverview] = useState<SystemOverview | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+interface SystemEvent {
+  id: string;
+  type: string;
+  source: string;
+  data: Record<string, unknown>;
+  timestamp: string;
+  severity: string;
+}
 
-  useEffect(() => {
-    loadOverview();
-    const interval = setInterval(loadOverview, 30000);
-    return () => clearInterval(interval);
-  }, []);
+interface HealthCheckRecord {
+  time: string;
+  score: number;
+  status: string;
+}
 
-  const loadOverview = async () => {
-    try {
-      const data = await api.system.overview();
-      setOverview(data);
-      setError('');
-    } catch (e: any) {
-      setError(e.message || 'Failed to load system overview');
-    } finally {
-      setLoading(false);
-    }
-  };
+const SUBSYSTEM_DEFINITIONS: { name: string; label: string; tabId: TabView | null; description: string }[] = [
+  { name: 'agent', label: 'Agent Engine', tabId: 'chat', description: 'Core agent conversation and reasoning engine' },
+  { name: 'memory', label: 'Memory System', tabId: 'memory', description: 'Short-term and long-term memory storage' },
+  { name: 'kg', label: 'Knowledge Graph', tabId: 'kgraph', description: 'Entity-relationship knowledge network' },
+  { name: 'mcp', label: 'MCP Servers', tabId: 'mcp', description: 'Model Context Protocol integrations' },
+  { name: 'dream', label: 'Dream Engine', tabId: 'dream', description: 'Background memory consolidation cycles' },
+  { name: 'proactive', label: 'Proactive Discovery', tabId: 'proactive', description: 'Autonomous task discovery engine' },
+  { name: 'gateway', label: 'Gateway', tabId: 'gateway', description: 'Multi-platform messaging gateway' },
+  { name: 'daemon', label: 'Daemon', tabId: 'daemon', description: 'Background agent execution daemon' },
+  { name: 'swarm', label: 'Swarm Engine', tabId: 'swarm', description: 'Multi-agent swarm coordination' },
+  { name: 'guard', label: 'Guard', tabId: 'guard', description: 'Safety and monitoring system' },
+  { name: 'pulse', label: 'Pulse Monitor', tabId: 'pulse', description: 'System health and anomaly detection' },
+  { name: 'nexus', label: 'Nexus Hub', tabId: 'nexus', description: 'Cross-platform coordination hub' },
+  { name: 'forge', label: 'Forge', tabId: 'forge', description: 'Skill creation and evolution engine' },
+  { name: 'scheduler', label: 'Scheduler', tabId: 'scheduler', description: 'Cron-based task scheduling' },
+  { name: 'studio', label: 'Studio', tabId: 'studio', description: 'Persistent project workspaces' },
+  { name: 'workflow', label: 'Workflow', tabId: 'workflow', description: 'Task state machine workflow engine' },
+  { name: 'trajectory', label: 'Trajectory', tabId: 'trajectory', description: 'Execution trace recording and compression' },
+  { name: 'collaboration', label: 'Collaboration', tabId: 'collaboration', description: 'Multi-agent collaboration forum' },
+  { name: 'learning', label: 'Learning', tabId: 'learning', description: 'Self-improvement and pattern learning' },
+  { name: 'evolution', label: 'Evolution', tabId: 'evolution', description: 'Agent evolution and pathway optimization' },
+];
 
-  if (loading) {
-    return (
-      <div className="overview-panel">
-        <div className="loading">Loading system overview...</div>
-      </div>
-    );
-  }
+function formatUptime(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
+  return `${Math.round(seconds / 86400)}d`;
+}
 
-  if (!overview) {
-    return (
-      <div className="overview-panel">
-        <div className="error-banner">{error || 'No data available'}</div>
-      </div>
-    );
-  }
+function formatTimeAgo(isoString: string | null): string {
+  if (!isoString) return 'Never';
+  const diff = Date.now() - new Date(isoString).getTime();
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
 
-  const cards = [
-    { label: 'Agents', value: overview.agents.total, sub: `${overview.agents.active} active`, color: '#3b82f6', icon: '🤖' },
-    { label: 'Tasks', value: overview.tasks.total, sub: `${overview.tasks.active} active`, color: '#f59e0b', icon: '📋' },
-    { label: 'Conversations', value: overview.conversations.total, sub: '', color: '#10b981', icon: '💬' },
-    { label: 'Memories', value: overview.memories.total, sub: '', color: '#8b5cf6', icon: '🧠' },
-    { label: 'Autopilots', value: overview.autopilots.total, sub: '', color: '#ec4899', icon: '🔄' },
-    { label: 'Plans', value: overview.plans.total, sub: '', color: '#06b6d4', icon: '📐' },
-    { label: 'MCP Servers', value: overview.mcp_servers.total, sub: '', color: '#f97316', icon: '🔌' },
-    { label: 'Tool Executions', value: overview.tools.total_executions, sub: overview.tools.success_rate, color: '#84cc16', icon: '🔧' },
+// Simple text-based architecture diagram
+function ArchitectureDiagram() {
+  const layers = [
+    { name: 'User Interface', components: ['Web UI', 'CLI', 'API Gateway'], color: '#3b82f6' },
+    { name: 'Orchestration', components: ['Agent Engine', 'Nexus Hub', 'Swarm Engine'], color: '#8b5cf6' },
+    { name: 'Processing', components: ['Memory', 'KG', 'Forge', 'Trajectory'], color: '#06b6d4' },
+    { name: 'Background', components: ['Daemon', 'Dream', 'Proactive', 'Scheduler'], color: '#f59e0b' },
+    { name: 'Integration', components: ['MCP', 'Gateway', 'Pulse', 'Guard'], color: '#22c55e' },
   ];
 
   return (
-    <div className="overview-panel">
-      <h2>System Overview</h2>
-      <p className="subtitle">{overview.service} v{overview.version} — Real-time platform status</p>
-
-      {error && <div className="error-banner">{error}</div>}
-
-      <div className="card-grid">
-        {cards.map(card => (
-          <div key={card.label} className="stat-card" style={{ borderTop: `3px solid ${card.color}` }}>
-            <div className="card-icon">{card.icon}</div>
-            <div className="card-content">
-              <span className="card-value">{card.value}</span>
-              <span className="card-label">{card.label}</span>
-              {card.sub && <span className="card-sub">{card.sub}</span>}
-            </div>
+    <div className="architecture-diagram">
+      {layers.map((layer, li) => (
+        <div key={layer.name} className={`arch-layer arch-layer-${li}`}>
+          <div className="arch-layer-label" style={{ borderColor: layer.color, color: layer.color }}>
+            {layer.name}
           </div>
-        ))}
-      </div>
-
-      <div className="detail-grid">
-        <div className="detail-section">
-          <h3>Routing</h3>
-          <div className="detail-row">
-            <span>Total Requests</span>
-            <span>{overview.routing.total_requests}</span>
-          </div>
-          <div className="detail-row">
-            <span>Average Cost</span>
-            <span>{overview.routing.average_cost}</span>
-          </div>
-          <div className="tier-distribution">
-            <h4>Tier Distribution</h4>
-            {Object.entries(overview.routing.tier_distribution).map(([tier, count]) => (
-              <div key={tier} className="tier-bar">
-                <span className="tier-label">{tier}</span>
-                <div className="tier-track">
-                  <div
-                    className="tier-fill"
-                    style={{
-                      width: `${overview.routing.total_requests > 0 ? (Number(count) / overview.routing.total_requests * 100) : 0}%`,
-                    }}
-                  />
-                </div>
-                <span className="tier-count">{String(count)}</span>
+          <div className="arch-layer-components">
+            {layer.components.map((comp) => (
+              <div key={comp} className="arch-component" style={{ borderColor: layer.color }}>
+                {comp}
               </div>
             ))}
           </div>
         </div>
+      ))}
+    </div>
+  );
+}
 
-        <div className="detail-section">
-          <h3>Orchestrator</h3>
-          <div className="detail-row">
-            <span>Active Agents</span>
-            <span>{overview.orchestrator.active_agents}</span>
+export const SystemOverview: React.FC<{ onNavigate?: (tab: TabView) => void }> = ({ onNavigate }) => {
+  const [subsystems, setSubsystems] = useState<SubsystemInfo[]>([]);
+  const [events, setEvents] = useState<SystemEvent[]>([]);
+  const [healthHistory, setHealthHistory] = useState<HealthCheckRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [overview, setOverview] = useState<any>(null);
+  const [resourceUsage, setResourceUsage] = useState<{ memory: string; storage: string; connections: number }>({
+    memory: 'N/A',
+    storage: 'N/A',
+    connections: 0,
+  });
+
+  const loadData = useCallback(async () => {
+    try {
+      const [ov, ph, platformEvents] = await Promise.all([
+        api.system.overview(),
+        api.platformHub.health().catch(() => null),
+        api.platformHub.events(undefined, 50).catch(() => null),
+      ]);
+
+      setOverview(ov);
+
+      // Build subsystem status from platform health
+      const subsysList: SubsystemInfo[] = [];
+      if (ph?.subsystems) {
+        Object.entries(ph.subsystems).forEach(([name, info]: [string, any]) => {
+          const def = SUBSYSTEM_DEFINITIONS.find((d) => d.name === name);
+          subsysList.push({
+            name,
+            label: def?.label || name,
+            tabId: def?.tabId || null,
+            status: info.status || 'unknown',
+            lastHeartbeat: info.last_heartbeat || null,
+            uptime: info.uptime_seconds || 0,
+            description: def?.description || `Subsystem: ${name}`,
+          });
+        });
+      } else {
+        // Fallback: create entries from main overview
+        SUBSYSTEM_DEFINITIONS.forEach((def) => {
+          subsysList.push({
+            name: def.name,
+            label: def.label,
+            tabId: def.tabId,
+            status: 'unknown',
+            lastHeartbeat: null,
+            uptime: 0,
+            description: def.description,
+          });
+        });
+      }
+
+      setSubsystems(subsysList);
+
+      // Resource usage from overview
+      setResourceUsage({
+        memory: ph?.memory_usage ? `${(ph.memory_usage / 1024 / 1024).toFixed(1)} MB` : 'N/A',
+        storage: ov?.memories ? `${ov.memories.total} records` : 'N/A',
+        connections: ov?.agents?.active || 0,
+      });
+
+      // Events timeline
+      if (platformEvents?.events) {
+        setEvents(
+          platformEvents.events
+            .slice(0, 50)
+            .map((e: any) => ({
+              id: e.id || `evt-${Date.now()}-${Math.random()}`,
+              type: e.type || e.event_type || 'system',
+              source: e.source || 'platform',
+              data: e.data || {},
+              timestamp: e.timestamp || new Date().toISOString(),
+              severity: e.severity || (e.type === 'error' ? 'error' : e.type === 'warning' ? 'warning' : 'info'),
+            }))
+        );
+      }
+
+      // Health history: store current data point
+      const score = ph?.health_ratio ? Math.round(ph.health_ratio * 100) : 75;
+      const status = ph?.overall || 'unknown';
+      setHealthHistory((prev) => {
+        const updated = [
+          ...prev,
+          { time: new Date().toISOString(), score, status },
+        ];
+        return updated.slice(-24);
+      });
+    } catch (err) {
+      console.error('System overview load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  const statusColor = (status: string) => {
+    switch (status) {
+      case 'online': return '#22c55e';
+      case 'degraded': return '#f59e0b';
+      case 'offline': return '#ef4444';
+      default: return '#94a3b8';
+    }
+  };
+
+  const statusLabel = (status: string) => {
+    switch (status) {
+      case 'online': return 'Online';
+      case 'degraded': return 'Degraded';
+      case 'offline': return 'Offline';
+      default: return 'Unknown';
+    }
+  };
+
+  const onlineCount = subsystems.filter((s) => s.status === 'online').length;
+  const degradedCount = subsystems.filter((s) => s.status === 'degraded').length;
+  const offlineCount = subsystems.filter((s) => s.status === 'offline').length;
+
+  if (loading) {
+    return (
+      <div className="system-overview-panel">
+        <div className="panel-loading">Loading system overview...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="system-overview-panel">
+      <div className="system-overview-header">
+        <h2>System Overview</h2>
+        <span className="system-overview-version">
+          {overview?.service || 'Buddy'} v{overview?.version || 'N/A'}
+        </span>
+        <button className="btn-sm" onClick={loadData}>
+          Refresh
+        </button>
+      </div>
+
+      {/* Architecture Diagram */}
+      <div className="system-overview-section">
+        <h3>System Architecture</h3>
+        <ArchitectureDiagram />
+      </div>
+
+      {/* Module Status Grid */}
+      <div className="system-overview-section">
+        <div className="system-overview-section-header">
+          <h3>Module Status</h3>
+          <div className="module-status-summary">
+            <span className="module-status-count online">{onlineCount} Online</span>
+            <span className="module-status-count degraded">{degradedCount} Degraded</span>
+            <span className="module-status-count offline">{offlineCount} Offline</span>
           </div>
-          <div className="detail-row">
-            <span>Trust Relationships</span>
-            <span>{overview.orchestrator.trust_relationships}</span>
+        </div>
+        <div className="module-grid">
+          {subsystems.map((mod) => (
+            <div
+              key={mod.name}
+              className={`module-card module-${mod.status}`}
+              onClick={() => {
+                if (mod.tabId && onNavigate) {
+                  onNavigate(mod.tabId);
+                }
+              }}
+              style={{ cursor: mod.tabId ? 'pointer' : 'default' }}
+              title={mod.tabId ? `Navigate to ${mod.label}` : undefined}
+            >
+              <div className="module-card-header">
+                <span
+                  className="module-status-dot"
+                  style={{ background: statusColor(mod.status) }}
+                />
+                <span className="module-name">{mod.label}</span>
+                <span
+                  className="module-status-chip"
+                  style={{ background: statusColor(mod.status) }}
+                >
+                  {statusLabel(mod.status)}
+                </span>
+              </div>
+              <div className="module-card-body">
+                <span className="module-description">{mod.description}</span>
+                <div className="module-details">
+                  <span>Last heartbeat: {formatTimeAgo(mod.lastHeartbeat)}</span>
+                  <span>Uptime: {formatUptime(mod.uptime)}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Resource Usage Overview */}
+      <div className="system-overview-section">
+        <h3>Resource Usage</h3>
+        <div className="resource-usage-grid">
+          <div className="resource-card">
+            <span className="resource-value">{resourceUsage.memory}</span>
+            <span className="resource-label">Memory Usage</span>
           </div>
-          <div className="detail-row">
-            <span>Collaboration Threads</span>
-            <span>{overview.orchestrator.collaboration_threads}</span>
+          <div className="resource-card">
+            <span className="resource-value">{resourceUsage.storage}</span>
+            <span className="resource-label">Storage</span>
+          </div>
+          <div className="resource-card">
+            <span className="resource-value">{resourceUsage.connections}</span>
+            <span className="resource-label">Active Connections</span>
+          </div>
+          <div className="resource-card">
+            <span className="resource-value">{overview?.tasks?.total || 0}</span>
+            <span className="resource-label">Total Tasks</span>
           </div>
         </div>
       </div>
 
-      <style>{`
-        .overview-panel { padding: 24px; max-width: 1200px; margin: 0 auto; }
-        .overview-panel h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
-        .subtitle { color: #6b7280; margin-bottom: 24px; }
-        .card-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
-        @media (max-width: 900px) { .card-grid { grid-template-columns: repeat(2, 1fr); } }
-        .stat-card { background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #e5e7eb; display: flex; align-items: center; gap: 16px; }
-        .card-icon { font-size: 2rem; }
-        .card-content { display: flex; flex-direction: column; }
-        .card-value { font-size: 1.8rem; font-weight: 800; color: #1f2937; }
-        .card-label { font-size: 0.8rem; color: #6b7280; font-weight: 600; }
-        .card-sub { font-size: 0.75rem; color: #9ca3af; }
-        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-        @media (max-width: 700px) { .detail-grid { grid-template-columns: 1fr; } }
-        .detail-section { background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #e5e7eb; }
-        .detail-section h3 { font-size: 1rem; font-weight: 700; margin-bottom: 16px; }
-        .detail-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f3f4f6; }
-        .detail-row span:first-child { color: #6b7280; font-size: 0.85rem; }
-        .detail-row span:last-child { font-weight: 600; font-size: 0.9rem; }
-        .tier-distribution { margin-top: 16px; }
-        .tier-distribution h4 { font-size: 0.85rem; color: #6b7280; margin-bottom: 12px; }
-        .tier-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-        .tier-label { font-size: 0.8rem; font-weight: 600; min-width: 60px; color: #374151; }
-        .tier-track { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
-        .tier-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); border-radius: 3px; transition: width 0.5s; }
-        .tier-count { font-size: 0.8rem; color: #9ca3af; min-width: 30px; text-align: right; }
-        .loading { text-align: center; padding: 60px; color: #9ca3af; }
-        .error-banner { background: #fef2f2; color: #991b1b; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; }
-      `}</style>
+      {/* Health Check History */}
+      <div className="system-overview-section">
+        <h3>Health Check History (Last 24 checks)</h3>
+        {healthHistory.length > 0 ? (
+          <div className="health-history-chart">
+            <div className="health-history-bars">
+              {healthHistory.map((record, i) => (
+                <div key={i} className="health-history-bar-container" title={`${new Date(record.time).toLocaleTimeString()}: ${record.score}% (${record.status})`}>
+                  <div
+                    className="health-history-bar"
+                    style={{
+                      height: `${record.score}%`,
+                      background: record.score >= 70 ? '#22c55e' : record.score >= 40 ? '#f59e0b' : '#ef4444',
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="health-history-labels">
+              <span>Oldest</span>
+              <span>Newest</span>
+            </div>
+          </div>
+        ) : (
+          <div className="panel-empty">No health check data yet. Data will accumulate over time.</div>
+        )}
+      </div>
+
+      {/* Recent System Events Timeline */}
+      <div className="system-overview-section">
+        <h3>Recent Events</h3>
+        {events.length > 0 ? (
+          <div className="events-timeline">
+            {events.slice(0, 50).map((event, i) => (
+              <div key={event.id || i} className={`event-timeline-item event-${event.severity}`}>
+                <div className="event-timeline-dot" style={{ background: statusColor(event.severity === 'error' ? 'offline' : event.severity) }} />
+                <div className="event-timeline-content">
+                  <div className="event-timeline-header">
+                    <span className="event-timeline-type">{event.type}</span>
+                    <span className="event-timeline-source">{event.source}</span>
+                    <span className="event-timeline-time">{formatTimeAgo(event.timestamp)}</span>
+                  </div>
+                  {event.data && Object.keys(event.data).length > 0 && (
+                    <pre className="event-timeline-data">
+                      {JSON.stringify(event.data, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="panel-empty">No recent events.</div>
+        )}
+      </div>
     </div>
   );
 };
