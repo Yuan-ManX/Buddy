@@ -23,6 +23,8 @@ interface SidebarProps {
 // Tab categories with grouping
 const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+  { id: 'overview', label: 'Overview', icon: '🔍' },
+  { id: 'agent-comparison', label: 'Compare', icon: '⚖️' },
   { id: 'phub', label: 'Hub', icon: '🏗️' },
   { id: 'nexus', label: 'Nexus', icon: '🔗' },
   { id: 'forge', label: 'Forge', icon: '⚒️' },
