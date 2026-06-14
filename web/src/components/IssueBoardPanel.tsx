@@ -119,7 +119,10 @@ export const IssueBoardPanel: React.FC = () => {
         done: [],
         cancelled: [],
       };
-      res.issues.forEach((issue: any) => grouped[issue.state].push(issue as Issue));
+      res.issues.forEach((issue: any) => {
+        const state = issue.state || 'backlog';
+        (grouped[state] ??= []).push(issue as Issue);
+      });
       setColumns(grouped);
       setError(null);
     } catch (e: any) {
