@@ -1597,6 +1597,14 @@ async def list_workspaces():
     return {"workspaces": workspaces, "count": len(workspaces)}
 
 
+# ── Workspace Hub Stats (must be before /workspaces/{workspace_id}) ─────────
+
+@router.get("/workspaces/stats")
+async def get_workspace_hub_stats():
+    """Get aggregate workspace statistics from enterprise hub."""
+    return enterprise_hub.get_hub_stats()
+
+
 @router.get("/workspaces/{workspace_id}")
 async def get_workspace(workspace_id: str):
     """Get detailed information about a specific workspace."""
@@ -6244,14 +6252,6 @@ async def get_cost_projections(days: int = 30):
     return cost_tracker.project_costs(days)
 
 
-# ── Workspace Management (enterprise hub stats) ─────────
-
-@router.get("/workspaces/stats")
-async def get_workspace_hub_stats():
-    """Get aggregate workspace statistics from enterprise hub."""
-    return enterprise_hub.get_hub_stats()
-
-
 # ═══════════════════════════════════════════════════════════
 # Proactive Discovery
 # ═══════════════════════════════════════════════════════════
@@ -7103,5 +7103,557 @@ async def run_scheduled_task_now(agent_id: str, task_id: str):
         }
     except Exception as e:
         raise HTTPException(500, f"Failed to execute task: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Self Identity
+# ═══════════════════════════════════════════════════════════
+
+from agent.agent_self import agent_self_registry, SelfTraitCategory, TraitOrigin
+
+
+@router.get("/agents/{agent_id}/self/profile")
+async def get_agent_self_profile(agent_id: str):
+    """Get the self identity profile for an agent."""
+    agent_self = agent_self_registry.get_or_create(agent_id)
+    return agent_self.get_self_profile()
+
+
+@router.get("/agents/{agent_id}/self/stats")
+async def get_agent_self_stats(agent_id: str):
+    """Get self identity statistics for an agent."""
+    agent_self = agent_self_registry.get_or_create(agent_id)
+    return agent_self.get_stats()
+
+
+@router.post("/agents/{agent_id}/self/snapshot")
+async def create_agent_self_snapshot(agent_id: str):
+    """Create a self identity snapshot for an agent."""
+    agent_self = agent_self_registry.get_or_create(agent_id)
+    snapshot = agent_self.create_snapshot()
+    return {
+        "id": snapshot.id,
+        "timestamp": snapshot.timestamp,
+        "trait_count": snapshot.trait_count,
+        "pattern_count": snapshot.pattern_count,
+        "dominant_categories": snapshot.dominant_categories,
+        "evolution_step": snapshot.evolution_step,
+    }
+
+
+@router.post("/agents/{agent_id}/self/observe")
+async def observe_agent_interaction(
+    agent_id: str,
+    user_message: str = Query(..., min_length=1),
+    agent_response: str = Query(default=""),
+    topic: str = Query(default=""),
+    sentiment: str = Query(default=""),
+    complexity: str = Query(default=""),
+):
+    """Record an observed interaction for self identity learning."""
+    agent_self = agent_self_registry.get_or_create(agent_id)
+    context = {}
+    if topic:
+        context["topic"] = topic
+    if sentiment:
+        context["sentiment"] = sentiment
+    if complexity:
+        context["complexity"] = complexity
+    agent_self.observe_interaction(user_message, agent_response, context)
+    return {"agent_id": agent_id, "observed": True}
+
+
+@router.get("/agents/{agent_id}/self/export")
+async def export_agent_self(agent_id: str):
+    """Export the full agent self model."""
+    agent_self = agent_self_registry.get_or_create(agent_id)
+    return agent_self.export_self()
+
+
+@router.post("/agents/{agent_id}/self/import")
+async def import_agent_self(agent_id: str, data: dict):
+    """Import an agent self model."""
+    agent_self = agent_self_registry.get_or_create(agent_id)
+    agent_self.import_self(data)
+    return agent_self.get_stats()
+
+
+@router.get("/agent-self/registry")
+async def list_agent_selves():
+    """List all agent selves in the registry."""
+    return {"agents": agent_self_registry.list_all()}
+
+
+# ═══════════════════════════════════════════════════════════
+# Plugin System
+# ═══════════════════════════════════════════════════════════
+
+from agent.plugin_system import plugin_system, PluginManifest, PluginPermission, PluginStatus
+
+
+@router.get("/plugins")
+async def list_plugins(
+    status: str = Query(default=""),
+):
+    """List all registered plugins."""
+    status_filter = PluginStatus(status) if status else None
+    return {"plugins": plugin_system.list_plugins(status_filter)}
+
+
+@router.get("/plugins/stats")
+async def get_plugin_stats():
+    """Get plugin system statistics."""
+    return plugin_system.get_stats()
+
+
+@router.post("/plugins/register")
+async def register_plugin(data: dict):
+    """Register a new plugin manifest."""
+    manifest = PluginManifest(
+        id=data["id"],
+        name=data["name"],
+        version=data.get("version", "1.0.0"),
+        description=data.get("description", ""),
+        author=data.get("author", ""),
+        homepage=data.get("homepage", ""),
+        permissions=[PluginPermission(p) for p in data.get("permissions", [])],
+        capabilities=data.get("capabilities", []),
+        entry_point=data.get("entry_point", ""),
+        tags=data.get("tags", []),
+    )
+    instance = plugin_system.register_manifest(manifest)
+    return {"id": instance.manifest.id, "status": instance.status.value}
+
+
+@router.post("/plugins/{plugin_id}/install")
+async def install_plugin(plugin_id: str):
+    """Install a registered plugin."""
+    success = await plugin_system.install(plugin_id)
+    return {"plugin_id": plugin_id, "installed": success}
+
+
+@router.post("/plugins/{plugin_id}/activate")
+async def activate_plugin(plugin_id: str):
+    """Activate an installed plugin."""
+    success = await plugin_system.activate(plugin_id)
+    return {"plugin_id": plugin_id, "activated": success}
+
+
+@router.post("/plugins/{plugin_id}/deactivate")
+async def deactivate_plugin(plugin_id: str):
+    """Deactivate an active plugin."""
+    success = await plugin_system.deactivate(plugin_id)
+    return {"plugin_id": plugin_id, "deactivated": success}
+
+
+@router.delete("/plugins/{plugin_id}")
+async def uninstall_plugin(plugin_id: str):
+    """Uninstall a plugin."""
+    await plugin_system.uninstall(plugin_id)
+    return {"plugin_id": plugin_id, "uninstalled": True}
+
+
+# ═══════════════════════════════════════════════════════════
+# IM Integration Hub
+# ═══════════════════════════════════════════════════════════
+
+from agent.im_hub import im_hub, IMPlatform, IMChannelConfig
+
+
+@router.get("/im/stats")
+async def get_im_hub_stats():
+    """Get IM Hub statistics."""
+    return im_hub.get_stats()
+
+
+@router.get("/im/platforms")
+async def list_im_platforms():
+    """List all IM platforms and their statuses."""
+    return {
+        "platforms": [
+            im_hub.get_platform_status(p) for p in IMPlatform
+        ]
+    }
+
+
+@router.get("/im/messages")
+async def get_im_messages(
+    platform: str = Query(default=""),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Get recent IM messages."""
+    plat = IMPlatform(platform) if platform else None
+    return {"messages": im_hub.get_recent_messages(plat, limit)}
+
+
+@router.post("/im/platforms/configure")
+async def configure_im_platform(data: dict):
+    """Configure an IM platform for connection."""
+    config = IMChannelConfig(
+        platform=IMPlatform(data["platform"]),
+        enabled=data.get("enabled", False),
+        bot_token=data.get("bot_token", ""),
+        app_id=data.get("app_id", ""),
+        app_secret=data.get("app_secret", ""),
+        webhook_url=data.get("webhook_url", ""),
+        allowed_chat_ids=data.get("allowed_chat_ids", []),
+        auto_reply=data.get("auto_reply", True),
+    )
+    im_hub.configure_platform(config)
+    return {"platform": config.platform.value, "configured": True}
+
+
+@router.post("/im/platforms/{platform}/connect")
+async def connect_im_platform(platform: str):
+    """Connect to an IM platform."""
+    success = await im_hub.connect_platform(IMPlatform(platform))
+    return {"platform": platform, "connected": success}
+
+
+@router.post("/im/platforms/{platform}/disconnect")
+async def disconnect_im_platform(platform: str):
+    """Disconnect from an IM platform."""
+    await im_hub.disconnect_platform(IMPlatform(platform))
+    return {"platform": platform, "disconnected": True}
+
+
+@router.post("/im/send")
+async def send_im_message(
+    platform: str = Query(...),
+    chat_id: str = Query(...),
+    text: str = Query(..., min_length=1),
+):
+    """Send a message through an IM platform."""
+    success = await im_hub.send_to_chat(IMPlatform(platform), chat_id, text)
+    return {"sent": success}
+
+
+@router.post("/im/chats/assign")
+async def assign_agent_to_im_chat(
+    chat_id: str = Query(...),
+    agent_id: str = Query(...),
+):
+    """Assign a Buddy agent to handle messages from an IM chat."""
+    im_hub.assign_agent_to_chat(chat_id, agent_id)
+    return {"chat_id": chat_id, "agent_id": agent_id, "assigned": True}
+
+
+# ═══════════════════════════════════════════════════════════
+# Skills Marketplace
+# ═══════════════════════════════════════════════════════════
+
+from agent.skills_marketplace import skills_marketplace, MarketplaceSkill, SkillCategory, SkillPricing, SkillReview
+
+
+@router.get("/marketplace/stats")
+async def get_marketplace_stats():
+    """Get skills marketplace statistics."""
+    return skills_marketplace.get_stats()
+
+
+@router.get("/marketplace/skills")
+async def search_marketplace_skills(
+    query: str = Query(default=""),
+    category: str = Query(default=""),
+    tags: str = Query(default=""),
+    pricing: str = Query(default=""),
+    sort_by: str = Query(default="rating"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    """Search and browse marketplace skills."""
+    cat = SkillCategory(category) if category else None
+    tag_list = tags.split(",") if tags else None
+    price = SkillPricing(pricing) if pricing else None
+    return skills_marketplace.search_skills(
+        query=query, category=cat, tags=tag_list,
+        pricing=price, sort_by=sort_by, page=page, page_size=page_size
+    )
+
+
+@router.get("/marketplace/skills/featured")
+async def get_featured_skills():
+    """Get featured marketplace skills."""
+    return {"skills": skills_marketplace.get_featured_skills()}
+
+
+@router.get("/marketplace/skills/{skill_id}")
+async def get_marketplace_skill(skill_id: str):
+    """Get a specific marketplace skill."""
+    skill = skills_marketplace.get_skill(skill_id)
+    if not skill:
+        raise HTTPException(404, f"Skill {skill_id} not found")
+    return skills_marketplace._skill_to_dict(skill)
+
+
+@router.post("/marketplace/skills/publish")
+async def publish_marketplace_skill(data: dict):
+    """Publish a new skill to the marketplace."""
+    skill = MarketplaceSkill(
+        id="",
+        name=data["name"],
+        description=data.get("description", ""),
+        category=SkillCategory(data.get("category", "utility")),
+        version=data.get("version", "1.0.0"),
+        author=data.get("author", ""),
+        author_id=data.get("author_id", ""),
+        tags=data.get("tags", []),
+        dependencies=data.get("dependencies", []),
+        prompt_template=data.get("prompt_template", ""),
+        tool_requirements=data.get("tool_requirements", []),
+    )
+    published = skills_marketplace.publish_skill(skill)
+    return skills_marketplace._skill_to_dict(published)
+
+
+@router.post("/marketplace/skills/{skill_id}/review")
+async def review_marketplace_skill(skill_id: str, data: dict):
+    """Add a review for a marketplace skill."""
+    if skill_id not in skills_marketplace._skills:
+        raise HTTPException(404, f"Skill {skill_id} not found")
+    review = SkillReview(
+        id="",
+        skill_id=skill_id,
+        reviewer_id=data.get("reviewer_id", ""),
+        reviewer_name=data.get("reviewer_name", "Anonymous"),
+        rating=float(data["rating"]),
+        title=data.get("title", ""),
+        content=data.get("content", ""),
+    )
+    result = skills_marketplace.add_review(review)
+    return {"id": result.id, "rating": result.rating, "created_at": result.created_at}
+
+
+@router.get("/marketplace/skills/{skill_id}/reviews")
+async def get_marketplace_reviews(
+    skill_id: str, page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)
+):
+    """Get reviews for a marketplace skill."""
+    return skills_marketplace.get_reviews(skill_id, page, page_size)
+
+
+@router.get("/marketplace/publishers/{publisher_id}")
+async def get_marketplace_publisher(publisher_id: str):
+    """Get a publisher profile."""
+    pub = skills_marketplace.get_publisher(publisher_id)
+    if not pub:
+        raise HTTPException(404, f"Publisher {publisher_id} not found")
+    return pub
+
+
+@router.get("/marketplace/categories")
+async def get_marketplace_categories():
+    """Get marketplace category statistics."""
+    return {"categories": skills_marketplace.get_categories()}
+
+
+@router.post("/marketplace/skills/{skill_id}/download")
+async def record_skill_download(skill_id: str):
+    """Record a download of a marketplace skill."""
+    skills_marketplace.record_download(skill_id)
+    return {"skill_id": skill_id, "recorded": True}
+
+
+# ═══════════════════════════════════════════════════════════
+# Task Queue
+# ═══════════════════════════════════════════════════════════
+
+from agent.task_queue import task_queue, JobType, JobPriority, JobStatus as TQJobStatus
+
+
+@router.get("/queue/stats")
+async def get_task_queue_stats():
+    """Get task queue statistics."""
+    return task_queue.get_stats()
+
+
+@router.get("/queue/jobs")
+async def list_queued_jobs(
+    status: str = Query(default=""),
+    job_type: str = Query(default=""),
+    priority: str = Query(default=""),
+    agent_id: str = Query(default=""),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """List queued jobs with optional filtering."""
+    s = TQJobStatus(status) if status else None
+    t = JobType(job_type) if job_type else None
+    p = JobPriority(priority) if priority else None
+    return {"jobs": task_queue.list_jobs(status=s, job_type=t, priority=p, agent_id=agent_id, limit=limit)}
+
+
+@router.get("/queue/jobs/{job_id}")
+async def get_queued_job(job_id: str):
+    """Get a specific queued job."""
+    job = task_queue.get_job(job_id)
+    if not job:
+        raise HTTPException(404, f"Job {job_id} not found")
+    return task_queue._job_to_dict(job)
+
+
+@router.post("/queue/jobs/submit")
+async def submit_job(data: dict):
+    """Submit a new job to the queue."""
+    job = task_queue.submit(
+        name=data["name"],
+        job_type=JobType(data.get("job_type", "custom")),
+        payload=data.get("payload", {}),
+        priority=JobPriority(data.get("priority", "normal")),
+        agent_id=data.get("agent_id", ""),
+        max_retries=data.get("max_retries", 3),
+        timeout_seconds=data.get("timeout_seconds", 300),
+        tags=data.get("tags", []),
+    )
+    return task_queue._job_to_dict(job)
+
+
+@router.post("/queue/jobs/batch")
+async def submit_batch_jobs(data: dict):
+    """Submit a batch of related jobs."""
+    batch = task_queue.submit_batch(
+        name=data["name"],
+        jobs=data.get("jobs", []),
+        priority=JobPriority(data.get("priority", "normal")),
+        agent_id=data.get("agent_id", ""),
+    )
+    return {
+        "id": batch.id,
+        "name": batch.name,
+        "total_jobs": batch.total_jobs,
+        "status": batch.status,
+    }
+
+
+@router.get("/queue/batches")
+async def list_batches(limit: int = Query(20, ge=1, le=100)):
+    """List batch jobs."""
+    return {"batches": task_queue.list_batches(limit)}
+
+
+@router.get("/queue/batches/{batch_id}")
+async def get_batch(batch_id: str):
+    """Get a batch by ID."""
+    batch = task_queue.get_batch(batch_id)
+    if not batch:
+        raise HTTPException(404, f"Batch {batch_id} not found")
+    return {
+        "id": batch.id,
+        "name": batch.name,
+        "status": batch.status,
+        "progress": round(batch.progress, 2),
+        "total_jobs": batch.total_jobs,
+        "completed_jobs": batch.completed_jobs,
+        "failed_jobs": batch.failed_jobs,
+        "job_ids": batch.job_ids,
+    }
+
+
+@router.post("/queue/jobs/{job_id}/cancel")
+async def cancel_queued_job(job_id: str):
+    """Cancel a pending or queued job."""
+    success = task_queue.cancel_job(job_id)
+    return {"job_id": job_id, "cancelled": success}
+
+
+@router.put("/queue/jobs/{job_id}/progress")
+async def update_job_progress(
+    job_id: str,
+    progress: float = Query(..., ge=0.0, le=1.0),
+    message: str = Query(default=""),
+):
+    """Update the progress of a running job."""
+    task_queue.update_progress(job_id, progress, message)
+    return {"job_id": job_id, "progress": progress, "updated": True}
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Runtime Backend
+# ═══════════════════════════════════════════════════════════
+
+from agent.runtime_backend import runtime_backend_hub, RuntimeBackendKind, RuntimeConfig
+
+
+@router.get("/runtime-backend/stats")
+async def get_runtime_backend_stats():
+    """Get runtime backend hub statistics."""
+    return runtime_backend_hub.get_stats()
+
+
+@router.get("/runtime-backend/backends")
+async def list_runtime_backends():
+    """List available runtime backends."""
+    return {"backends": runtime_backend_hub.list_backends()}
+
+
+@router.get("/runtime-backend/instances")
+async def list_runtime_instances(agent_id: str = Query(default="")):
+    """List runtime instances."""
+    return {"instances": runtime_backend_hub.list_instances(agent_id)}
+
+
+@router.get("/runtime-backend/instances/{instance_id}")
+async def get_runtime_instance(instance_id: str):
+    """Get a specific runtime instance."""
+    instance = runtime_backend_hub.get_instance(instance_id)
+    if not instance:
+        raise HTTPException(404, f"Instance {instance_id} not found")
+    return {
+        "id": instance.id,
+        "backend": instance.backend.value,
+        "status": instance.status.value,
+        "agent_id": instance.agent_id,
+        "created_at": instance.created_at,
+        "started_at": instance.started_at,
+        "error": instance.error_message,
+    }
+
+
+@router.post("/runtime-backend/instances/create")
+async def create_runtime_instance(data: dict):
+    """Create a new runtime instance."""
+    config = RuntimeConfig(
+        backend=RuntimeBackendKind(data.get("backend", "buddy_native")),
+        workspace_dir=data.get("workspace_dir", ""),
+        environment_vars=data.get("environment_vars", {}),
+        installed_packages=data.get("installed_packages", []),
+        max_memory_mb=data.get("max_memory_mb", 512),
+        max_cpu_cores=data.get("max_cpu_cores", 2),
+        timeout_seconds=data.get("timeout_seconds", 3600),
+    )
+    instance = await runtime_backend_hub.create_instance(
+        agent_id=data.get("agent_id", ""),
+        backend=RuntimeBackendKind(data.get("backend", "buddy_native")),
+        config=config,
+    )
+    return {
+        "id": instance.id,
+        "backend": instance.backend.value,
+        "status": instance.status.value,
+        "agent_id": instance.agent_id,
+    }
+
+
+@router.post("/runtime-backend/instances/{instance_id}/execute")
+async def execute_in_runtime(instance_id: str, data: dict):
+    """Execute an agent operation in a runtime instance."""
+    result = await runtime_backend_hub.execute(
+        instance_id,
+        agent_config=data.get("agent_config", {}),
+        input_data=data.get("input_data", {}),
+    )
+    return result
+
+
+@router.get("/runtime-backend/instances/{instance_id}/metrics")
+async def get_runtime_metrics(instance_id: str):
+    """Get runtime instance metrics."""
+    return await runtime_backend_hub.get_metrics(instance_id)
+
+
+@router.delete("/runtime-backend/instances/{instance_id}")
+async def terminate_runtime_instance(instance_id: str):
+    """Terminate a runtime instance."""
+    await runtime_backend_hub.terminate_instance(instance_id)
+    return {"instance_id": instance_id, "terminated": True}
 
 
