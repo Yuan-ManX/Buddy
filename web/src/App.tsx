@@ -48,6 +48,12 @@ import { AgentDashboard } from './components/AgentDashboard';
 import { ProactiveDiscoveryPanel } from './components/ProactiveDiscoveryPanel';
 import { MetaCognitionPanel } from './components/MetaCognitionPanel';
 import { EvolutionPanel } from './components/EvolutionPanel';
+import { AgentSelfPanel } from './components/AgentSelfPanel';
+import { PluginSystemPanel } from './components/PluginSystemPanel';
+import { IMHubPanel } from './components/IMHubPanel';
+import { MarketplacePanel } from './components/MarketplacePanel';
+import { TaskQueuePanel } from './components/TaskQueuePanel';
+import { RuntimeBackendPanel } from './components/RuntimeBackendPanel';
 import { KanbanBoard } from './components/KanbanBoard';
 import { ActivityTimeline } from './components/ActivityTimeline';
 import { RuntimeMonitor } from './components/RuntimeMonitor';
@@ -471,9 +477,15 @@ export default function App() {
         {activeTab === 'proactive' && selectedAgent && <ProactiveDiscoveryPanel agent={selectedAgent} />}
         {activeTab === 'metacognition' && selectedAgent && <MetaCognitionPanel agent={selectedAgent} />}
         {activeTab === 'evolution' && selectedAgent && <EvolutionPanel agent={selectedAgent} />}
+        {activeTab === 'agentself' && selectedAgent && <AgentSelfPanel agent={selectedAgent} />}
         {activeTab === 'activity' && <ActivityTimeline />}
         {activeTab === 'runtimemonitor' && <RuntimeMonitor />}
         {activeTab === 'skillmanager' && <SkillManager />}
+        {activeTab === 'plugins' && <PluginSystemPanel />}
+        {activeTab === 'imhub' && <IMHubPanel />}
+        {activeTab === 'marketplace' && <MarketplacePanel />}
+        {activeTab === 'taskqueue' && <TaskQueuePanel />}
+        {activeTab === 'runtimebackend' && <RuntimeBackendPanel agent={selectedAgent} />}
 
         {/* Agent-specific panels */}
         {selectedAgent && (
@@ -553,7 +565,7 @@ export default function App() {
     )}
 
         {/* Empty state — no agent and no global panel selected */}
-        {!selectedAgent && !['overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager'].includes(activeTab) && (
+        {!selectedAgent && !['overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend'].includes(activeTab) && (
           <div className="main-empty">
             <div className="main-empty-icon">B</div>
             <h2>Welcome to Buddy</h2>
