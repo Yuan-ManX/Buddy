@@ -143,6 +143,98 @@ class ExecutionPlan:
         return batches
 
 
+@dataclass
+class PlanTemplate:
+    """Predefined plan template for common task types."""
+    name: str
+    category: str
+    description: str = ""
+    default_steps: list[dict] = field(default_factory=list)
+
+    @classmethod
+    def for_research(cls) -> "PlanTemplate":
+        return cls(
+            name="Research Task",
+            category="research",
+            description="Investigate a topic and produce a comprehensive report",
+            default_steps=[
+                {"title": "Define research scope", "description": "Clarify the research question and boundaries", "depends_on": []},
+                {"title": "Gather sources", "description": "Collect relevant information from multiple sources", "depends_on": [0]},
+                {"title": "Analyze findings", "description": "Synthesize and cross-reference information", "depends_on": [1]},
+                {"title": "Draft report", "description": "Write structured findings with citations", "depends_on": [2]},
+                {"title": "Review and refine", "description": "Verify accuracy and improve clarity", "depends_on": [3]},
+            ],
+        )
+
+    @classmethod
+    def for_code_review(cls) -> "PlanTemplate":
+        return cls(
+            name="Code Review",
+            category="code-review",
+            description="Systematic code review with quality assessment",
+            default_steps=[
+                {"title": "Understand codebase context", "description": "Review project structure and dependencies", "depends_on": []},
+                {"title": "Read changed files", "description": "Examine all modified and new files", "depends_on": [0]},
+                {"title": "Check correctness", "description": "Verify logic, edge cases, and error handling", "depends_on": [1]},
+                {"title": "Assess code quality", "description": "Evaluate style, readability, and maintainability", "depends_on": [1]},
+                {"title": "Security review", "description": "Check for vulnerabilities and insecure patterns", "depends_on": [1]},
+                {"title": "Generate review report", "description": "Compile findings with actionable feedback", "depends_on": [2, 3, 4]},
+            ],
+        )
+
+    @classmethod
+    def for_data_analysis(cls) -> "PlanTemplate":
+        return cls(
+            name="Data Analysis",
+            category="data-analysis",
+            description="Analyze data and produce insights",
+            default_steps=[
+                {"title": "Load and inspect data", "description": "Import data and check structure", "depends_on": []},
+                {"title": "Clean data", "description": "Handle missing values and outliers", "depends_on": [0]},
+                {"title": "Explore distributions", "description": "Compute summary statistics and visualizations", "depends_on": [1]},
+                {"title": "Identify patterns", "description": "Find correlations, trends, and anomalies", "depends_on": [2]},
+                {"title": "Draw conclusions", "description": "Interpret findings and formulate recommendations", "depends_on": [3]},
+            ],
+        )
+
+    @classmethod
+    def for_content_creation(cls) -> "PlanTemplate":
+        return cls(
+            name="Content Creation",
+            category="content-creation",
+            description="Create structured content from requirements",
+            default_steps=[
+                {"title": "Analyze requirements", "description": "Understand target audience and goals", "depends_on": []},
+                {"title": "Research topic", "description": "Gather background information and references", "depends_on": [0]},
+                {"title": "Create outline", "description": "Structure the content with sections", "depends_on": [1]},
+                {"title": "Draft content", "description": "Write the full content following the outline", "depends_on": [2]},
+                {"title": "Edit and polish", "description": "Refine language, check grammar, improve flow", "depends_on": [3]},
+                {"title": "Final review", "description": "Verify against requirements and publish", "depends_on": [4]},
+            ],
+        )
+
+    @classmethod
+    def get_all_templates(cls) -> dict[str, "PlanTemplate"]:
+        return {
+            "research": cls.for_research(),
+            "code-review": cls.for_code_review(),
+            "data-analysis": cls.for_data_analysis(),
+            "content-creation": cls.for_content_creation(),
+        }
+
+    def to_plan_steps(self, plan_id: str) -> list[PlanStep]:
+        """Convert template steps into PlanStep instances."""
+        return [
+            PlanStep(
+                id=f"step-{plan_id}-{i}",
+                title=s["title"],
+                description=s.get("description", ""),
+                depends_on=[f"step-{plan_id}-{dep}" for dep in s.get("depends_on", [])],
+            )
+            for i, s in enumerate(self.default_steps)
+        ]
+
+
 class PlanningEngine:
     """Structured planning engine for complex task decomposition."""
 
@@ -173,6 +265,7 @@ Return a JSON plan with this structure:
             base_url=settings.OPENAI_BASE_URL,
         )
         self._plans: dict[str, ExecutionPlan] = {}
+        self.plan_dependency_graph: dict[str, set[str]] = {}
 
     async def generate_plan(self, goal: str, agent_id: str, model: str = "gpt-4o-mini") -> ExecutionPlan:
         """Generate an execution plan from a goal description."""
@@ -363,7 +456,256 @@ Return a JSON plan with this structure:
         return True
 
     def delete_plan(self, plan_id: str) -> bool:
-        return self._plans.pop(plan_id, None) is not None
+        result = self._plans.pop(plan_id, None) is not None
+        if result and plan_id in self.plan_dependency_graph:
+            del self.plan_dependency_graph[plan_id]
+        return result
+
+    # ── Advanced Planning Methods ───────────────────────────
+
+    async def plan_critique(
+        self,
+        plan: ExecutionPlan,
+        model: str = "gpt-4o-mini",
+    ) -> dict:
+        """Have the LLM review a plan for completeness before execution.
+
+        Returns a dict with 'score', 'issues', and 'suggestions'.
+        """
+        plan_text = json.dumps(plan.to_dict(), indent=2)
+        try:
+            response = await self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": (
+                        "You are a plan reviewer. Evaluate the given execution plan for completeness, "
+                        "feasibility, and logical ordering. Identify gaps, missing steps, unclear descriptions, "
+                        "and dependency issues. Return JSON with: "
+                        "{'score': 0.0-1.0, 'issues': ['issue1', ...], 'suggestions': ['suggestion1', ...]}"
+                    )},
+                    {"role": "user", "content": f"Review this plan:\n\n{plan_text}"},
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=1000,
+                temperature=0.3,
+            )
+            content = response.choices[0].message.content or "{}"
+            return json.loads(content)
+        except Exception as e:
+            logger.warning(f"Plan critique failed: {e}")
+            return {
+                "score": 0.5,
+                "issues": [f"Critique generation failed: {str(e)}"],
+                "suggestions": ["Review the plan manually."],
+            }
+
+    def plan_quality_score(self, plan: ExecutionPlan) -> float:
+        """Assign a quality score (0-1) to a plan based on completeness, specificity, and feasibility.
+
+        Scoring dimensions:
+        - Completeness: Are all necessary phases covered? (0-0.4)
+        - Specificity: Are steps clearly described? (0-0.3)
+        - Feasibility: Are dependencies well-formed? (0-0.2)
+        - Structure: Is step count reasonable? (0-0.1)
+        """
+        if not plan.steps:
+            return 0.0
+
+        score = 0.0
+
+        # Completeness: check for essential phases
+        titles_lower = " ".join(s.title.lower() for s in plan.steps)
+        essentials = [
+            ("analyze" in titles_lower or "understand" in titles_lower or "assess" in titles_lower, 0.15),
+            ("execute" in titles_lower or "implement" in titles_lower or "build" in titles_lower or "perform" in titles_lower or "do" in titles_lower, 0.1),
+            ("verify" in titles_lower or "test" in titles_lower or "check" in titles_lower or "review" in titles_lower or "validate" in titles_lower, 0.1),
+            ("report" in titles_lower or "summarize" in titles_lower or "finalize" in titles_lower or "deliver" in titles_lower, 0.05),
+        ]
+        for condition, weight in essentials:
+            if condition:
+                score += weight
+
+        # Specificity: descriptions should be non-trivial
+        described = sum(1 for s in plan.steps if len(s.description) > 20)
+        score += min(0.3, (described / max(len(plan.steps), 1)) * 0.3)
+
+        # Feasibility: dependencies should reference valid step IDs
+        valid_ids = {s.id for s in plan.steps}
+        valid_deps = 0
+        total_deps = 0
+        for s in plan.steps:
+            for dep in s.depends_on:
+                total_deps += 1
+                if dep in valid_ids:
+                    valid_deps += 1
+        if total_deps > 0:
+            score += (valid_deps / total_deps) * 0.2
+        else:
+            score += 0.1  # No dependencies is acceptable for simple plans
+
+        # Structure: step count
+        n = len(plan.steps)
+        if 3 <= n <= 8:
+            score += 0.1
+        elif n < 3:
+            score += 0.05
+        else:
+            score += max(0, 0.1 - (n - 8) * 0.02)
+
+        return round(min(1.0, score), 3)
+
+    def parallelize_steps(self, plan: ExecutionPlan) -> list[list[PlanStep]]:
+        """Identify independent plan steps that can run concurrently.
+
+        Returns a list of batches where each batch contains steps that
+        can execute in parallel (no inter-dependencies within a batch).
+        """
+        # Build dependency graph
+        step_map = {s.id: s for s in plan.steps}
+        in_degree: dict[str, int] = {s.id: 0 for s in plan.steps}
+        dependents: dict[str, list[str]] = {s.id: [] for s in plan.steps}
+
+        for step in plan.steps:
+            for dep_id in step.depends_on:
+                if dep_id in in_degree:
+                    in_degree[step.id] += 1
+                    dependents.setdefault(dep_id, []).append(step.id)
+
+        # Topological sort into batches
+        batches = []
+        ready = [sid for sid, deg in in_degree.items() if deg == 0]
+
+        while ready:
+            batch = [step_map[sid] for sid in sorted(ready)]
+            batches.append(batch)
+
+            next_ready = []
+            for sid in ready:
+                for dependent_id in dependents.get(sid, []):
+                    in_degree[dependent_id] -= 1
+                    if in_degree[dependent_id] == 0:
+                        next_ready.append(dependent_id)
+            ready = next_ready
+
+        # Update the dependency graph cache
+        self.plan_dependency_graph[plan.id] = {
+            sid: set(deps) for sid, deps in dependents.items()
+        }
+
+        return batches
+
+    async def adaptive_replan(
+        self,
+        plan: ExecutionPlan,
+        model: str = "gpt-4o-mini",
+    ) -> ExecutionPlan | None:
+        """During execution, detect when a plan is going off-track and re-plan mid-execution.
+
+        Analyzes step statuses, identifies stuck or failed steps, and generates
+        a revised set of remaining steps to salvage the plan. Returns a new
+        ExecutionPlan if replanning was needed, or None if the plan is on track.
+        """
+        # Determine if replanning is needed
+        completed = sum(1 for s in plan.steps if s.status in (StepStatus.COMPLETED, StepStatus.SKIPPED))
+        failed = sum(1 for s in plan.steps if s.status == StepStatus.FAILED)
+        total = len(plan.steps)
+
+        # Only replan if there are failures or progress is stuck
+        if failed == 0 and completed < total:
+            # Check for blocked steps
+            blocked = sum(1 for s in plan.steps if s.status == StepStatus.BLOCKED)
+            if blocked == 0:
+                return None  # Plan is progressing normally
+
+        # Build context about what's been done and what failed
+        completed_context = "\n".join(
+            f"- [COMPLETED] {s.title}: {s.result[:200]}"
+            for s in plan.steps
+            if s.status in (StepStatus.COMPLETED, StepStatus.SKIPPED)
+        )
+        failed_context = "\n".join(
+            f"- [FAILED] {s.title}: {s.result[:200]}"
+            for s in plan.steps if s.status == StepStatus.FAILED
+        )
+        pending_context = "\n".join(
+            f"- [PENDING] {s.title}"
+            for s in plan.steps
+            if s.status == StepStatus.PENDING
+        )
+
+        try:
+            replan_response = await self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": (
+                        "You are a replanning system. Given a partially executed plan with some failures, "
+                        "create a revised set of remaining steps to complete the original goal. Consider "
+                        "what has already been done and what failed. Return JSON: "
+                        "{'should_replan': true/false, 'reason': '...', "
+                        "'revised_steps': [{'title': '...', 'description': '...', 'depends_on': []}]}"
+                    )},
+                    {"role": "user", "content": (
+                        f"Original goal: {plan.goal}\n\n"
+                        f"Completed steps:\n{completed_context or 'None'}\n\n"
+                        f"Failed steps:\n{failed_context or 'None'}\n\n"
+                        f"Pending steps:\n{pending_context or 'None'}\n\n"
+                        "Should we replan? If so, what are the revised remaining steps?"
+                    )},
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=1000,
+                temperature=0.4,
+            )
+            content = response.choices[0].message.content or "{}"
+            replan_data = json.loads(content)
+
+            if not replan_data.get("should_replan", False):
+                return None
+
+            # Create revised plan with new steps
+            revised_plan = ExecutionPlan(
+                id=f"{plan.id}-r{len([k for k in self._plans if k.startswith(plan.id)])}",
+                title=f"{plan.title} (Revised)",
+                goal=plan.goal,
+                created_by=plan.created_by,
+                created_at=datetime.now(timezone.utc).isoformat(),
+            )
+
+            revised_steps = replan_data.get("revised_steps", [])
+            for i, step_data in enumerate(revised_steps):
+                revised_plan.steps.append(PlanStep(
+                    id=f"step-{revised_plan.id}-{i}",
+                    title=step_data.get("title", f"Step {i+1}"),
+                    description=step_data.get("description", ""),
+                ))
+
+            self._plans[revised_plan.id] = revised_plan
+            logger.info(f"Adaptive replan: {plan.id} -> {revised_plan.id} ({len(revised_steps)} new steps)")
+            return revised_plan
+
+        except Exception as e:
+            logger.warning(f"Adaptive replan failed: {e}")
+            return None
+
+    def _rebuild_dependency_graph(self, plan_id: str):
+        """Rebuild the internal dependency graph for a plan."""
+        plan = self._plans.get(plan_id)
+        if not plan:
+            return
+        dependents: dict[str, set[str]] = {}
+        for step in plan.steps:
+            dependents[step.id] = set()
+            for dep_id in step.depends_on:
+                dependents.setdefault(dep_id, set()).add(step.id)
+        self.plan_dependency_graph[plan_id] = dependents
+
+    def get_dependency_graph(self, plan_id: str) -> dict[str, list[str]]:
+        """Get the dependency graph for a plan as {step_id: [dependent_step_ids]}."""
+        graph = self.plan_dependency_graph.get(plan_id)
+        if not graph:
+            self._rebuild_dependency_graph(plan_id)
+            graph = self.plan_dependency_graph.get(plan_id, {})
+        return {k: list(v) for k, v in graph.items()}
 
     def get_stats(self) -> dict:
         plans = list(self._plans.values())
