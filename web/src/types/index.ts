@@ -1,4 +1,4 @@
-export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse' | 'persona' | 'learning' | 'gateway' | 'daemon' | 'swarm' | 'knowledge' | 'runtime' | 'scheduler' | 'studio' | 'workflow' | 'board' | 'compounding' | 'whitememory' | 'pipeline' | 'capability' | 'kgraph' | 'memorysync' | 'phub' | 'costs' | 'workspaces' | 'agentdashboard' | 'proactive' | 'metacognition' | 'evolution' | 'kanban' | 'activity' | 'runtimemonitor' | 'skillmanager' | 'agent-comparison';
+export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse' | 'persona' | 'learning' | 'gateway' | 'daemon' | 'swarm' | 'knowledge' | 'runtime' | 'scheduler' | 'studio' | 'workflow' | 'board' | 'compounding' | 'whitememory' | 'pipeline' | 'capability' | 'kgraph' | 'memorysync' | 'phub' | 'costs' | 'workspaces' | 'agentdashboard' | 'proactive' | 'metacognition' | 'evolution' | 'kanban' | 'activity' | 'runtimemonitor' | 'skillmanager' | 'agent-comparison' | 'agentself' | 'plugins' | 'imhub' | 'marketplace' | 'taskqueue' | 'runtimebackend';
 
 export interface Agent {
   id: string;
@@ -922,4 +922,173 @@ export interface WorkflowStats {
   tasks_by_priority: Record<string, number>;
   total_blockers: number;
   unresolved_blockers: number;
+}
+
+// ── Agent Self Types ──
+
+export interface AgentSelfProfile {
+  agent_id: string;
+  agent_name: string;
+  traits: Record<string, { name: string; value: string; category: string; confidence: number; origin: string }>;
+  patterns: Record<string, { pattern_type: string; frequency: number; avg_success_rate: number; description: string }>;
+  evolution_step: number;
+  interaction_count: number;
+  alignment_score: number;
+  snapshot_count: number;
+}
+
+export interface AgentSelfStats {
+  agent_id: string;
+  agent_name: string;
+  total_traits: number;
+  total_patterns: number;
+  evolution_step: number;
+  interaction_count: number;
+  alignment_score: number;
+  snapshot_count: number;
+}
+
+// ── Plugin System Types ──
+
+export interface PluginInfo {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  status: string;
+  permissions: string[];
+  capabilities: string[];
+  tags: string[];
+  homepage: string;
+  installed_at: string;
+  last_error: string;
+}
+
+export interface PluginStats {
+  total_plugins: number;
+  by_status: Record<string, number>;
+  active_hooks: Record<string, number>;
+}
+
+// ── IM Hub Types ──
+
+export interface IMPlatformStatus {
+  platform: string;
+  config_status: string;
+  connection_status: string;
+  message_count: number;
+  online_users: number;
+  active_chats: number;
+}
+
+export interface IMHubStats {
+  connected_platforms: number;
+  platforms: Record<string, string>;
+  total_messages: number;
+  active_chats: number;
+}
+
+// ── Skills Marketplace Types ──
+
+export interface MarketplaceSkillInfo {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  version: string;
+  author: string;
+  author_id: string;
+  tags: string[];
+  rating: number;
+  review_count: number;
+  download_count: number;
+  pricing: string;
+  dependencies: string[];
+  verified: boolean;
+  published_at: string;
+}
+
+export interface MarketplaceStats {
+  total_skills: number;
+  total_publishers: number;
+  total_reviews: number;
+  total_downloads: number;
+  avg_rating: number;
+  by_category: Record<string, number>;
+}
+
+export interface SkillReview {
+  id: string;
+  skill_id: string;
+  reviewer_name: string;
+  rating: number;
+  title: string;
+  content: string;
+  created_at: string;
+}
+
+// ── Task Queue Types ──
+
+export interface QueuedJob {
+  id: string;
+  job_type: string;
+  name: string;
+  priority: string;
+  status: string;
+  agent_id: string;
+  progress: number;
+  progress_message: string;
+  tags: string[];
+  created_at: string;
+  started_at: string;
+  completed_at: string;
+  retry_count: number;
+  max_retries: number;
+  error_message: string;
+}
+
+export interface BatchJobInfo {
+  id: string;
+  name: string;
+  status: string;
+  progress: number;
+  total_jobs: number;
+  completed_jobs: number;
+  failed_jobs: number;
+  job_ids: string[];
+}
+
+export interface TaskQueueStats {
+  total_jobs: number;
+  by_status: Record<string, number>;
+  by_priority: Record<string, number>;
+  active_workers: number;
+  max_concurrent: number;
+}
+
+// ── Runtime Backend Types ──
+
+export interface RuntimeBackendInfo {
+  kind: string;
+  display_name: string;
+  capabilities: string[];
+  instance_count: number;
+  active_count: number;
+}
+
+export interface RuntimeInstanceInfo {
+  id: string;
+  backend: string;
+  status: string;
+  agent_id: string;
+  created_at: string;
+  started_at: string;
+  error: string;
+}
+
+export interface RuntimeBackendStats {
+  total_instances: number;
+  by_status: Record<string, number>;
+  by_backend: Record<string, number>;
 }
