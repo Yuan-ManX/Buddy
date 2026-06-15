@@ -24,7 +24,7 @@ from typing import Any
 from openai import AsyncOpenAI
 from config.settings import settings
 
-logger = logging.getLogger("buddy.learning")
+logger = logging.getLogger("buddy.self_improvement")
 
 
 class PatternType(str, Enum):
@@ -357,6 +357,21 @@ Adapt this approach to the user's specific situation while following the core me
                 skill.status = SkillStatus.PROMOTED
                 skill.updated_at = datetime.now(timezone.utc).isoformat()
                 promoted.append(skill.id)
+
+                # Register the skill handler in the skills registry
+                handler_fn = await make_skill_handler(skill)
+                try:
+                    from .shared import skills_registry
+                    skills_registry.register(
+                        skill_id=skill.id,
+                        name=skill.name,
+                        handler=handler_fn,
+                        description=skill.description,
+                        tags=skill.tags,
+                    )
+                except (ImportError, AttributeError) as e:
+                    logger.warning(f"Could not register promoted skill {skill.name}: {e}")
+
                 logger.info(f"Promoted skill: {skill.name} (score: {skill.score:.2f})")
 
         return promoted
