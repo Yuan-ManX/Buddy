@@ -1339,4 +1339,166 @@ export const api = {
     status: (resourceType: string) => request<any>(`/resources/status?resource_type=${resourceType}`),
     reset: () => request<any>('/resources/reset', { method: 'POST' }),
   },
+
+  // ── Agent Self ──
+  agentSelf: {
+    profile: (agentId: string) =>
+      request<import('../types').AgentSelfProfile>(`/agents/${agentId}/self/profile`),
+    stats: (agentId: string) =>
+      request<import('../types').AgentSelfStats>(`/agents/${agentId}/self/stats`),
+    snapshot: (agentId: string) =>
+      request<{ id: string; timestamp: string; trait_count: number; pattern_count: number; dominant_categories: string[]; evolution_step: number }>(`/agents/${agentId}/self/snapshot`, { method: 'POST' }),
+    observe: (agentId: string, userMessage: string, agentResponse?: string, topic?: string, sentiment?: string, complexity?: string) => {
+      const qs = new URLSearchParams({ user_message: userMessage, agent_response: agentResponse || '', topic: topic || '', sentiment: sentiment || '', complexity: complexity || '' });
+      return request<{ agent_id: string; observed: boolean }>(`/agents/${agentId}/self/observe?${qs.toString()}`, { method: 'POST' });
+    },
+    export: (agentId: string) =>
+      request<any>(`/agents/${agentId}/self/export`),
+    import: (agentId: string, data: Record<string, unknown>) =>
+      request<any>(`/agents/${agentId}/self/import`, { method: 'POST', body: JSON.stringify(data) }),
+    registry: () =>
+      request<{ agents: string[] }>('/agent-self/registry'),
+  },
+
+  // ── Plugin System ──
+  plugins: {
+    list: (status?: string) => {
+      const qs = status ? `?status=${status}` : '';
+      return request<{ plugins: Array<import('../types').PluginInfo> }>(`/plugins${qs}`);
+    },
+    stats: () =>
+      request<import('../types').PluginStats>('/plugins/stats'),
+    register: (data: { id: string; name: string; version?: string; description?: string; author?: string; homepage?: string; permissions?: string[]; capabilities?: string[]; entry_point?: string; tags?: string[] }) =>
+      request<{ id: string; status: string }>('/plugins/register', { method: 'POST', body: JSON.stringify(data) }),
+    install: (pluginId: string) =>
+      request<{ plugin_id: string; installed: boolean }>(`/plugins/${pluginId}/install`, { method: 'POST' }),
+    activate: (pluginId: string) =>
+      request<{ plugin_id: string; activated: boolean }>(`/plugins/${pluginId}/activate`, { method: 'POST' }),
+    deactivate: (pluginId: string) =>
+      request<{ plugin_id: string; deactivated: boolean }>(`/plugins/${pluginId}/deactivate`, { method: 'POST' }),
+    uninstall: (pluginId: string) =>
+      request<{ plugin_id: string; uninstalled: boolean }>(`/plugins/${pluginId}`, { method: 'DELETE' }),
+  },
+
+  // ── IM Hub ──
+  imHub: {
+    stats: () =>
+      request<import('../types').IMHubStats>('/im/stats'),
+    platforms: () =>
+      request<{ platforms: Array<import('../types').IMPlatformStatus> }>('/im/platforms'),
+    messages: (platform?: string, limit?: number) => {
+      const qs = new URLSearchParams();
+      if (platform) qs.set('platform', platform);
+      if (limit) qs.set('limit', String(limit));
+      return request<{ messages: any[] }>(`/im/messages?${qs.toString()}`);
+    },
+    configure: (data: { platform: string; enabled?: boolean; bot_token?: string; app_id?: string; app_secret?: string; webhook_url?: string; allowed_chat_ids?: string[]; auto_reply?: boolean }) =>
+      request<{ platform: string; configured: boolean }>('/im/platforms/configure', { method: 'POST', body: JSON.stringify(data) }),
+    connect: (platform: string) =>
+      request<{ platform: string; connected: boolean }>(`/im/platforms/${platform}/connect`, { method: 'POST' }),
+    disconnect: (platform: string) =>
+      request<{ platform: string; disconnected: boolean }>(`/im/platforms/${platform}/disconnect`, { method: 'POST' }),
+    send: (platform: string, chatId: string, text: string) => {
+      const qs = new URLSearchParams({ platform, chat_id: chatId, text });
+      return request<{ sent: boolean }>(`/im/send?${qs.toString()}`, { method: 'POST' });
+    },
+    assignAgent: (chatId: string, agentId: string) => {
+      const qs = new URLSearchParams({ chat_id: chatId, agent_id: agentId });
+      return request<{ chat_id: string; agent_id: string; assigned: boolean }>(`/im/chats/assign?${qs.toString()}`, { method: 'POST' });
+    },
+  },
+
+  // ── Skills Marketplace ──
+  marketplace: {
+    stats: () =>
+      request<import('../types').MarketplaceStats>('/marketplace/stats'),
+    search: (query?: string, category?: string, tags?: string, pricing?: string, sortBy?: string, page?: number, pageSize?: number) => {
+      const qs = new URLSearchParams();
+      if (query) qs.set('query', query);
+      if (category) qs.set('category', category);
+      if (tags) qs.set('tags', tags);
+      if (pricing) qs.set('pricing', pricing);
+      if (sortBy) qs.set('sort_by', sortBy);
+      if (page) qs.set('page', String(page));
+      if (pageSize) qs.set('page_size', String(pageSize));
+      return request<{ skills: Array<import('../types').MarketplaceSkillInfo>; total: number; page: number; page_size: number }>(`/marketplace/skills?${qs.toString()}`);
+    },
+    featured: () =>
+      request<{ skills: Array<import('../types').MarketplaceSkillInfo> }>('/marketplace/skills/featured'),
+    get: (skillId: string) =>
+      request<import('../types').MarketplaceSkillInfo>(`/marketplace/skills/${skillId}`),
+    publish: (data: { name: string; description?: string; category?: string; version?: string; author?: string; author_id?: string; tags?: string[]; dependencies?: string[]; prompt_template?: string; tool_requirements?: string[] }) =>
+      request<import('../types').MarketplaceSkillInfo>('/marketplace/skills/publish', { method: 'POST', body: JSON.stringify(data) }),
+    review: (skillId: string, data: { reviewer_id?: string; reviewer_name?: string; rating: number; title?: string; content?: string }) =>
+      request<{ id: string; rating: number; created_at: string }>(`/marketplace/skills/${skillId}/review`, { method: 'POST', body: JSON.stringify(data) }),
+    reviews: (skillId: string, page?: number, pageSize?: number) => {
+      const qs = new URLSearchParams();
+      if (page) qs.set('page', String(page));
+      if (pageSize) qs.set('page_size', String(pageSize));
+      return request<{ reviews: Array<import('../types').SkillReview>; total: number }>(`/marketplace/skills/${skillId}/reviews?${qs.toString()}`);
+    },
+    publisher: (publisherId: string) =>
+      request<any>(`/marketplace/publishers/${publisherId}`),
+    categories: () =>
+      request<{ categories: Array<{ category: string; count: number }> }>('/marketplace/categories'),
+    download: (skillId: string) =>
+      request<{ skill_id: string; recorded: boolean }>(`/marketplace/skills/${skillId}/download`, { method: 'POST' }),
+  },
+
+  // ── Task Queue ──
+  taskQueue: {
+    stats: () =>
+      request<import('../types').TaskQueueStats>('/queue/stats'),
+    listJobs: (params?: { status?: string; job_type?: string; priority?: string; agent_id?: string; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.status) qs.set('status', params.status);
+      if (params?.job_type) qs.set('job_type', params.job_type);
+      if (params?.priority) qs.set('priority', params.priority);
+      if (params?.agent_id) qs.set('agent_id', params.agent_id);
+      if (params?.limit) qs.set('limit', String(params.limit));
+      return request<{ jobs: Array<import('../types').QueuedJob> }>(`/queue/jobs?${qs.toString()}`);
+    },
+    getJob: (jobId: string) =>
+      request<import('../types').QueuedJob>(`/queue/jobs/${jobId}`),
+    submit: (data: { name: string; job_type?: string; payload?: Record<string, unknown>; priority?: string; agent_id?: string; max_retries?: number; timeout_seconds?: number; tags?: string[] }) =>
+      request<import('../types').QueuedJob>('/queue/jobs/submit', { method: 'POST', body: JSON.stringify(data) }),
+    submitBatch: (data: { name: string; jobs?: Array<{ name: string; job_type: string; payload?: Record<string, unknown> }>; priority?: string; agent_id?: string }) =>
+      request<import('../types').BatchJobInfo>('/queue/jobs/batch', { method: 'POST', body: JSON.stringify(data) }),
+    listBatches: (limit?: number) => {
+      const qs = limit ? `?limit=${limit}` : '';
+      return request<{ batches: Array<import('../types').BatchJobInfo> }>(`/queue/batches${qs}`);
+    },
+    getBatch: (batchId: string) =>
+      request<import('../types').BatchJobInfo>(`/queue/batches/${batchId}`),
+    cancelJob: (jobId: string) =>
+      request<{ job_id: string; cancelled: boolean }>(`/queue/jobs/${jobId}/cancel`, { method: 'POST' }),
+    updateProgress: (jobId: string, progress: number, message?: string) => {
+      const qs = new URLSearchParams();
+      qs.set('progress', String(progress));
+      if (message) qs.set('message', message);
+      return request<{ job_id: string; progress: number; updated: boolean }>(`/queue/jobs/${jobId}/progress?${qs.toString()}`, { method: 'PUT' });
+    },
+  },
+
+  // ── Runtime Backend ──
+  runtimeBackend: {
+    stats: () =>
+      request<import('../types').RuntimeBackendStats>('/runtime-backend/stats'),
+    backends: () =>
+      request<{ backends: Array<import('../types').RuntimeBackendInfo> }>('/runtime-backend/backends'),
+    instances: (agentId?: string) => {
+      const qs = agentId ? `?agent_id=${agentId}` : '';
+      return request<{ instances: Array<import('../types').RuntimeInstanceInfo> }>(`/runtime-backend/instances${qs}`);
+    },
+    getInstance: (instanceId: string) =>
+      request<import('../types').RuntimeInstanceInfo>(`/runtime-backend/instances/${instanceId}`),
+    create: (data: { agent_id?: string; backend?: string; workspace_dir?: string; environment_vars?: Record<string, string>; installed_packages?: string[]; max_memory_mb?: number; max_cpu_cores?: number; timeout_seconds?: number }) =>
+      request<{ id: string; backend: string; status: string; agent_id: string }>('/runtime-backend/instances/create', { method: 'POST', body: JSON.stringify(data) }),
+    execute: (instanceId: string, data: { agent_config?: Record<string, unknown>; input_data?: Record<string, unknown> }) =>
+      request<any>(`/runtime-backend/instances/${instanceId}/execute`, { method: 'POST', body: JSON.stringify(data) }),
+    metrics: (instanceId: string) =>
+      request<any>(`/runtime-backend/instances/${instanceId}/metrics`),
+    terminate: (instanceId: string) =>
+      request<{ instance_id: string; terminated: boolean }>(`/runtime-backend/instances/${instanceId}`, { method: 'DELETE' }),
+  },
 };
