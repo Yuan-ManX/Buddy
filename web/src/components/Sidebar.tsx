@@ -56,6 +56,10 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'activity', label: 'Activity', icon: '📡' },
   { id: 'runtimemonitor', label: 'Runtime', icon: '🖥️' },
   { id: 'skillmanager', label: 'S-Manager', icon: '🎛️' },
+  { id: 'agentcore', label: 'A-Core', icon: '🧬' },
+  { id: 'synthesis', label: 'Synthesis', icon: '🔮' },
+  { id: 'intelligence', label: 'Intel', icon: '💡' },
+  { id: 'runtimepanel', label: 'Runtime', icon: '⚡' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
