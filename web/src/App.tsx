@@ -59,6 +59,10 @@ import { ActivityTimeline } from './components/ActivityTimeline';
 import { RuntimeMonitor } from './components/RuntimeMonitor';
 import { SkillManager } from './components/SkillManager';
 import { StatusBar } from './components/StatusBar';
+import { AgentCorePanel } from './components/AgentCorePanel';
+import { SynthesisPanel } from './components/SynthesisPanel';
+import { IntelligencePanel } from './components/IntelligencePanel';
+import { RuntimePanel } from './components/RuntimePanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { CommandPalette } from './components/CommandPalette';
@@ -486,6 +490,10 @@ export default function App() {
         {activeTab === 'marketplace' && <MarketplacePanel />}
         {activeTab === 'taskqueue' && <TaskQueuePanel />}
         {activeTab === 'runtimebackend' && <RuntimeBackendPanel agent={selectedAgent} />}
+        {activeTab === 'agentcore' && <AgentCorePanel />}
+        {activeTab === 'synthesis' && <SynthesisPanel />}
+        {activeTab === 'intelligence' && <IntelligencePanel />}
+        {activeTab === 'runtimepanel' && <RuntimePanel />}
 
         {/* Agent-specific panels */}
         {selectedAgent && (
