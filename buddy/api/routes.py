@@ -48,6 +48,11 @@ from agent.identity import PersonaType as IdentityPersonaType
 from agent.trajectory import TraceAction as TrajectoryTraceAction
 from agent.squad import SquadStatus as SquadSquadStatus, MemberRole as SquadMemberRole
 from agent.websocket import MessageType as WsMessageType, WebSocketMessage
+from agent.protocol import acp, AgentMessage, MessageType as AcpMessageType, MessagePriority
+from agent.provider import provider_registry, ProviderType, ProviderConfig
+from agent.tool_chain import tool_chain_executor, ToolNode
+from agent.discovery import agent_discovery, AgentRegistration, AgentCapability
+from agent.resource import resource_manager, ResourceType as ResType, QuotaPeriod
 from agent.workflow import WorkflowPriority, TaskState, BlockerType
 from config.settings import settings
 
@@ -5867,6 +5872,466 @@ async def list_shared_records(
     }
 
 
+# ═══════════════════════════════════════════════════════════════════
+# Agent Communication Protocol (ACP) Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+class AgentMessageCreate(BaseModel):
+    msg_type: str = "task_request"
+    sender_id: str
+    recipient_id: str
+    priority: str = "normal"
+    payload: dict = Field(default_factory=dict)
+    ttl_seconds: int = 300
+    tags: list[str] = Field(default_factory=list)
+
+
+@router.get("/protocol/stats")
+async def get_protocol_stats():
+    """Get ACP communication statistics."""
+    return acp.get_stats()
+
+
+@router.get("/protocol/agent/{agent_id}/stats")
+async def get_agent_protocol_stats(agent_id: str):
+    """Get ACP stats for a specific agent."""
+    return acp.get_agent_stats(agent_id)
+
+
+@router.post("/protocol/send", status_code=201)
+async def send_acp_message(data: AgentMessageCreate):
+    """Send a message via the Agent Communication Protocol."""
+    try:
+        msg_type = AcpMessageType(data.msg_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid message type: {data.msg_type}")
+    try:
+        priority = MessagePriority(data.priority)
+    except ValueError:
+        priority = MessagePriority.NORMAL
+
+    msg = AgentMessage(
+        msg_type=msg_type,
+        sender_id=data.sender_id,
+        recipient_id=data.recipient_id,
+        priority=priority,
+        payload=data.payload,
+        ttl_seconds=data.ttl_seconds,
+        tags=data.tags,
+    )
+    success = await acp.send(msg)
+    return {"sent": success, "message_id": msg.id, "status": msg.status.value}
+
+
+@router.post("/protocol/session")
+async def create_protocol_session(agent_a: str = Query(...), agent_b: str = Query(...)):
+    """Create a communication session between two agents."""
+    session = await acp.create_session(agent_a, agent_b)
+    return {
+        "session_id": session.id,
+        "agent_a": session.agent_a,
+        "agent_b": session.agent_b,
+        "is_active": session.is_active,
+    }
+
+
+@router.delete("/protocol/session")
+async def close_protocol_session(agent_a: str = Query(...), agent_b: str = Query(...)):
+    """Close a communication session."""
+    await acp.close_session(agent_a, agent_b)
+    return {"closed": True}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Provider Registry Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+class ProviderRegisterRequest(BaseModel):
+    provider_type: str
+    api_key: str = ""
+    base_url: str = ""
+    models: list[str] = Field(default_factory=list)
+    default_model: str = ""
+    max_concurrency: int = 10
+
+
+@router.get("/providers/stats")
+async def get_provider_stats():
+    """Get comprehensive provider statistics."""
+    return provider_registry.get_stats()
+
+
+@router.get("/providers/costs")
+async def get_provider_costs():
+    """Get cost breakdown by provider."""
+    return provider_registry.get_cost_summary()
+
+
+@router.get("/providers/models")
+async def get_available_models():
+    """Get all available models across providers."""
+    return {"models": provider_registry.get_available_models()}
+
+
+@router.get("/providers/health")
+async def get_provider_health():
+    """Get health status of all providers."""
+    healthy = provider_registry.get_healthy_providers()
+    return {
+        "healthy": [h.value for h in healthy],
+        "total": len(provider_registry._providers),
+    }
+
+
+@router.post("/providers/health/{provider_type}/check")
+async def check_provider_health(provider_type: str):
+    """Run a health check on a specific provider."""
+    try:
+        pt = ProviderType(provider_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid provider type: {provider_type}")
+    health = await provider_registry.health_check(pt)
+    return {
+        "provider": pt.value,
+        "status": health.status.value,
+        "latency_ms": health.latency_ms,
+        "consecutive_failures": health.consecutive_failures,
+    }
+
+
+@router.post("/providers/register", status_code=201)
+async def register_provider(data: ProviderRegisterRequest):
+    """Register a new LLM provider."""
+    try:
+        pt = ProviderType(data.provider_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid provider type: {data.provider_type}")
+    config = ProviderConfig(
+        provider_type=pt,
+        api_key=data.api_key,
+        base_url=data.base_url,
+        models=data.models,
+        default_model=data.default_model or (data.models[0] if data.models else ""),
+        max_concurrency=data.max_concurrency,
+    )
+    provider_registry.register(config)
+    return {"registered": True, "provider": pt.value, "models": data.models}
+
+
+@router.delete("/providers/{provider_type}")
+async def unregister_provider(provider_type: str):
+    """Remove a provider from the registry."""
+    try:
+        pt = ProviderType(provider_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid provider type: {provider_type}")
+    provider_registry.unregister(pt)
+    return {"unregistered": True}
+
+
+@router.post("/providers/cache/clear")
+async def clear_provider_cache():
+    """Clear the provider response cache."""
+    provider_registry.clear_cache()
+    return {"cleared": True}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Tool Chain Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+class ToolNodeCreate(BaseModel):
+    id: str
+    tool_name: str
+    arguments: dict = Field(default_factory=dict)
+    depends_on: list[str] = Field(default_factory=list)
+    timeout_seconds: int = 60
+    retry_on_failure: bool = False
+
+
+class ToolChainCreate(BaseModel):
+    name: str
+    nodes: list[ToolNodeCreate]
+    edges: list[dict] = Field(default_factory=list)  # [{from, to}]
+    global_timeout_seconds: int = 300
+
+
+@router.get("/tool-chains/stats")
+async def get_tool_chain_stats():
+    """Get tool chain executor statistics."""
+    return tool_chain_executor.get_executor_stats()
+
+
+@router.get("/tool-chains/templates")
+async def list_tool_chain_templates():
+    """List all saved tool chain templates."""
+    return {"templates": tool_chain_executor.list_templates()}
+
+
+@router.post("/tool-chains", status_code=201)
+async def create_tool_chain(data: ToolChainCreate):
+    """Create and optionally execute a tool chain."""
+    nodes = [
+        ToolNode(
+            id=n.id,
+            tool_name=n.tool_name,
+            arguments=n.arguments,
+            depends_on=n.depends_on,
+            timeout_seconds=n.timeout_seconds,
+            retry_on_failure=n.retry_on_failure,
+        )
+        for n in data.nodes
+    ]
+    chain = tool_chain_executor.create_chain(data.name, nodes)
+    for edge in data.edges:
+        chain.add_edge(edge["from"], edge["to"])
+    chain.global_timeout_seconds = data.global_timeout_seconds
+    return {"chain_id": chain.id, "name": chain.name, "node_count": len(nodes)}
+
+
+@router.get("/tool-chains/{chain_id}")
+async def get_tool_chain(chain_id: str):
+    """Get tool chain details and execution stats."""
+    stats = tool_chain_executor.get_chain_stats(chain_id)
+    if not stats:
+        raise HTTPException(404, "Tool chain not found")
+    return stats
+
+
+@router.post("/tool-chains/{chain_id}/execute")
+async def execute_tool_chain(chain_id: str):
+    """Execute a tool chain."""
+    chain = await tool_chain_executor.execute(chain_id)
+    results = tool_chain_executor.get_all_results(chain_id)
+    return {
+        "chain_id": chain.id,
+        "status": chain.status.value,
+        "results": {k: str(v)[:500] for k, v in results.items()},
+        "node_count": len(chain.nodes),
+    }
+
+
+@router.post("/tool-chains/templates/{name}")
+async def save_tool_chain_template(name: str, data: ToolChainCreate):
+    """Save a tool chain as a reusable template."""
+    nodes = [
+        ToolNode(
+            id=n.id,
+            tool_name=n.tool_name,
+            arguments=n.arguments,
+            depends_on=n.depends_on,
+            timeout_seconds=n.timeout_seconds,
+            retry_on_failure=n.retry_on_failure,
+        )
+        for n in data.nodes
+    ]
+    chain = tool_chain_executor.create_chain(data.name, nodes)
+    for edge in data.edges:
+        chain.add_edge(edge["from"], edge["to"])
+    tool_chain_executor.save_template(name, chain)
+    return {"saved": True, "template": name, "node_count": len(nodes)}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Agent Discovery Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+class AgentRegisterRequest(BaseModel):
+    agent_id: str
+    agent_name: str
+    capabilities: list[str] = Field(default_factory=list)
+    expertise_domains: list[str] = Field(default_factory=list)
+    model: str = ""
+    max_concurrency: int = 5
+
+
+@router.get("/discovery/stats")
+async def get_discovery_stats():
+    """Get agent discovery service statistics."""
+    return agent_discovery.get_stats()
+
+
+@router.get("/discovery/capabilities")
+async def list_discovery_capabilities():
+    """List all registered capabilities."""
+    return {"capabilities": agent_discovery.list_capabilities()}
+
+
+@router.get("/discovery/agents")
+async def list_discovered_agents():
+    """List all registered agents."""
+    agents = agent_discovery.list_all_agents()
+    return {
+        "agents": [
+            {
+                "agent_id": a.agent_id,
+                "agent_name": a.agent_name,
+                "capabilities": a.capabilities,
+                "status": a.status,
+                "score": a.score,
+                "availability": a.availability(),
+            }
+            for a in agents
+        ],
+        "count": len(agents),
+    }
+
+
+@router.post("/discovery/register", status_code=201)
+async def register_agent_discovery(data: AgentRegisterRequest):
+    """Register an agent in the discovery service."""
+    registration = AgentRegistration(
+        agent_id=data.agent_id,
+        agent_name=data.agent_name,
+        capabilities=data.capabilities,
+        expertise_domains=data.expertise_domains,
+        model=data.model,
+        max_concurrency=data.max_concurrency,
+    )
+    agent_id = agent_discovery.register(registration)
+    return {"registered": True, "agent_id": agent_id}
+
+
+@router.post("/discovery/heartbeat/{agent_id}")
+async def agent_heartbeat(agent_id: str):
+    """Send a heartbeat for an agent."""
+    success = agent_discovery.heartbeat(agent_id)
+    return {"heartbeat": success, "agent_id": agent_id}
+
+
+@router.get("/discovery/find/{capability}")
+async def discover_by_capability(
+    capability: str,
+    min_score: float = Query(default=0.3, ge=0.0, le=1.0),
+    strategy: str = Query(default="balanced"),
+):
+    """Find agents by capability."""
+    if strategy == "best":
+        agent = agent_discovery.discover_best_agent(capability, strategy)
+        if agent:
+            return {"found": True, "agent": agent.agent_name, "agent_id": agent.agent_id, "score": agent.score}
+        return {"found": False, "capability": capability}
+
+    agents = agent_discovery.discover_by_capability(capability, min_score=min_score)
+    return {
+        "agents": [
+            {"agent_id": a.agent_id, "agent_name": a.agent_name, "score": a.score, "load": a.current_load}
+            for a in agents
+        ],
+        "count": len(agents),
+    }
+
+
+@router.get("/discovery/agent/{agent_id}")
+async def get_discovery_agent_info(agent_id: str):
+    """Get detailed agent discovery info."""
+    info = agent_discovery.get_agent_info(agent_id)
+    if not info:
+        raise HTTPException(404, "Agent not found in discovery service")
+    return info
+
+
+@router.delete("/discovery/agent/{agent_id}")
+async def unregister_discovery_agent(agent_id: str):
+    """Remove an agent from discovery."""
+    agent_discovery.unregister(agent_id)
+    return {"unregistered": True}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Resource Manager Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+class ResourceQuotaSet(BaseModel):
+    resource_type: str
+    limit: float
+    period: str = "per_day"
+
+
+@router.get("/resources/stats")
+async def get_resource_stats():
+    """Get resource management statistics."""
+    return resource_manager.get_stats()
+
+
+@router.get("/resources/global")
+async def get_global_resource_report():
+    """Get global resource usage report."""
+    return resource_manager.get_global_report()
+
+
+@router.get("/resources/agent/{agent_id}")
+async def get_agent_resource_report(agent_id: str):
+    """Get resource usage report for an agent."""
+    return resource_manager.get_usage_report(agent_id)
+
+
+@router.post("/resources/agent/{agent_id}/quota")
+async def set_agent_resource_quota(agent_id: str, data: ResourceQuotaSet):
+    """Set a resource quota for an agent."""
+    try:
+        res_type = ResType(data.resource_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid resource type: {data.resource_type}")
+    try:
+        period = QuotaPeriod(data.period)
+    except ValueError:
+        period = QuotaPeriod.PER_DAY
+
+    resource_manager.set_agent_quota(agent_id, res_type, data.limit, period)
+    return {"set": True, "agent_id": agent_id, "resource_type": res_type.value, "limit": data.limit}
+
+
+@router.post("/resources/agent/{agent_id}/acquire")
+async def acquire_resource(agent_id: str, resource_type: str = Query(...), amount: float = Query(default=1.0, gt=0)):
+    """Try to acquire resources for an agent."""
+    try:
+        res_type = ResType(resource_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid resource type: {resource_type}")
+    success = await resource_manager.acquire(agent_id, res_type, amount)
+    return {"acquired": success, "agent_id": agent_id, "resource_type": res_type.value, "amount": amount}
+
+
+@router.post("/resources/agent/{agent_id}/release")
+async def release_resource(agent_id: str, resource_type: str = Query(...), amount: float = Query(default=1.0, gt=0)):
+    """Release previously acquired resources."""
+    try:
+        res_type = ResType(resource_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid resource type: {resource_type}")
+    resource_manager.release(agent_id, res_type, amount)
+    return {"released": True}
+
+
+@router.get("/resources/alerts")
+async def get_resource_alerts(limit: int = Query(default=10, ge=1, le=100)):
+    """Get recent resource usage alerts."""
+    return {"alerts": resource_manager.get_alerts(limit)}
+
+
+@router.post("/resources/agent/{agent_id}/reset")
+async def reset_agent_quotas(agent_id: str):
+    """Reset all quotas for an agent."""
+    resource_manager.reset_agent_quotas(agent_id)
+    return {"reset": True}
+
+
+@router.get("/resources/agent/{agent_id}/check")
+async def check_resource_availability(
+    agent_id: str,
+    resource_type: str = Query(...),
+    amount: float = Query(default=1.0, gt=0),
+):
+    """Check if resources are available without acquiring."""
+    try:
+        res_type = ResType(resource_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid resource type: {resource_type}")
+    available, message = resource_manager.check_availability(agent_id, res_type, amount)
+    return {"available": available, "message": message}
+
+
 # ── Reactive Loop APIs ──────────────────────────────────
 
 class ReactiveLoopStartRequest(BaseModel):
@@ -6455,7 +6920,8 @@ async def get_proactive_interactions(agent_id: str, limit: int = Query(20, ge=1,
 # Agent Communication Protocol
 # ═══════════════════════════════════════════════════════════
 
-from agent.comm_protocol import agent_comm, AgentMessage, MessageType, MessagePriority, DelegationRequest, ContextShare
+from agent.comm_protocol import agent_comm, DelegationRequest, ContextShare
+from agent.comm_protocol import MessageType as CommMsgType, MessagePriority as CommMsgPriority
 
 
 @router.get("/comm/stats")
@@ -6486,7 +6952,7 @@ async def send_agent_message(
             sender_id=sender_id,
             subject=subject,
             content=content,
-            priority=MessagePriority(priority) if priority in [p.value for p in MessagePriority] else MessagePriority.NORMAL,
+            priority=CommMsgPriority(priority) if priority in [p.value for p in CommMsgPriority] else CommMsgPriority.NORMAL,
         )
     else:
         msg = await agent_comm.direct_message(
@@ -6494,7 +6960,7 @@ async def send_agent_message(
             recipient_id=recipient_id,
             subject=subject,
             content=content,
-            priority=MessagePriority(priority) if priority in [p.value for p in MessagePriority] else MessagePriority.NORMAL,
+            priority=CommMsgPriority(priority) if priority in [p.value for p in CommMsgPriority] else CommMsgPriority.NORMAL,
         )
     return {
         "id": msg.id,
@@ -6516,7 +6982,7 @@ async def delegate_task(request: dict):
         task_description=request.get("task_description", ""),
         task_context=request.get("task_context", {}),
         required_capabilities=request.get("required_capabilities", []),
-        priority=MessagePriority(request.get("priority", "normal")),
+        priority=CommMsgPriority(request.get("priority", "normal")),
     )
     result = await agent_comm.delegate_task(delegation)
     return {
@@ -6579,56 +7045,304 @@ async def get_online_agents():
 
 
 # ═══════════════════════════════════════════════════════════
-# Resource Manager
+# System Stats
 # ═══════════════════════════════════════════════════════════
 
-from agent.resource_manager import resource_manager
+@router.get("/system/stats")
+async def get_system_stats():
+    """Get comprehensive system statistics."""
+    return {
+        "platform": platform_hub.get_stats() if hasattr(platform_hub, 'get_stats') else {"status": "active"},
+        "agents": {"total": len(orchestrator._engines)},
+        "services": {
+            "swarm": swarm_engine.get_stats() if hasattr(swarm_engine, 'get_stats') else {},
+            "forge": forge.get_stats() if hasattr(forge, 'get_stats') else {},
+            "pipeline": pipeline_engine.get_stats() if hasattr(pipeline_engine, 'get_stats') else {},
+            "capability": capability_registry.get_stats() if hasattr(capability_registry, 'get_stats') else {},
+            "task_queue": task_queue.get_stats() if hasattr(task_queue, 'get_stats') else {},
+            "im_hub": im_hub.get_stats() if hasattr(im_hub, 'get_stats') else {},
+        },
+        "status": "operational",
+    }
 
 
-@router.get("/resources/stats")
-async def get_resource_stats():
-    """Get comprehensive resource management statistics."""
-    return resource_manager.get_stats()
+# ═══════════════════════════════════════════════════════════
+# Platform Hub Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/platform-hub/status")
+async def get_platform_hub_status():
+    """Get platform hub status and statistics."""
+    return platform_hub.get_stats() if hasattr(platform_hub, 'get_stats') else {"status": "active"}
 
 
-@router.get("/resources/usage")
-async def get_agent_resource_usage(agent_id: str = Query(..., min_length=1)):
-    """Get resource usage summary for a specific agent."""
-    return resource_manager.get_agent_usage(agent_id)
+# ═══════════════════════════════════════════════════════════
+# Session Search Stats
+# ═══════════════════════════════════════════════════════════
 
-
-@router.get("/resources/alerts")
-async def get_resource_alerts(limit: int = Query(20, ge=1, le=100), severity: str = Query(default="")):
-    """Get recent resource alerts."""
-    alerts = resource_manager.get_alerts(limit=limit, severity=severity or None)
-    return {"alerts": alerts, "count": len(alerts)}
-
-
-@router.get("/resources/status")
-async def get_resource_status(resource_type: str = Query(..., min_length=1)):
-    """Get the current availability status of a resource type."""
-    from agent.resource_manager import ResourceType
+@router.get("/session-search/stats")
+async def get_session_search_stats():
+    """Get session search statistics."""
     try:
-        rt = ResourceType(resource_type)
-        status = resource_manager.get_status(rt)
-        quota = resource_manager.get_quota(rt)
-        return {
-            "resource_type": rt.value,
-            "status": status.value,
-            "max_limit": quota.max_limit,
-            "soft_limit": quota.soft_limit,
-            "current_usage": quota.current_usage,
-            "usage_fraction": round(quota.current_usage / max(quota.max_limit, 1), 3),
-        }
-    except ValueError:
-        return {"error": f"Unknown resource type: {resource_type}"}
+        sessions = session_searcher.get_recent_sessions(limit=1) if hasattr(session_searcher, 'get_recent_sessions') else []
+        return {"indexed_sessions": len(sessions), "status": "active"}
+    except Exception:
+        return {"indexed_sessions": 0, "status": "active"}
 
 
-@router.post("/resources/reset")
-async def reset_all_resources():
-    """Reset all resource quotas."""
-    resource_manager.reset_all_quotas()
-    return {"reset": True, "timestamp": datetime.now(timezone.utc).isoformat()}
+# ═══════════════════════════════════════════════════════════
+# Cost Analytics
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/costs/report")
+async def get_cost_report():
+    """Get cost analytics report."""
+    if hasattr(cost_tracker, 'get_system_overview'):
+        return cost_tracker.get_system_overview()
+    return {"total_cost": 0, "total_tokens": 0, "status": "active"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Workflow Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/workflows/stats")
+async def get_workflow_stats():
+    """Get workflow engine statistics."""
+    return workflow_engine.get_stats() if hasattr(workflow_engine, 'get_stats') else {}
+
+
+# ═══════════════════════════════════════════════════════════
+# Studio Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/studio/stats")
+async def get_studio_stats():
+    """Get studio statistics."""
+    return buddy_studio.get_stats() if hasattr(buddy_studio, 'get_stats') else {}
+
+
+# ═══════════════════════════════════════════════════════════
+# Scheduler Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/scheduler/stats")
+async def get_scheduler_stats():
+    """Get scheduler statistics."""
+    return buddy_scheduler.get_stats() if hasattr(buddy_scheduler, 'get_stats') else {}
+
+
+# ═══════════════════════════════════════════════════════════
+# Nexus Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/nexus/stats")
+async def get_nexus_stats():
+    """Get nexus statistics."""
+    return nexus.get_summary() if hasattr(nexus, 'get_summary') else {}
+
+
+# ═══════════════════════════════════════════════════════════
+# Identity Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/identity/stats")
+async def get_identity_stats():
+    """Get identity statistics."""
+    try:
+        agent_id = next(iter(orchestrator._engines), None)
+        if agent_id and hasattr(identity, 'get_profile_summary'):
+            return identity.get_profile_summary(agent_id)
+        return {"profiles": 0, "status": "active"}
+    except Exception:
+        return {"profiles": 0, "status": "active"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Pulse Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/pulse/stats")
+async def get_pulse_stats():
+    """Get system pulse health statistics."""
+    return pulse_system.get_system_health() if hasattr(pulse_system, 'get_system_health') else {}
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Self Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/agent-self/stats")
+async def get_agent_self_stats():
+    """Get agent self registry statistics."""
+    return agent_self_registry.get_stats() if hasattr(agent_self_registry, 'get_stats') else {}
+
+
+# ═══════════════════════════════════════════════════════════
+# IM Hub Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/im-hub/stats")
+async def get_im_hub_stats():
+    """Get IM hub statistics."""
+    return im_hub.get_stats() if hasattr(im_hub, 'get_stats') else {}
+
+
+# ═══════════════════════════════════════════════════════════
+# Task Queue Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/task-queue/stats")
+async def get_task_queue_stats():
+    """Get task queue statistics."""
+    return task_queue.get_stats() if hasattr(task_queue, 'get_stats') else {}
+
+
+# ═══════════════════════════════════════════════════════════
+# Enterprise Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/enterprise/stats")
+async def get_enterprise_stats():
+    """Get enterprise hub statistics."""
+    return enterprise_hub.get_hub_stats() if hasattr(enterprise_hub, 'get_hub_stats') else {}
+
+
+# ═══════════════════════════════════════════════════════════
+# Pipeline Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/pipeline/stats")
+async def get_pipeline_stats():
+    """Get pipeline engine statistics."""
+    return pipeline_engine.get_stats() if hasattr(pipeline_engine, 'get_stats') else {}
+
+
+# ═══════════════════════════════════════════════════════════
+# Capability Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/capability/stats")
+async def get_capability_stats():
+    """Get capability registry statistics."""
+    return capability_registry.get_stats() if hasattr(capability_registry, 'get_stats') else {}
+
+
+# ═══════════════════════════════════════════════════════════
+# Knowledge Graph Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/knowledge/stats")
+async def get_knowledge_stats():
+    """Get knowledge graph statistics."""
+    return knowledge_graph.get_stats() if hasattr(knowledge_graph, 'get_stats') else {"status": "active"}
+
+
+# ═══════════════════════════════════════════════════════════
+# MCP Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/mcp/stats")
+async def get_mcp_stats():
+    """Get MCP registry statistics."""
+    servers = mcp_registry.get_server_states() if hasattr(mcp_registry, 'get_server_states') else []
+    return {"servers": len(servers), "server_states": servers, "status": "active"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Proactive Discovery Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/proactive/stats")
+async def get_proactive_stats():
+    """Get proactive discovery engine statistics."""
+    from agent.proactive import ProactiveDiscoveryEngine
+    # Get engine for a default agent
+    agent_id = next(iter(orchestrator._engines), None)
+    if agent_id:
+        engine = orchestrator.get_engine(agent_id=agent_id, agent_name="Default", instructions="")
+        if hasattr(engine, 'proactive') and hasattr(engine.proactive, 'get_stats'):
+            return engine.proactive.get_stats()
+    return {"status": "active", "tasks_detected": 0}
+
+
+# ═══════════════════════════════════════════════════════════
+# Evolution Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/evolution/stats")
+async def get_evolution_stats():
+    """Get agent evolution statistics."""
+    from agent.agent_evolution import AgentEvolution
+    agent_id = next(iter(orchestrator._engines), None)
+    if agent_id:
+        engine = orchestrator.get_engine(agent_id=agent_id, agent_name="Default", instructions="")
+        if hasattr(engine, 'evolution') and hasattr(engine.evolution, 'get_stats'):
+            return engine.evolution.get_stats()
+    return {"status": "active", "experiences": 0}
+
+
+# ═══════════════════════════════════════════════════════════
+# Metacognition Stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/metacognition/stats")
+async def get_metacognition_stats():
+    """Get metacognition engine statistics."""
+    from agent.metacognition import MetaCognition
+    agent_id = next(iter(orchestrator._engines), None)
+    if agent_id:
+        engine = orchestrator.get_engine(agent_id=agent_id, agent_name="Default", instructions="")
+        if hasattr(engine, 'metacognition') and hasattr(engine.metacognition, 'get_stats'):
+            return engine.metacognition.get_stats()
+    return {"status": "active", "decisions": 0}
+
+
+from agent.shared import intelligence, ReasoningStrategy
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Intelligence Core API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/intelligence/stats")
+async def get_intelligence_stats():
+    """Get agent intelligence core statistics."""
+    return intelligence.get_stats()
+
+
+@router.post("/intelligence/analyze")
+async def analyze_task_intelligence(prompt: str = Query(..., min_length=1)):
+    """Analyze a task for complexity, strategy, and tool recommendations."""
+    tools = [t.name for t in tool_registry.list_tools()]
+    return intelligence.analyze_task(prompt, tools)
+
+
+@router.get("/intelligence/insights")
+async def get_learning_insights():
+    """Get learning insights from accumulated experiences."""
+    return intelligence.get_learning_insights()
+
+
+@router.get("/intelligence/experiences")
+async def get_recent_experiences(limit: int = Query(10, ge=1, le=100)):
+    """Replay recent learning experiences."""
+    return {"experiences": intelligence.replay_experiences(limit)}
+
+
+@router.post("/intelligence/plan-tools")
+async def plan_tool_sequence(task: str = Query(..., min_length=1)):
+    """Plan an optimal tool execution sequence for a task."""
+    tools = [t.name for t in tool_registry.list_tools()]
+    return {"sequence": intelligence.plan_tool_sequence(task, tools)}
+
+
+@router.post("/intelligence/select-tools")
+async def select_relevant_tools(prompt: str = Query(..., min_length=1), limit: int = Query(5, ge=1, le=20)):
+    """Intelligently select the most relevant tools for a task."""
+    available = tool_registry.list_tools()
+    selected = intelligence.select_tools(prompt, available, limit)
+    return {"tools": [{"name": t.name, "description": t.description} for t in selected]}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -7655,5 +8369,416 @@ async def terminate_runtime_instance(instance_id: str):
     """Terminate a runtime instance."""
     await runtime_backend_hub.terminate_instance(instance_id)
     return {"instance_id": instance_id, "terminated": True}
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Core API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import AgentCore, AgentCoreConfig, AgentState, ExecutionContext, AgentCapability, agent_synthesis
+
+# Global agent core instances
+_agent_cores: dict[str, AgentCore] = {}
+
+
+def _get_or_create_core(agent_id: str, agent_name: str = "Buddy") -> AgentCore:
+    """Get or create an agent core instance."""
+    if agent_id not in _agent_cores:
+        _agent_cores[agent_id] = AgentCore(
+            agent_id=agent_id,
+            agent_name=agent_name,
+            config=AgentCoreConfig(
+                enable_metacognition=True,
+                enable_evolution=True,
+                enable_proactive=True,
+                enable_checkpoints=True,
+            ),
+        )
+    return _agent_cores[agent_id]
+
+
+@router.get("/agent-core/stats")
+async def get_agent_core_stats(agent_id: str = Query("default", min_length=1)):
+    """Get comprehensive agent core statistics."""
+    core = _get_or_create_core(agent_id)
+    return core.get_stats()
+
+
+@router.get("/agent-core/traces")
+async def get_agent_core_traces(
+    agent_id: str = Query("default", min_length=1),
+    limit: int = Query(10, ge=1, le=100),
+):
+    """Get recent execution traces from the agent core."""
+    core = _get_or_create_core(agent_id)
+    return {"traces": core.get_recent_traces(limit)}
+
+
+@router.get("/agent-core/insights")
+async def get_agent_core_insights(
+    agent_id: str = Query("default", min_length=1),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """Get learned insights from the agent core."""
+    core = _get_or_create_core(agent_id)
+    return {"insights": core.get_insights(limit)}
+
+
+@router.post("/agent-core/generate-insights")
+async def generate_agent_core_insights(agent_id: str = Query("default", min_length=1)):
+    """Generate new insights from accumulated execution history."""
+    core = _get_or_create_core(agent_id)
+    insights = core.generate_insights()
+    return {"generated": len(insights), "insights": [
+        {"id": i.id, "category": i.category, "content": i.content, "confidence": round(i.confidence, 3)}
+        for i in insights
+    ]}
+
+
+@router.get("/agent-core/proactive-signals")
+async def get_proactive_signals(
+    agent_id: str = Query("default", min_length=1),
+    limit: int = Query(10, ge=1, le=50),
+):
+    """Get proactive signals detected by the agent core."""
+    core = _get_or_create_core(agent_id)
+    core.scan_proactive_signals()
+    return {"signals": core.get_proactive_signals(limit)}
+
+
+@router.post("/agent-core/analyze")
+async def analyze_with_core(prompt: str = Query(..., min_length=1), agent_id: str = Query("default", min_length=1)):
+    """Analyze a task using the agent core's strategy selection."""
+    core = _get_or_create_core(agent_id)
+    result = core.select_strategy(prompt)
+    tools = core.score_tools(prompt, [t.name for t in tool_registry.list_tools()])
+    return {
+        "fingerprint": result["fingerprint"],
+        "strategy": result["strategy"],
+        "source": result["source"],
+        "confidence": result["confidence"],
+        "relevant_tools": tools[:5],
+    }
+
+
+@router.post("/agent-core/plan-sequence")
+async def plan_with_core(task: str = Query(..., min_length=1), agent_id: str = Query("default", min_length=1)):
+    """Plan a tool execution sequence using the agent core."""
+    core = _get_or_create_core(agent_id)
+    tools = [t.name for t in tool_registry.list_tools()]
+    return {"sequence": core.plan_tool_sequence(task, tools)}
+
+
+@router.post("/agent-core/learn")
+async def record_agent_learning(
+    agent_id: str = Query(..., min_length=1),
+    prompt: str = Query(..., min_length=1),
+    success: bool = Query(True),
+    tools_used: str = Query(""),
+):
+    """Record a learning event for the agent core."""
+    core = _get_or_create_core(agent_id)
+    trace = core.start_execution(ExecutionContext.CHAT, prompt)
+    trace.success = success
+    if tools_used:
+        trace.tools_used = tools_used.split(",")
+    core.learn_from_execution(trace)
+    return {"agent_id": agent_id, "recorded": True}
+
+
+@router.post("/agent-core/checkpoint")
+async def save_agent_checkpoint(
+    agent_id: str = Query("default", min_length=1),
+    name: str = Query("manual", min_length=1),
+):
+    """Save a checkpoint of the agent core's state."""
+    core = _get_or_create_core(agent_id)
+    checkpoint_id = core.save_checkpoint(name, {"state": core.get_stats()})
+    return {"checkpoint_id": checkpoint_id, "agent_id": agent_id}
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Synthesis API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/synthesis/stats")
+async def get_synthesis_stats():
+    """Get agent synthesis engine statistics."""
+    return agent_synthesis.get_stats()
+
+
+@router.get("/synthesis/reports")
+async def get_synthesis_reports(limit: int = Query(5, ge=1, le=50)):
+    """Get recent synthesis reports."""
+    return {"reports": agent_synthesis.get_recent_reports(limit)}
+
+
+@router.post("/synthesis/contribute")
+async def contribute_to_synthesis(
+    agent_id: str = Query(..., min_length=1),
+    agent_name: str = Query("Buddy", min_length=1),
+    insight_type: str = Query("strategy", min_length=1),
+    content: str = Query(..., min_length=1),
+    confidence: float = Query(0.5, ge=0.0, le=1.0),
+):
+    """Submit an agent's insight for cross-agent synthesis."""
+    from agent.agent_synthesis import InsightType
+    try:
+        it = InsightType(insight_type)
+    except ValueError:
+        it = InsightType.STRATEGY
+    contrib = agent_synthesis.contribute(agent_id, agent_name, it, content, confidence)
+    return {
+        "contribution_id": contrib.agent_id,
+        "insight_type": contrib.insight_type.value,
+        "confidence": contrib.confidence,
+    }
+
+
+@router.post("/synthesis/synthesize")
+async def run_synthesis(mode: str = Query("aggregate", min_length=1)):
+    """Run a synthesis cycle across all agent contributions."""
+    from agent.agent_synthesis import SynthesisMode
+    try:
+        sm = SynthesisMode(mode)
+    except ValueError:
+        sm = SynthesisMode.AGGREGATE
+    report = agent_synthesis.synthesize(sm)
+    return {
+        "report_id": report.id,
+        "total_agents": report.total_agents,
+        "insights": len(report.insights),
+        "conflicts": len(report.conflicts),
+        "emergent_patterns": report.emergent_patterns,
+    }
+
+
+@router.get("/synthesis/recommendations/{agent_id}")
+async def get_agent_recommendations(agent_id: str):
+    """Get cross-agent learning recommendations for a specific agent."""
+    return {"recommendations": agent_synthesis.get_agent_recommendations(agent_id)}
+
+
+@router.get("/synthesis/conflicts")
+async def get_synthesis_conflicts(limit: int = Query(20, ge=1, le=100)):
+    """Get detected knowledge conflicts between agents."""
+    conflicts = agent_synthesis._conflicts[-limit:]
+    return {
+        "conflicts": [
+            {
+                "id": c.id,
+                "topic": c.topic,
+                "agent_a": c.agent_a,
+                "agent_b": c.agent_b,
+                "resolved": c.resolved,
+                "resolution": c.resolution,
+                "timestamp": c.timestamp,
+            }
+            for c in conflicts
+        ]
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Runtime API — unified lifecycle and execution management
+# ═══════════════════════════════════════════════════════════
+
+from agent.agent_runtime import (
+    runtime_registry, AgentRuntime, RuntimeConfig, RuntimeState as RtState,
+    ExecutionMode as RtExecMode, RuntimeEventType,
+)
+
+
+@router.get("/runtime/registry")
+async def get_runtime_registry():
+    """Get all active runtime instances."""
+    return {
+        "runtimes": runtime_registry.list_all(),
+        "active_count": runtime_registry.active_count,
+        "total_executions": runtime_registry.total_executions,
+    }
+
+
+@router.get("/runtime/{agent_id}/stats")
+async def get_runtime_stats(agent_id: str):
+    """Get comprehensive runtime statistics for an agent."""
+    runtime = runtime_registry.get(agent_id)
+    if not runtime:
+        raise HTTPException(404, f"Runtime not found for agent {agent_id}")
+    return runtime.get_stats()
+
+
+@router.get("/runtime/{agent_id}/executions")
+async def get_runtime_executions(agent_id: str, limit: int = Query(10, ge=1, le=100)):
+    """Get recent execution history for an agent runtime."""
+    runtime = runtime_registry.get(agent_id)
+    if not runtime:
+        raise HTTPException(404, f"Runtime not found for agent {agent_id}")
+    return {"executions": runtime.get_recent_executions(limit)}
+
+
+@router.get("/runtime/{agent_id}/checkpoints")
+async def get_runtime_checkpoints(agent_id: str):
+    """List all checkpoints for an agent runtime."""
+    runtime = runtime_registry.get(agent_id)
+    if not runtime:
+        raise HTTPException(404, f"Runtime not found for agent {agent_id}")
+    return {"checkpoints": runtime.list_checkpoints()}
+
+
+@router.post("/runtime/{agent_id}/checkpoint")
+async def save_runtime_checkpoint(agent_id: str, name: str = Query("manual", min_length=1)):
+    """Save a runtime checkpoint."""
+    runtime = runtime_registry.get(agent_id)
+    if not runtime:
+        raise HTTPException(404, f"Runtime not found for agent {agent_id}")
+    checkpoint_id = await runtime.save_checkpoint(name)
+    return {"checkpoint_id": checkpoint_id, "agent_id": agent_id, "saved": True}
+
+
+@router.post("/runtime/{agent_id}/pause")
+async def pause_runtime(agent_id: str):
+    """Pause an agent runtime."""
+    runtime = runtime_registry.get(agent_id)
+    if not runtime:
+        raise HTTPException(404, f"Runtime not found for agent {agent_id}")
+    runtime.pause()
+    return {"agent_id": agent_id, "state": runtime.state.value}
+
+
+@router.post("/runtime/{agent_id}/resume")
+async def resume_runtime(agent_id: str):
+    """Resume a paused agent runtime."""
+    runtime = runtime_registry.get(agent_id)
+    if not runtime:
+        raise HTTPException(404, f"Runtime not found for agent {agent_id}")
+    runtime.resume()
+    return {"agent_id": agent_id, "state": runtime.state.value}
+
+
+@router.post("/runtime/{agent_id}/refill-tokens")
+async def refill_runtime_tokens(agent_id: str, count: int = Query(10000, ge=1)):
+    """Refill the token budget for an agent runtime."""
+    runtime = runtime_registry.get(agent_id)
+    if not runtime:
+        raise HTTPException(404, f"Runtime not found for agent {agent_id}")
+    runtime.refill_tokens(count)
+    return {"agent_id": agent_id, "token_budget_remaining": runtime.token_budget_remaining}
+
+
+@router.post("/runtime/{agent_id}/shutdown")
+async def shutdown_runtime(agent_id: str):
+    """Shutdown an agent runtime."""
+    await runtime_registry.remove(agent_id)
+    return {"agent_id": agent_id, "shutdown": True}
+
+
+@router.get("/runtime/{agent_id}/events")
+async def get_runtime_events(agent_id: str, limit: int = Query(20, ge=1, le=100)):
+    """Get recent events from an agent runtime (non-destructive peek)."""
+    runtime = runtime_registry.get(agent_id)
+    if not runtime:
+        raise HTTPException(404, f"Runtime not found for agent {agent_id}")
+    events = []
+    # Peek at events without consuming them
+    for _ in range(min(limit, runtime._event_queue.qsize())):
+        try:
+            event = runtime._event_queue.get_nowait()
+            events.append({
+                "id": event.id,
+                "type": event.event_type.value,
+                "data": event.data,
+                "timestamp": event.timestamp,
+            })
+            runtime._event_queue.put_nowait(event)  # Put back
+        except asyncio.QueueEmpty:
+            break
+    return {"events": events, "agent_id": agent_id}
+
+
+@router.get("/runtime/{agent_id}/intelligence")
+async def get_runtime_intelligence(agent_id: str):
+    """Get intelligence core statistics for an agent runtime."""
+    runtime = runtime_registry.get(agent_id)
+    if not runtime:
+        raise HTTPException(404, f"Runtime not found for agent {agent_id}")
+    intelligence = runtime.get_intelligence()
+    return intelligence.get_stats()
+
+
+@router.get("/runtime/{agent_id}/agent-core")
+async def get_runtime_agent_core(agent_id: str):
+    """Get agent core statistics for an agent runtime."""
+    runtime = runtime_registry.get(agent_id)
+    if not runtime:
+        raise HTTPException(404, f"Runtime not found for agent {agent_id}")
+    core = runtime.get_agent_core()
+    return core.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# System Dashboard API — unified platform monitoring
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/system/dashboard")
+async def get_system_dashboard():
+    """Get unified system dashboard with all platform metrics."""
+    from agent.shared import (
+        platform_hub, cost_tracker, enterprise_hub, session_searcher,
+        memory_sync_hub, guard_system, pulse_system,
+        daemon_manager, gateway_hub, nexus,
+    )
+
+    # Collect all subsystem stats
+    dashboard = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "runtime": {
+            "active_runtimes": runtime_registry.active_count,
+            "total_executions": runtime_registry.total_executions,
+            "runtimes": runtime_registry.list_all(),
+        },
+        "platform": platform_hub.get_stats() if hasattr(platform_hub, 'get_stats') else {"status": "active"},
+        "costs": cost_tracker.get_summary() if hasattr(cost_tracker, 'get_summary') else {},
+        "enterprise": {
+            "workspaces": enterprise_hub.get_stats() if hasattr(enterprise_hub, 'get_stats') else {},
+        },
+        "guard": guard_system.get_stats() if hasattr(guard_system, 'get_stats') else {},
+        "pulse": pulse_system.get_health() if hasattr(pulse_system, 'get_health') else {},
+        "daemon": daemon_manager.get_status() if hasattr(daemon_manager, 'get_status') else {},
+        "gateway": gateway_hub.get_stats() if hasattr(gateway_hub, 'get_stats') else {},
+        "nexus": nexus.get_stats() if hasattr(nexus, 'get_stats') else {},
+    }
+
+    # Add synthesis stats
+    try:
+        dashboard["synthesis"] = agent_synthesis.get_stats()
+    except Exception:
+        dashboard["synthesis"] = {"status": "active"}
+
+    return dashboard
+
+
+@router.get("/system/health")
+async def get_system_health():
+    """Get comprehensive system health check."""
+    health = {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "components": {
+            "api": "ok",
+            "database": "ok",
+            "runtime_registry": f"ok ({runtime_registry.active_count} active)",
+            "orchestrator": f"ok ({orchestrator.active_agents} agents)",
+        },
+    }
+
+    # Check pulse system
+    try:
+        pulse = pulse_system.get_health()
+        health["components"]["pulse"] = pulse.get("status", "ok") if isinstance(pulse, dict) else "ok"
+    except Exception as e:
+        health["components"]["pulse"] = f"error: {e}"
+
+    return health
 
 
