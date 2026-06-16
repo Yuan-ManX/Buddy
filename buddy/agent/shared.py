@@ -46,6 +46,10 @@ from agent.im_hub import im_hub, IMHub, IMPlatform, IMConnectionStatus, IMMessag
 from agent.skills_marketplace import skills_marketplace, SkillsMarketplace, MarketplaceSkill, SkillCategory as MktSkillCategory, SkillPricing, SkillReview
 from agent.task_queue import task_queue, TaskQueue, Job, JobType, JobPriority, JobStatus as QJobStatus, BatchJob
 from agent.runtime_backend import runtime_backend_hub, RuntimeBackendHub, RuntimeBackend as RtBackend, RuntimeBackendKind, RuntimeConfig, RuntimeInstance, RuntimeStatus as RtInstStatus
+from agent.agent_intelligence import AgentIntelligence, IntelligenceConfig, IntelligenceMode, ReasoningStrategy
+from agent.agent_core import AgentCore, AgentCoreConfig, AgentState, ExecutionContext, AgentCapability, ExecutionStep, ExecutionTrace, AgentInsight, ProactiveSignal
+from agent.agent_synthesis import AgentSynthesis, agent_synthesis, SynthesisMode, InsightType, SynthesisInsight, AgentContribution
+from agent.agent_runtime import AgentRuntime, RuntimeRegistry, RuntimeConfig, RuntimeState, ExecutionMode, RuntimeEventType, RuntimeMetrics, runtime_registry
 
 orchestrator = Orchestrator()
 skills_registry = SkillsRegistry()
@@ -60,3 +64,12 @@ squads = BuddySquads()
 knowledge_graph = KnowledgeGraph()
 
 memory_sync_hub = MemorySyncHub(orchestrator=orchestrator)
+
+# Global intelligence core instance
+intelligence = AgentIntelligence(IntelligenceConfig(
+    max_reasoning_steps=10,
+    max_parallel_branches=5,
+    enable_self_critique=True,
+    enable_experience_replay=True,
+    enable_strategy_adaptation=True,
+))
