@@ -1,4 +1,4 @@
-export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse' | 'persona' | 'learning' | 'gateway' | 'daemon' | 'swarm' | 'knowledge' | 'runtime' | 'scheduler' | 'studio' | 'workflow' | 'board' | 'compounding' | 'whitememory' | 'pipeline' | 'capability' | 'kgraph' | 'memorysync' | 'phub' | 'costs' | 'workspaces' | 'agentdashboard' | 'proactive' | 'metacognition' | 'evolution' | 'kanban' | 'activity' | 'runtimemonitor' | 'skillmanager' | 'agent-comparison' | 'agentself' | 'plugins' | 'imhub' | 'marketplace' | 'taskqueue' | 'runtimebackend';
+export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse' | 'persona' | 'learning' | 'gateway' | 'daemon' | 'swarm' | 'knowledge' | 'runtime' | 'scheduler' | 'studio' | 'workflow' | 'board' | 'compounding' | 'whitememory' | 'pipeline' | 'capability' | 'kgraph' | 'memorysync' | 'phub' | 'costs' | 'workspaces' | 'agentdashboard' | 'proactive' | 'metacognition' | 'evolution' | 'kanban' | 'activity' | 'runtimemonitor' | 'skillmanager' | 'agent-comparison' | 'agentself' | 'plugins' | 'imhub' | 'marketplace' | 'taskqueue' | 'runtimebackend' | 'agentcore' | 'synthesis' | 'intelligence' | 'runtimepanel' | 'skillcompiler' | 'conversationsearch';
 
 export interface Agent {
   id: string;
@@ -1091,4 +1091,323 @@ export interface RuntimeBackendStats {
   total_instances: number;
   by_status: Record<string, number>;
   by_backend: Record<string, number>;
+}
+
+// ── Agent Core Types ──
+
+export interface AgentCoreStats {
+  agent_id: string;
+  agent_name: string;
+  state: string;
+  capabilities: string[];
+  executions: { total: number; successful: number; success_rate: number };
+  performance: { total_tokens: number; total_tool_calls: number; avg_response_time_ms: number };
+  learning: { insights: number; task_patterns: number; tool_patterns: number };
+  strategies: Record<string, { successes: number; failures: number; avg_tokens: number; avg_time_ms: number }>;
+  checkpoints: number;
+  proactive_signals: number;
+}
+
+export interface CoreExecutionTrace {
+  id: string;
+  context: string;
+  prompt: string;
+  steps: number;
+  success: boolean;
+  confidence: number;
+  total_time_ms: number;
+  tools_used: string[];
+  insights: string[];
+  timestamp: string;
+}
+
+export interface CoreInsight {
+  id: string;
+  category: string;
+  content: string;
+  confidence: number;
+  evidence_count: number;
+  timestamp: string;
+}
+
+export interface ProactiveSignal {
+  id: string;
+  type: string;
+  description: string;
+  priority: number;
+  suggested_action: string;
+  timestamp: string;
+}
+
+export interface CoreAnalysis {
+  fingerprint: string;
+  strategy: string;
+  source: string;
+  confidence: number;
+  relevant_tools: Array<{ tool: string; score: number; reason: string }>;
+}
+
+// ── Agent Synthesis Types ──
+
+export interface SynthesisStats {
+  total_contributions: number;
+  total_synthesis_reports: number;
+  total_conflicts: number;
+  resolved_conflicts: number;
+  active_agents: number;
+  agent_trust_scores: Record<string, number>;
+  recent_insights: number;
+}
+
+export interface SynthesisReport {
+  id: string;
+  total_agents: number;
+  total_contributions: number;
+  insights_count: number;
+  conflicts_count: number;
+  emergent_patterns: string[];
+  recommendations: string[];
+  timestamp: string;
+}
+
+export interface SynthesisContribution {
+  contribution_id: string;
+  insight_type: string;
+  confidence: number;
+}
+
+export interface SynthesisResult {
+  report_id: string;
+  total_agents: number;
+  insights: number;
+  conflicts: number;
+  emergent_patterns: string[];
+}
+
+export interface AgentRecommendation {
+  from_agent: string;
+  insight_type: string;
+  content: string;
+  confidence: number;
+  source_trust: number;
+}
+
+export interface KnowledgeConflict {
+  id: string;
+  topic: string;
+  agent_a: string;
+  agent_b: string;
+  resolved: boolean;
+  resolution: string;
+  timestamp: string;
+}
+
+// ── Agent Intelligence Types ──
+
+export interface IntelligenceStats {
+  total_experiences: number;
+  success_rate: number;
+  active_traces: number;
+  task_patterns: Record<string, number>;
+  strategies: Record<string, { successes: number; failures: number }>;
+  tools_tracked: number;
+}
+
+export interface IntelligenceAnalysis {
+  complexity: string;
+  recommended_strategy: string;
+  relevant_tools: Array<{ name: string; score: number; reason: string }>;
+  mode: string;
+  estimated_steps: number;
+}
+
+export interface LearningInsights {
+  total_experiences: number;
+  overall_success_rate?: number;
+  insights: string[];
+  strategy_effectiveness?: Record<string, { success_rate: number; avg_duration: number; attempts: number }>;
+  recent_lessons?: string[];
+}
+
+export interface Experience {
+  pattern: string;
+  strategy: string;
+  outcome: string;
+  lessons: string[];
+}
+
+// ── Runtime Types ──
+
+export interface RuntimeInfo {
+  agent_id: string;
+  agent_name: string;
+  state: string;
+  executions: number;
+  uptime: number;
+}
+
+export interface RuntimeStats {
+  agent_id: string;
+  agent_name: string;
+  state: string;
+  uptime_seconds: number;
+  executions: {
+    total: number;
+    successful: number;
+    failed: number;
+    success_rate: number;
+  };
+  performance: {
+    avg_response_time_ms: number;
+    avg_tokens_per_execution: number;
+    total_tokens_used: number;
+    total_tool_calls: number;
+    total_tool_errors: number;
+  };
+  resources: {
+    token_budget_remaining: number;
+    token_budget_total: number;
+    token_budget_percent: number;
+    active_executions: number;
+    max_parallel_tasks: number;
+  };
+  checkpoints: number;
+  event_listeners: number;
+}
+
+export interface RuntimeExecution {
+  id: string;
+  mode: string;
+  prompt: string;
+  success: boolean;
+  tokens_used: number;
+  tool_calls: number;
+  elapsed: string;
+  error: string;
+}
+
+export interface SystemDashboard {
+  timestamp: string;
+  runtime: {
+    active_runtimes: number;
+    total_executions: number;
+    runtimes: RuntimeInfo[];
+  };
+  platform: Record<string, any>;
+  costs: Record<string, any>;
+  synthesis: Record<string, any>;
+  guard: Record<string, any>;
+  pulse: Record<string, any>;
+}
+
+export interface SystemHealth {
+  status: string;
+  timestamp: string;
+  components: Record<string, string>;
+}
+
+// ── Skill Compiler Types ──
+
+export interface CompiledSkillInfo {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  version: string;
+  status: string;
+  parameters: string[];
+  usage_count: number;
+  success_count: number;
+  failure_count: number;
+  success_rate: number;
+  avg_tokens: number;
+  avg_latency_ms: number;
+  validation_score: number;
+  tags: string[];
+  created_at: string;
+}
+
+export interface PipelineInfo {
+  id: string;
+  name: string;
+  description: string;
+  skills: string[];
+  usage_count: number;
+  success_count: number;
+  success_rate: number;
+  created_at: string;
+}
+
+export interface SkillCompilerStats {
+  total_skills: number;
+  total_pipelines: number;
+  total_skills_created: number;
+  total_skills_improved: number;
+  skills_by_status: Record<string, number>;
+  skills_by_category: Record<string, number>;
+  total_usage: number;
+  total_success: number;
+}
+
+// ── Conversation Search Types ──
+
+export interface ConversationInfo {
+  conversation_id: string;
+  title: string;
+  summary: string;
+  topics: string[];
+  entry_count: number;
+  total_tokens: number;
+  last_message_at: string;
+  tags: string[];
+}
+
+export interface SearchResultItem {
+  conversation_id: string;
+  role: string;
+  content: string;
+  summary: string;
+  topics: string[];
+  relevance_score: number;
+  timestamp: string;
+  conversation_title: string;
+}
+
+export interface RecapResult {
+  query: string;
+  found: boolean;
+  result_count?: number;
+  summary?: string;
+  key_decisions?: string[];
+  action_items?: string[];
+  relevance?: string;
+  sources?: Array<{
+    conversation_id: string;
+    title: string;
+    relevance: number;
+    timestamp: string;
+  }>;
+  message?: string;
+}
+
+export interface TimelineEntry {
+  conversation_id: string;
+  title: string;
+  summary: string;
+  topics: string[];
+  entry_count: number;
+  total_tokens: number;
+  last_message_at: string;
+  first_message_at: string;
+  tags: string[];
+}
+
+export interface ConversationSearchStats {
+  total_entries: number;
+  total_conversations: number;
+  indexed_entries: number;
+  indexed_conversations: number;
+  unique_topics: number;
+  unique_keywords: number;
+  last_indexed_at: string;
 }
