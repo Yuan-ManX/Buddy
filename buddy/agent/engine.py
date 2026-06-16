@@ -579,6 +579,35 @@ class AgentEngine:
         except Exception:
             pass  # Non-critical — proactive discovery is best-effort
 
+        # ── Skill compiler: analyze execution for pattern detection ──
+        try:
+            from agent.skill_compiler import skill_compiler
+            await skill_compiler.analyze_execution(
+                execution_id=f"exec-{self.agent_id}-{int(time.time())}",
+                prompt=user_message,
+                result=content[:500],
+                success=True,
+                tools_used=[t.name for t in self._last_tools_used] if hasattr(self, '_last_tools_used') else [],
+                metadata={"agent_id": self.agent_id, "model": routing.model},
+            )
+        except Exception:
+            pass  # Non-critical — skill compilation is best-effort
+
+        # ── Conversation search: index this interaction ──
+        try:
+            from agent.conversation_search import conversation_search
+            conv_id = self._conversation_id or f"conv-{self.agent_id}"
+            await conversation_search.index_conversation(
+                conversation_id=conv_id,
+                messages=[
+                    {"role": "user", "content": user_message, "timestamp": datetime.now(timezone.utc).isoformat()},
+                    {"role": "assistant", "content": content[:500], "timestamp": datetime.now(timezone.utc).isoformat()},
+                ],
+                title=f"Chat with {self.agent_name}"[:80],
+            )
+        except Exception:
+            pass  # Non-critical — conversation indexing is best-effort
+
         # Publish events
         event_bus.publish(Event(
             type=EventType.MESSAGE_SENT,
