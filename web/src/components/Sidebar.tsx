@@ -60,6 +60,8 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'synthesis', label: 'Synthesis', icon: '🔮' },
   { id: 'intelligence', label: 'Intel', icon: '💡' },
   { id: 'runtimepanel', label: 'Runtime', icon: '⚡' },
+  { id: 'skillcompiler', label: 'Skills', icon: '🔧' },
+  { id: 'conversationsearch', label: 'Search', icon: '🔍' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
