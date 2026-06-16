@@ -8782,3 +8782,156 @@ async def get_system_health():
     return health
 
 
+# ═══════════════════════════════════════════════════════════
+# Skill Compiler API
+# ═══════════════════════════════════════════════════════════
+
+from agent.skill_compiler import skill_compiler
+
+
+@router.get("/skill-compiler/skills")
+async def list_compiled_skills(category: str = Query("", max_length=50), status: str = Query("", max_length=50)):
+    """List compiled skills with optional filtering."""
+    skills = skill_compiler.list_skills(
+        status=status or None,
+        category=category or None,
+    )
+    return {"skills": skills}
+
+
+@router.get("/skill-compiler/pipelines")
+async def list_skill_pipelines():
+    """List all skill pipelines."""
+    pipelines = skill_compiler.list_pipelines()
+    return {"pipelines": pipelines}
+
+
+@router.get("/skill-compiler/stats")
+async def get_skill_compiler_stats():
+    """Get skill compiler statistics."""
+    return skill_compiler.get_stats()
+
+
+@router.get("/skill-compiler/search")
+async def search_skills(query: str = Query(min_length=1, max_length=200)):
+    """Search for skills by query."""
+    skills = skill_compiler.search_skills(query)
+    return {"skills": skills}
+
+
+@router.post("/skill-compiler/skills/{skill_id}/activate")
+async def activate_skill(skill_id: str):
+    """Activate a compiled skill."""
+    success = skill_compiler.activate_skill(skill_id)
+    if not success:
+        raise HTTPException(404, "Skill not found")
+    return {"success": True}
+
+
+@router.post("/skill-compiler/skills/{skill_id}/improve")
+async def improve_skill(skill_id: str):
+    """Improve a compiled skill based on usage data."""
+    result = await skill_compiler.improve_skill(skill_id)
+    if result.get("error"):
+        raise HTTPException(400, result["error"])
+    return result
+
+
+@router.post("/skill-compiler/pipelines")
+async def create_skill_pipeline(
+    name: str = Query(min_length=1, max_length=100),
+    skill_ids: str = Query(min_length=1, max_length=500),
+):
+    """Create a skill pipeline from multiple skills."""
+    ids = [s.strip() for s in skill_ids.split(",") if s.strip()]
+    result = await skill_compiler.compound_pipeline(name=name, skill_ids=ids)
+    if result.get("error"):
+        raise HTTPException(400, result["error"])
+    return result
+
+
+# ═══════════════════════════════════════════════════════════
+# Conversation Search API
+# ═══════════════════════════════════════════════════════════
+
+from agent.conversation_search import conversation_search
+
+
+@router.get("/conversation-search/list")
+async def list_conversations(limit: int = Query(20, ge=1, le=100)):
+    """List indexed conversations."""
+    conversations = conversation_search.list_conversations(limit)
+    return {"conversations": conversations}
+
+
+@router.get("/conversation-search/search")
+async def search_conversations(
+    query: str = Query(min_length=1, max_length=500),
+    limit: int = Query(10, ge=1, le=50),
+):
+    """Search conversation history."""
+    results = await conversation_search.search(query, limit=limit)
+    return {
+        "results": [
+            {
+                "conversation_id": r.entry.conversation_id,
+                "role": r.entry.role,
+                "content": r.entry.content[:500],
+                "summary": r.entry.summary,
+                "topics": r.entry.topics,
+                "relevance_score": r.relevance_score,
+                "timestamp": r.entry.timestamp,
+                "conversation_title": r.conversation.title if r.conversation else "",
+            }
+            for r in results
+        ]
+    }
+
+
+@router.get("/conversation-search/search-by-topic")
+async def search_by_topic(
+    topic: str = Query(min_length=1, max_length=100),
+    limit: int = Query(10, ge=1, le=50),
+):
+    """Search conversations by topic."""
+    results = await conversation_search.search_by_topic(topic, limit=limit)
+    return {
+        "results": [
+            {
+                "conversation_id": r.entry.conversation_id,
+                "role": r.entry.role,
+                "content": r.entry.content[:500],
+                "summary": r.entry.summary,
+                "topics": r.entry.topics,
+                "relevance_score": r.relevance_score,
+                "timestamp": r.entry.timestamp,
+                "conversation_title": r.conversation.title if r.conversation else "",
+            }
+            for r in results
+        ]
+    }
+
+
+@router.get("/conversation-search/recap")
+async def generate_conversation_recap(
+    query: str = Query(min_length=1, max_length=500),
+    days_back: int = Query(30, ge=1, le=365),
+):
+    """Generate a recap of past conversations relevant to a query."""
+    recap = await conversation_search.generate_recap(query, days_back=days_back)
+    return recap
+
+
+@router.get("/conversation-search/timeline")
+async def get_conversation_timeline(days_back: int = Query(30, ge=1, le=365)):
+    """Get a chronological timeline of conversations."""
+    timeline = conversation_search.get_timeline(days_back=days_back)
+    return {"timeline": timeline}
+
+
+@router.get("/conversation-search/stats")
+async def get_conversation_search_stats():
+    """Get conversation search engine statistics."""
+    return conversation_search.get_stats()
+
+
