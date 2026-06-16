@@ -1501,4 +1501,92 @@ export const api = {
     terminate: (instanceId: string) =>
       request<{ instance_id: string; terminated: boolean }>(`/runtime-backend/instances/${instanceId}`, { method: 'DELETE' }),
   },
+
+  // ── Agent Core ──
+  agentCore: {
+    stats: (agentId = 'default') =>
+      request<import('../types').AgentCoreStats>(`/agent-core/stats?agent_id=${agentId}`),
+    traces: (agentId = 'default', limit = 10) =>
+      request<{ traces: Array<import('../types').CoreExecutionTrace> }>(`/agent-core/traces?agent_id=${agentId}&limit=${limit}`),
+    insights: (agentId = 'default', limit = 20) =>
+      request<{ insights: Array<import('../types').CoreInsight> }>(`/agent-core/insights?agent_id=${agentId}&limit=${limit}`),
+    generateInsights: (agentId = 'default') =>
+      request<{ generated: number; insights: Array<import('../types').CoreInsight> }>(`/agent-core/generate-insights?agent_id=${agentId}`, { method: 'POST' }),
+    proactiveSignals: (agentId = 'default', limit = 10) =>
+      request<{ signals: Array<import('../types').ProactiveSignal> }>(`/agent-core/proactive-signals?agent_id=${agentId}&limit=${limit}`),
+    analyze: (prompt: string, agentId = 'default') =>
+      request<import('../types').CoreAnalysis>(`/agent-core/analyze?prompt=${encodeURIComponent(prompt)}&agent_id=${agentId}`, { method: 'POST' }),
+    planSequence: (task: string, agentId = 'default') =>
+      request<{ sequence: string[][] }>(`/agent-core/plan-sequence?task=${encodeURIComponent(task)}&agent_id=${agentId}`, { method: 'POST' }),
+    learn: (agentId: string, prompt: string, success: boolean, toolsUsed?: string) => {
+      const qs = `agent_id=${agentId}&prompt=${encodeURIComponent(prompt)}&success=${success}${toolsUsed ? `&tools_used=${toolsUsed}` : ''}`;
+      return request<{ agent_id: string; recorded: boolean }>(`/agent-core/learn?${qs}`, { method: 'POST' });
+    },
+    checkpoint: (agentId = 'default', name = 'manual') =>
+      request<{ checkpoint_id: string; agent_id: string }>(`/agent-core/checkpoint?agent_id=${agentId}&name=${name}`, { method: 'POST' }),
+  },
+
+  // ── Agent Synthesis ──
+  synthesis: {
+    stats: () =>
+      request<import('../types').SynthesisStats>('/synthesis/stats'),
+    reports: (limit = 5) =>
+      request<{ reports: Array<import('../types').SynthesisReport> }>(`/synthesis/reports?limit=${limit}`),
+    contribute: (agentId: string, agentName: string, content: string, insightType = 'strategy', confidence = 0.5) =>
+      request<import('../types').SynthesisContribution>(`/synthesis/contribute?agent_id=${agentId}&agent_name=${agentName}&content=${encodeURIComponent(content)}&insight_type=${insightType}&confidence=${confidence}`, { method: 'POST' }),
+    synthesize: (mode = 'aggregate') =>
+      request<import('../types').SynthesisResult>(`/synthesis/synthesize?mode=${mode}`, { method: 'POST' }),
+    recommendations: (agentId: string) =>
+      request<{ recommendations: Array<import('../types').AgentRecommendation> }>(`/synthesis/recommendations/${agentId}`),
+    conflicts: (limit = 20) =>
+      request<{ conflicts: Array<import('../types').KnowledgeConflict> }>(`/synthesis/conflicts?limit=${limit}`),
+  },
+
+  // ── Agent Intelligence ──
+  intelligence: {
+    stats: () =>
+      request<import('../types').IntelligenceStats>('/intelligence/stats'),
+    analyze: (prompt: string) =>
+      request<import('../types').IntelligenceAnalysis>(`/intelligence/analyze?prompt=${encodeURIComponent(prompt)}`, { method: 'POST' }),
+    insights: () =>
+      request<import('../types').LearningInsights>('/intelligence/insights'),
+    experiences: (limit = 10) =>
+      request<{ experiences: Array<import('../types').Experience> }>(`/intelligence/experiences?limit=${limit}`),
+    planTools: (task: string) =>
+      request<{ sequence: string[][] }>(`/intelligence/plan-tools?task=${encodeURIComponent(task)}`, { method: 'POST' }),
+    selectTools: (prompt: string, limit = 5) =>
+      request<{ tools: Array<{ name: string; description: string }> }>(`/intelligence/select-tools?prompt=${encodeURIComponent(prompt)}&limit=${limit}`, { method: 'POST' }),
+  },
+
+  // ── Runtime ──
+  runtime: {
+    registry: () =>
+      request<{ runtimes: Array<import('../types').RuntimeInfo>; active_count: number; total_executions: number }>('/runtime/registry'),
+    stats: (agentId: string) =>
+      request<import('../types').RuntimeStats>(`/runtime/${agentId}/stats`),
+    executions: (agentId: string, limit = 10) =>
+      request<{ executions: Array<import('../types').RuntimeExecution> }>(`/runtime/${agentId}/executions?limit=${limit}`),
+    checkpoints: (agentId: string) =>
+      request<{ checkpoints: Array<{ id: string; name: string; timestamp: string }> }>(`/runtime/${agentId}/checkpoints`),
+    saveCheckpoint: (agentId: string, name = 'manual') =>
+      request<{ checkpoint_id: string; agent_id: string; saved: boolean }>(`/runtime/${agentId}/checkpoint?name=${name}`, { method: 'POST' }),
+    pause: (agentId: string) =>
+      request<{ agent_id: string; state: string }>(`/runtime/${agentId}/pause`, { method: 'POST' }),
+    resume: (agentId: string) =>
+      request<{ agent_id: string; state: string }>(`/runtime/${agentId}/resume`, { method: 'POST' }),
+    refillTokens: (agentId: string, count = 10000) =>
+      request<{ agent_id: string; token_budget_remaining: number }>(`/runtime/${agentId}/refill-tokens?count=${count}`, { method: 'POST' }),
+    shutdown: (agentId: string) =>
+      request<{ agent_id: string; shutdown: boolean }>(`/runtime/${agentId}/shutdown`, { method: 'POST' }),
+    events: (agentId: string, limit = 20) =>
+      request<{ events: Array<{ id: string; type: string; data: any; timestamp: string }>; agent_id: string }>(`/runtime/${agentId}/events?limit=${limit}`),
+    intelligence: (agentId: string) =>
+      request<import('../types').IntelligenceStats>(`/runtime/${agentId}/intelligence`),
+    agentCore: (agentId: string) =>
+      request<import('../types').AgentCoreStats>(`/runtime/${agentId}/agent-core`),
+    dashboard: () =>
+      request<import('../types').SystemDashboard>('/system/dashboard'),
+    health: () =>
+      request<import('../types').SystemHealth>('/system/health'),
+  },
 };
