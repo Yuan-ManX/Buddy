@@ -63,6 +63,8 @@ import { AgentCorePanel } from './components/AgentCorePanel';
 import { SynthesisPanel } from './components/SynthesisPanel';
 import { IntelligencePanel } from './components/IntelligencePanel';
 import { RuntimePanel } from './components/RuntimePanel';
+import { SkillCompilerPanel } from './components/SkillCompilerPanel';
+import { ConversationSearchPanel } from './components/ConversationSearchPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { CommandPalette } from './components/CommandPalette';
@@ -494,6 +496,8 @@ export default function App() {
         {activeTab === 'synthesis' && <SynthesisPanel />}
         {activeTab === 'intelligence' && <IntelligencePanel />}
         {activeTab === 'runtimepanel' && <RuntimePanel />}
+        {activeTab === 'skillcompiler' && <SkillCompilerPanel />}
+        {activeTab === 'conversationsearch' && <ConversationSearchPanel />}
 
         {/* Agent-specific panels */}
         {selectedAgent && (
