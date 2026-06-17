@@ -367,9 +367,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  chatBranches: (messageId: string) =>
+    request<{ branches: Array<import('../types').MessageBranch> }>(`/chat/branches?message_id=${messageId}`),
+  chatQuickReplies: (agentId: string) =>
+    request<{ replies: Array<import('../types').QuickReply> }>(`/chat/quick-replies?agent_id=${agentId}`),
 
   system: {
     overview: () => request<import('../types').SystemOverview>('/system/overview'),
+    health: () => request<import('../types').SystemHealthStatus>('/system/health'),
+    tokenUsage: () => request<import('../types').TokenUsageData>('/system/token-usage'),
+    activeAgents: () => request<{ agents: Array<import('../types').AgentState> }>('/system/active-agents'),
+    recentActivity: (limit = 20) =>
+      request<{ activities: Array<import('../types').ActivityFeedEntry> }>(`/system/recent-activity?limit=${limit}`),
   },
 
   dream: {
@@ -1524,6 +1533,17 @@ export const api = {
     },
     checkpoint: (agentId = 'default', name = 'manual') =>
       request<{ checkpoint_id: string; agent_id: string }>(`/agent-core/checkpoint?agent_id=${agentId}&name=${name}`, { method: 'POST' }),
+    // Pipeline Runner
+    runPipeline: (agentId: string, prompt: string) =>
+      request<import('../types').PipelineRun>(`/agent-core/pipeline?agent_id=${agentId}&prompt=${encodeURIComponent(prompt)}`, { method: 'POST' }),
+    crossTrace: (agentId: string, limit?: number) =>
+      request<{ traces: Array<import('../types').ExecutionTimelineEntry> }>(`/agent-core/cross-trace?agent_id=${agentId}&limit=${limit || 20}`),
+    reflect: (agentId: string) =>
+      request<{ reflections: string[]; confidence: number }>(`/agent-core/reflect?agent_id=${agentId}`, { method: 'POST' }),
+    strategyEffectiveness: (agentId: string) =>
+      request<{ strategies: Array<import('../types').StrategyEffectiveness> }>(`/agent-core/strategy-effectiveness?agent_id=${agentId}`),
+    timeline: (agentId: string, limit?: number) =>
+      request<{ entries: Array<import('../types').ExecutionTimelineEntry> }>(`/agent-core/timeline?agent_id=${agentId}&limit=${limit || 15}`),
   },
 
   // ── Agent Synthesis ──
@@ -1540,6 +1560,32 @@ export const api = {
       request<{ recommendations: Array<import('../types').AgentRecommendation> }>(`/synthesis/recommendations/${agentId}`),
     conflicts: (limit = 20) =>
       request<{ conflicts: Array<import('../types').KnowledgeConflict> }>(`/synthesis/conflicts?limit=${limit}`),
+    // Knowledge Fusion
+    fuse: (agentIds: string[], topic?: string) => {
+      const qs = new URLSearchParams();
+      qs.set('agent_ids', agentIds.join(','));
+      if (topic) qs.set('topic', topic);
+      return request<import('../types').FusionResult>(`/synthesis/fuse?${qs.toString()}`, { method: 'POST' });
+    },
+    trustNetwork: () =>
+      request<import('../types').TrustNetwork>('/synthesis/trust-network'),
+    decide: (topic: string, options: string[], agentIds?: string[]) => {
+      const qs = new URLSearchParams();
+      qs.set('topic', topic);
+      qs.set('options', options.join(','));
+      if (agentIds) qs.set('agent_ids', agentIds.join(','));
+      return request<import('../types').CollectiveDecision>(`/synthesis/decide?${qs.toString()}`, { method: 'POST' });
+    },
+    resolvedConflicts: (limit = 20) =>
+      request<{ conflicts: Array<import('../types').ResolvedConflict> }>(`/synthesis/resolved-conflicts?limit=${limit}`),
+    distill: (topic?: string, limit?: number) => {
+      const qs = new URLSearchParams();
+      if (topic) qs.set('topic', topic);
+      if (limit) qs.set('limit', String(limit));
+      return request<{ knowledge: Array<import('../types').DistilledKnowledge> }>(`/synthesis/distill?${qs.toString()}`);
+    },
+    collaborate: (query: string, agentIds: string[]) =>
+      request<{ result: string; contributors: string[] }>(`/synthesis/collaborate?query=${encodeURIComponent(query)}&agent_ids=${agentIds.join(',')}`, { method: 'POST' }),
   },
 
   // ── Agent Intelligence ──
@@ -1556,6 +1602,16 @@ export const api = {
       request<{ sequence: string[][] }>(`/intelligence/plan-tools?task=${encodeURIComponent(task)}`, { method: 'POST' }),
     selectTools: (prompt: string, limit = 5) =>
       request<{ tools: Array<{ name: string; description: string }> }>(`/intelligence/select-tools?prompt=${encodeURIComponent(prompt)}&limit=${limit}`, { method: 'POST' }),
+    strategyDispatch: () =>
+      request<{ strategies: Array<import('../types').StrategyDispatch> }>('/intelligence/strategy-dispatch'),
+    toolEffectiveness: () =>
+      request<{ tools: Array<import('../types').ToolEffectiveness> }>('/intelligence/tool-effectiveness'),
+    lessonsLearned: (limit = 20) =>
+      request<{ lessons: Array<import('../types').LessonLearned> }>(`/intelligence/lessons?limit=${limit}`),
+    uncertaintyGauge: (responseId: string) =>
+      request<import('../types').UncertaintyGaugeData>(`/intelligence/uncertainty?response_id=${responseId}`),
+    promptAnalyzer: (prompt: string) =>
+      request<import('../types').PromptAnalysis>(`/intelligence/prompt-analyzer?prompt=${encodeURIComponent(prompt)}`, { method: 'POST' }),
   },
 
   // ── Runtime ──
@@ -1588,5 +1644,71 @@ export const api = {
       request<import('../types').SystemDashboard>('/system/dashboard'),
     health: () =>
       request<import('../types').SystemHealth>('/system/health'),
+  },
+
+  // ── Skill Compiler ──
+  skillCompiler: {
+    listSkills: (category?: string, status?: string) => {
+      let qs = '';
+      if (category) qs += `&category=${category}`;
+      if (status) qs += `&status=${status}`;
+      return request<{ skills: Array<import('../types').CompiledSkillInfo> }>(`/skill-compiler/skills?${qs.replace(/^&/, '')}`);
+    },
+    listPipelines: () =>
+      request<{ pipelines: Array<import('../types').PipelineInfo> }>('/skill-compiler/pipelines'),
+    stats: () =>
+      request<import('../types').SkillCompilerStats>('/skill-compiler/stats'),
+    search: (query: string) =>
+      request<{ skills: Array<import('../types').CompiledSkillInfo> }>(`/skill-compiler/search?query=${encodeURIComponent(query)}`),
+    activate: (skillId: string) =>
+      request<{ success: boolean }>(`/skill-compiler/skills/${skillId}/activate`, { method: 'POST' }),
+    improve: (skillId: string) =>
+      request<{ improved: boolean; skill: import('../types').CompiledSkillInfo }>(`/skill-compiler/skills/${skillId}/improve`, { method: 'POST' }),
+    createPipeline: (name: string, skillIds: string[]) =>
+      request<{ created: boolean; pipeline: import('../types').PipelineInfo }>(`/skill-compiler/pipelines?name=${encodeURIComponent(name)}&skill_ids=${skillIds.join(',')}`, { method: 'POST' }),
+  },
+
+  // ── Conversation Search ──
+  conversationSearch: {
+    list: (limit = 20) =>
+      request<{ conversations: Array<import('../types').ConversationInfo> }>(`/conversation-search/list?limit=${limit}`),
+    search: (query: string, limit = 10) =>
+      request<{ results: Array<import('../types').SearchResultItem> }>(`/conversation-search/search?query=${encodeURIComponent(query)}&limit=${limit}`),
+    searchByTopic: (topic: string, limit = 10) =>
+      request<{ results: Array<import('../types').SearchResultItem> }>(`/conversation-search/search-by-topic?topic=${encodeURIComponent(topic)}&limit=${limit}`),
+    recap: (query: string, daysBack = 30) =>
+      request<import('../types').RecapResult>(`/conversation-search/recap?query=${encodeURIComponent(query)}&days_back=${daysBack}`),
+    timeline: (daysBack = 30) =>
+      request<{ timeline: Array<import('../types').TimelineEntry> }>(`/conversation-search/timeline?days_back=${daysBack}`),
+    stats: () =>
+      request<import('../types').ConversationSearchStats>('/conversation-search/stats'),
+  },
+
+  // ── MCP Bridge ──
+  mcpBridge: {
+    stats: () =>
+      request<any>('/mcp-bridge/stats'),
+    tools: (serverName?: string) =>
+      request<{ tools: Array<{ name: string; description: string; server_name: string; input_schema: any }> }>(`/mcp-bridge/tools${serverName ? `?server_name=${serverName}` : ''}`),
+    registerServer: (config: { name: string; transport: string; command?: string; args?: string[]; url?: string }) =>
+      request<{ server_name: string; registered: boolean }>('/mcp-bridge/servers', { method: 'POST', body: JSON.stringify(config) }),
+    connect: (serverName: string) =>
+      request<{ server_name: string; connected: boolean }>(`/mcp-bridge/servers/${serverName}/connect`, { method: 'POST' }),
+    disconnect: (serverName: string) =>
+      request<{ server_name: string; disconnected: boolean }>(`/mcp-bridge/servers/${serverName}/disconnect`, { method: 'POST' }),
+  },
+
+  // ── Learning Orchestrator ──
+  learningOrchestrator: {
+    stats: () =>
+      request<any>('/learning/stats'),
+    insights: (category?: string, limit = 20) =>
+      request<{ insights: Array<{ id: string; category: string; summary: string; confidence: number; impact_score: number; applied_count: number; success_rate_after: number; created_at: string }> }>(`/learning/insights?${category ? `category=${category}&` : ''}limit=${limit}`),
+    strategies: (limit = 10) =>
+      request<{ strategies: Array<{ id: string; task_pattern: string; preferred_style: string; preferred_model: string; preferred_mode: string; success_rate: number; total_attempts: number; avg_tokens: number; avg_latency_ms: number }> }>(`/learning/strategies?limit=${limit}`),
+    consolidate: () =>
+      request<any>('/learning/consolidate', { method: 'POST' }),
+    bestStrategy: (prompt: string) =>
+      request<{ found: boolean; strategy?: any; message?: string }>(`/learning/best-strategy?prompt=${encodeURIComponent(prompt)}`),
   },
 };
