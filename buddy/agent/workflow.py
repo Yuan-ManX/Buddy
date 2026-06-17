@@ -150,6 +150,39 @@ class WorkflowTask:
         }
 
 
+@dataclass
+class BranchCondition:
+    """A condition for conditional branching in workflows."""
+    task_id: str
+    field: str = "state"          # field to evaluate (state, priority, metadata key)
+    operator: str = "equals"      # equals, not_equals, contains, greater_than
+    value: Any = None
+    target_task_id: str = ""      # task to execute if condition is met
+
+
+@dataclass
+class WorkflowTemplate:
+    """A reusable workflow template with parameterized task definitions."""
+    id: str = field(default_factory=lambda: f"wftpl-{uuid.uuid4().hex[:12]}")
+    name: str = ""
+    description: str = ""
+    task_definitions: list[dict] = field(default_factory=list)
+    parameters: dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+@dataclass
+class ExecutionMetrics:
+    """Metrics for workflow execution analysis."""
+    task_id: str
+    total_duration_ms: float = 0.0
+    wait_duration_ms: float = 0.0
+    blocked_duration_ms: float = 0.0
+    delegation_count: int = 0
+    state_transitions: int = 0
+    dependency_chain_depth: int = 0
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Dependency Resolver
 # ═══════════════════════════════════════════════════════════════════════════
@@ -543,9 +576,620 @@ class WorkflowEngine:
 
     def __init__(self):
         self.board = TaskBoard()
+        self._templates: dict[str, WorkflowTemplate] = {}
+        self._branches: dict[str, list[BranchCondition]] = {}
+        self._execution_metrics: dict[str, ExecutionMetrics] = {}
+        self._fan_out_groups: dict[str, list[str]] = {}
 
     def get_stats(self) -> dict[str, Any]:
         return self.board.get_board_stats()
+
+    # ── Conditional Branching ──────────────────────────────
+
+    def add_conditional_branch(
+        self,
+        task_id: str,
+        field: str,
+        operator: str,
+        value: Any,
+        target_task_id: str,
+    ) -> BranchCondition:
+        """Add a conditional branch to a workflow task.
+
+        When the source task completes, the condition is evaluated. If
+        the condition is met, the target task is automatically created
+        or transitioned. If the condition is not met, the else branch
+        (if any) is taken.
+
+        Supported operators: equals, not_equals, contains, greater_than, less_than.
+
+        Args:
+            task_id: The source task whose result triggers the branch.
+            field: Field to evaluate: 'state', 'priority', or a metadata key.
+            operator: Comparison operator.
+            value: The value to compare against.
+            target_task_id: The task to activate if condition is met.
+
+        Returns:
+            The created BranchCondition record.
+        """
+        condition = BranchCondition(
+            task_id=task_id,
+            field=field,
+            operator=operator,
+            value=value,
+            target_task_id=target_task_id,
+        )
+        if task_id not in self._branches:
+            self._branches[task_id] = []
+        self._branches[task_id].append(condition)
+        logger.info(
+            f"Conditional branch added: {task_id} -> {target_task_id} "
+            f"({field} {operator} {value})"
+        )
+        return condition
+
+    def evaluate_branches(self, task_id: str) -> list[str]:
+        """Evaluate all conditional branches for a task and return triggered targets.
+
+        Args:
+            task_id: The source task ID.
+
+        Returns:
+            List of target task IDs whose conditions were met.
+        """
+        conditions = self._branches.get(task_id, [])
+        triggered: list[str] = []
+
+        task = self.board.get_task(task_id)
+        if not task:
+            return triggered
+
+        for condition in conditions:
+            try:
+                actual_value = self._resolve_field_value(task, condition.field)
+                if self._evaluate_condition(actual_value, condition.operator, condition.value):
+                    triggered.append(condition.target_task_id)
+                    logger.info(
+                        f"Branch triggered: {task_id} -> {condition.target_task_id}"
+                    )
+            except Exception as e:
+                logger.warning(f"Branch evaluation failed for {task_id}: {e}")
+
+        return triggered
+
+    def get_branches(self, task_id: str) -> list[BranchCondition]:
+        """Get all conditional branches for a task."""
+        return list(self._branches.get(task_id, []))
+
+    def get_all_branches(self) -> dict[str, list[BranchCondition]]:
+        """Get all conditional branches in the workflow."""
+        return dict(self._branches)
+
+    @staticmethod
+    def _resolve_field_value(task: WorkflowTask, field: str) -> Any:
+        """Resolve a field value from a task for condition evaluation."""
+        if field == "state":
+            return task.state.value
+        if field == "priority":
+            return task.priority.value
+        if field == "title":
+            return task.title
+        if field == "description":
+            return task.description
+        if field == "assigned_agent":
+            return task.assigned_agent
+        # Try metadata
+        if field in task.metadata:
+            return task.metadata[field]
+        return None
+
+    @staticmethod
+    def _evaluate_condition(actual: Any, operator: str, expected: Any) -> bool:
+        """Evaluate a single condition against actual and expected values."""
+        if operator == "equals":
+            return actual == expected
+        if operator == "not_equals":
+            return actual != expected
+        if operator == "contains":
+            return str(expected) in str(actual) if actual else False
+        if operator == "greater_than":
+            try:
+                return float(actual) > float(expected)
+            except (TypeError, ValueError):
+                return False
+        if operator == "less_than":
+            try:
+                return float(actual) < float(expected)
+            except (TypeError, ValueError):
+                return False
+        return False
+
+    # ── Parallel Task Fan-Out / Fan-In ─────────────────────
+
+    def fan_out(
+        self, parent_task_id: str, sub_tasks: list[dict], agent_id: str = ""
+    ) -> list[str]:
+        """Create multiple sub-tasks that execute in parallel.
+
+        Each sub-task is created and linked to the parent. The parent
+        task is blocked until all sub-tasks are complete (fan-in).
+
+        Args:
+            parent_task_id: The parent task that spawns sub-tasks.
+            sub_tasks: List of dicts with 'title', 'description', 'priority'.
+            agent_id: Default agent to assign to sub-tasks.
+
+        Returns:
+            List of created sub-task IDs.
+        """
+        parent = self.board.get_task(parent_task_id)
+        if not parent:
+            logger.error(f"Parent task not found: {parent_task_id}")
+            return []
+
+        sub_task_ids: list[str] = []
+        for sub_def in sub_tasks:
+            sub_task = self.board.create_task(
+                title=sub_def.get("title", f"Sub-task of {parent_task_id}"),
+                description=sub_def.get("description", ""),
+                priority=WorkflowPriority(sub_def.get("priority", "medium")),
+                assigned_agent=sub_def.get("agent_id", agent_id),
+                created_by=parent.created_by,
+                studio_id=parent.studio_id,
+            )
+            self.board.transition(sub_task.id, TaskState.TODO)
+            sub_task_ids.append(sub_task.id)
+
+        # Register the fan-out group
+        self._fan_out_groups[parent_task_id] = sub_task_ids
+
+        # Block parent until all sub-tasks are done
+        self.board.report_blocker(
+            parent_task_id,
+            BlockerType.DEPENDENCY,
+            f"Waiting for {len(sub_task_ids)} parallel sub-tasks to complete",
+            reported_by=parent.assigned_agent or "system",
+        )
+
+        logger.info(
+            f"Fan-out: {parent_task_id} spawned {len(sub_task_ids)} parallel sub-tasks"
+        )
+        return sub_task_ids
+
+    def fan_in(self, parent_task_id: str) -> dict:
+        """Aggregate results from completed parallel sub-tasks.
+
+        Checks if all sub-tasks in the fan-out group are complete, then
+        resolves the parent's blocker and returns aggregated results.
+
+        Args:
+            parent_task_id: The parent task ID.
+
+        Returns:
+            Dict with 'all_complete', 'completed_count', 'total_count',
+            'sub_task_states', and 'sub_task_ids'.
+        """
+        sub_task_ids = self._fan_out_groups.get(parent_task_id, [])
+        completed = 0
+        states: dict[str, str] = {}
+
+        for sub_id in sub_task_ids:
+            sub_task = self.board.get_task(sub_id)
+            if sub_task:
+                states[sub_id] = sub_task.state.value
+                if sub_task.state in (TaskState.DONE, TaskState.CANCELLED, TaskState.FAILED):
+                    completed += 1
+
+        all_complete = completed == len(sub_task_ids) if sub_task_ids else True
+
+        if all_complete:
+            # Resolve parent blocker
+            parent = self.board.get_task(parent_task_id)
+            if parent and parent.state == TaskState.BLOCKED:
+                for blocker in parent.blockers:
+                    if not blocker.is_resolved:
+                        self.board.resolve_blocker(
+                            parent_task_id, blocker.id,
+                            f"All {completed} sub-tasks completed"
+                        )
+                        break
+
+            logger.info(f"Fan-in complete: {parent_task_id} ({completed}/{len(sub_task_ids)})")
+
+        return {
+            "all_complete": all_complete,
+            "completed_count": completed,
+            "total_count": len(sub_task_ids),
+            "sub_task_states": states,
+            "sub_task_ids": sub_task_ids,
+        }
+
+    def get_fan_out_group(self, parent_task_id: str) -> list[str]:
+        """Get the sub-task IDs for a fan-out group."""
+        return list(self._fan_out_groups.get(parent_task_id, []))
+
+    # ── Workflow Templates ─────────────────────────────────
+
+    def create_workflow_template(
+        self,
+        name: str,
+        task_definitions: list[dict],
+        parameters: dict[str, Any] | None = None,
+        description: str = "",
+    ) -> WorkflowTemplate:
+        """Create a reusable workflow template with parameterized tasks.
+
+        Task definitions use {param_name} placeholders that are substituted
+        when the template is instantiated.
+
+        Args:
+            name: Unique template name.
+            task_definitions: List of task dicts with parameter placeholders.
+            parameters: Default parameter values.
+            description: Template description.
+
+        Returns:
+            The created WorkflowTemplate.
+        """
+        if name in self._templates:
+            raise ValueError(f"Template '{name}' already exists")
+
+        template = WorkflowTemplate(
+            name=name,
+            description=description,
+            task_definitions=task_definitions,
+            parameters=parameters or {},
+        )
+        self._templates[name] = template
+        logger.info(f"Workflow template created: '{name}' with {len(task_definitions)} tasks")
+        return template
+
+    def instantiate_template(
+        self, template_name: str, parameter_values: dict[str, Any] | None = None
+    ) -> list[str]:
+        """Instantiate a workflow template with parameter substitution.
+
+        Replaces {param_name} placeholders in task definitions with the
+        provided values and creates all tasks in the workflow.
+
+        Args:
+            template_name: Name of the template to instantiate.
+            parameter_values: Values to substitute for template parameters.
+
+        Returns:
+            List of created task IDs.
+
+        Raises:
+            ValueError: If the template or required parameters are missing.
+        """
+        template = self._templates.get(template_name)
+        if not template:
+            raise ValueError(f"Template not found: '{template_name}'")
+
+        params = dict(template.parameters)
+        if parameter_values:
+            params.update(parameter_values)
+
+        created_ids: list[str] = []
+        task_id_map: dict[str, str] = {}  # template_id -> real_id
+
+        for task_def in template.task_definitions:
+            # Perform parameter substitution
+            title = self._substitute_params(task_def.get("title", ""), params)
+            description = self._substitute_params(task_def.get("description", ""), params)
+
+            task = self.board.create_task(
+                title=title,
+                description=description,
+                priority=WorkflowPriority(task_def.get("priority", "medium")),
+                assigned_agent=self._substitute_params(task_def.get("assigned_agent", ""), params),
+                created_by=params.get("created_by", "template"),
+                tags=task_def.get("tags", []),
+            )
+
+            # Map template ID to real ID for dependency resolution
+            tpl_id = task_def.get("template_id", "")
+            if tpl_id:
+                task_id_map[tpl_id] = task.id
+
+            created_ids.append(task.id)
+            self.board.transition(task.id, TaskState.TODO)
+
+        # Resolve dependencies using the ID map
+        for task_def in template.task_definitions:
+            tpl_id = task_def.get("template_id", "")
+            real_id = task_id_map.get(tpl_id, "")
+            if real_id:
+                task = self.board.get_task(real_id)
+                if task:
+                    resolved_deps = [
+                        task_id_map.get(dep, dep)
+                        for dep in task_def.get("dependencies", [])
+                    ]
+                    task.dependencies = [d for d in resolved_deps if d]
+
+        logger.info(
+            f"Template '{template_name}' instantiated: {len(created_ids)} tasks created"
+        )
+        return created_ids
+
+    def get_template(self, template_name: str) -> WorkflowTemplate | None:
+        """Get a workflow template by name."""
+        return self._templates.get(template_name)
+
+    def list_templates(self) -> list[dict]:
+        """List all workflow templates."""
+        return [
+            {
+                "name": t.name,
+                "description": t.description,
+                "task_count": len(t.task_definitions),
+                "parameters": t.parameters,
+                "created_at": t.created_at,
+            }
+            for t in self._templates.values()
+        ]
+
+    @staticmethod
+    def _substitute_params(text: str, params: dict[str, Any]) -> str:
+        """Substitute {param_name} placeholders in a string."""
+        import re
+        def replacer(match):
+            key = match.group(1)
+            return str(params.get(key, match.group(0)))
+        return re.sub(r"\{(\w+)\}", replacer, text)
+
+    # ── Circular Dependency Detection ──────────────────────
+
+    def detect_circular_dependencies(self) -> list[list[str]]:
+        """Detect circular dependencies in the task dependency graph.
+
+        Uses DFS with a visited set to find cycles in the directed
+        dependency graph across all tasks.
+
+        Returns:
+            List of cycles, where each cycle is a list of task IDs.
+        """
+        all_tasks = self.board._tasks
+        cycles: list[list[str]] = []
+        visited: set[str] = set()
+        in_stack: set[str] = set()
+
+        def dfs(task_id: str, path: list[str]) -> None:
+            if task_id in in_stack:
+                # Found a cycle — extract the cycle portion
+                cycle_start = path.index(task_id)
+                cycle = path[cycle_start:]
+                cycles.append(cycle)
+                return
+            if task_id in visited:
+                return
+
+            visited.add(task_id)
+            in_stack.add(task_id)
+            path.append(task_id)
+
+            task = all_tasks.get(task_id)
+            if task:
+                for dep_id in task.dependencies:
+                    if dep_id in all_tasks:
+                        dfs(dep_id, list(path))
+
+            in_stack.discard(task_id)
+            path.pop()
+
+        for task_id in all_tasks:
+            if task_id not in visited:
+                dfs(task_id, [])
+
+        if cycles:
+            logger.warning(f"Detected {len(cycles)} circular dependency cycles")
+        return cycles
+
+    def resolve_circular_dependency(
+        self, cycle: list[str], strategy: str = "remove_last"
+    ) -> bool:
+        """Resolve a circular dependency cycle.
+
+        Strategies:
+            - 'remove_last': Remove the last dependency edge in the cycle.
+            - 'break_all': Remove all dependency edges in the cycle.
+
+        Args:
+            cycle: The cycle of task IDs to resolve.
+            strategy: Resolution strategy to apply.
+
+        Returns:
+            True if the cycle was resolved.
+        """
+        if len(cycle) < 2:
+            return False
+
+        if strategy == "remove_last":
+            # Remove the dependency from the last task in the cycle
+            last_task = self.board.get_task(cycle[-1])
+            if last_task:
+                dep_to_remove = cycle[0] if len(cycle) == 2 else cycle[-2]
+                if dep_to_remove in last_task.dependencies:
+                    last_task.dependencies.remove(dep_to_remove)
+                    logger.info(
+                        f"Removed dependency {cycle[-1]} -> {dep_to_remove} to break cycle"
+                    )
+                    return True
+
+        elif strategy == "break_all":
+            removed = 0
+            for i, task_id in enumerate(cycle):
+                task = self.board.get_task(task_id)
+                if task:
+                    dep_target = cycle[(i + 1) % len(cycle)]
+                    if dep_target in task.dependencies:
+                        task.dependencies.remove(dep_target)
+                        removed += 1
+            logger.info(f"Removed {removed} dependency edges to break cycle")
+            return removed > 0
+
+        return False
+
+    def get_dependency_chain_depth(self, task_id: str) -> int:
+        """Get the maximum depth of the dependency chain for a task.
+
+        Args:
+            task_id: The task ID to analyze.
+
+        Returns:
+            The maximum number of dependency hops.
+        """
+        task = self.board.get_task(task_id)
+        if not task:
+            return 0
+
+        all_tasks = self.board._tasks
+        visited: set[str] = set()
+
+        def max_depth(tid: str) -> int:
+            if tid in visited:
+                return 0
+            visited.add(tid)
+            t = all_tasks.get(tid)
+            if not t or not t.dependencies:
+                return 0
+            return 1 + max(
+                (max_depth(dep) for dep in t.dependencies if dep in all_tasks),
+                default=0,
+            )
+
+        return max_depth(task_id)
+
+    # ── Execution Metrics & Bottleneck Detection ───────────
+
+    def get_execution_metrics(self, task_id: str) -> ExecutionMetrics:
+        """Compute execution metrics for a workflow task.
+
+        Analyzes the task's activity timeline to calculate total duration,
+        wait time, blocked time, delegation count, and dependency depth.
+
+        Args:
+            task_id: The task ID to analyze.
+
+        Returns:
+            An ExecutionMetrics record with detailed timing data.
+        """
+        task = self.board.get_task(task_id)
+        if not task:
+            return ExecutionMetrics(task_id=task_id)
+
+        metrics = ExecutionMetrics(task_id=task_id)
+
+        # Count state transitions from activity log
+        metrics.state_transitions = sum(
+            1 for a in task.activities if a.action == "state_changed"
+        )
+
+        # Count delegations
+        metrics.delegation_count = sum(
+            1 for a in task.activities if a.action == "delegated"
+        )
+
+        # Calculate dependency chain depth
+        metrics.dependency_chain_depth = self.get_dependency_chain_depth(task_id)
+
+        # Calculate durations from activity timestamps
+        activities = sorted(task.activities, key=lambda a: a.timestamp)
+
+        if task.started_at and task.completed_at:
+            try:
+                start = datetime.fromisoformat(task.started_at)
+                end = datetime.fromisoformat(task.completed_at)
+                metrics.total_duration_ms = (end - start).total_seconds() * 1000
+            except (ValueError, TypeError):
+                pass
+
+        # Calculate blocked duration
+        blocked_start: str = ""
+        for a in activities:
+            if a.action == "state_changed" and a.to_state == "blocked":
+                blocked_start = a.timestamp
+            elif a.action == "state_changed" and a.from_state == "blocked" and blocked_start:
+                try:
+                    b_start = datetime.fromisoformat(blocked_start)
+                    b_end = datetime.fromisoformat(a.timestamp)
+                    metrics.blocked_duration_ms += (b_end - b_start).total_seconds() * 1000
+                except (ValueError, TypeError):
+                    pass
+                blocked_start = ""
+
+        # Calculate wait time (time between creation and start)
+        if task.created_at and task.started_at:
+            try:
+                created = datetime.fromisoformat(task.created_at)
+                started = datetime.fromisoformat(task.started_at)
+                metrics.wait_duration_ms = (started - created).total_seconds() * 1000
+            except (ValueError, TypeError):
+                pass
+
+        self._execution_metrics[task_id] = metrics
+        return metrics
+
+    def detect_bottlenecks(self, threshold_ms: float = 60000.0) -> list[dict]:
+        """Detect workflow bottlenecks — tasks that exceed the duration threshold.
+
+        Scans all tasks in the workflow and identifies those whose total
+        duration or blocked time exceeds the specified threshold.
+
+        Args:
+            threshold_ms: Duration threshold in milliseconds to flag as bottleneck.
+
+        Returns:
+            List of bottleneck records with task ID, duration, and reason.
+        """
+        bottlenecks: list[dict] = []
+        all_tasks = self.board._tasks
+
+        for task_id in all_tasks:
+            metrics = self.get_execution_metrics(task_id)
+
+            reasons: list[str] = []
+            if metrics.total_duration_ms > threshold_ms:
+                reasons.append(f"total_duration={metrics.total_duration_ms:.0f}ms")
+            if metrics.blocked_duration_ms > threshold_ms:
+                reasons.append(f"blocked_duration={metrics.blocked_duration_ms:.0f}ms")
+            if metrics.wait_duration_ms > threshold_ms:
+                reasons.append(f"wait_duration={metrics.wait_duration_ms:.0f}ms")
+            if metrics.dependency_chain_depth > 3:
+                reasons.append(f"deep_dependency_chain={metrics.dependency_chain_depth}")
+
+            if reasons:
+                bottlenecks.append({
+                    "task_id": task_id,
+                    "title": all_tasks[task_id].title,
+                    "state": all_tasks[task_id].state.value,
+                    "duration_ms": metrics.total_duration_ms,
+                    "blocked_ms": metrics.blocked_duration_ms,
+                    "wait_ms": metrics.wait_duration_ms,
+                    "dependency_depth": metrics.dependency_chain_depth,
+                    "reasons": reasons,
+                })
+
+        bottlenecks.sort(key=lambda b: b["duration_ms"], reverse=True)
+        logger.info(f"Detected {len(bottlenecks)} workflow bottlenecks")
+        return bottlenecks
+
+    def get_all_execution_metrics(self) -> dict[str, dict]:
+        """Get execution metrics for all tasks in the workflow."""
+        result = {}
+        for task_id in self.board._tasks:
+            metrics = self.get_execution_metrics(task_id)
+            result[task_id] = {
+                "total_duration_ms": metrics.total_duration_ms,
+                "wait_duration_ms": metrics.wait_duration_ms,
+                "blocked_duration_ms": metrics.blocked_duration_ms,
+                "delegation_count": metrics.delegation_count,
+                "state_transitions": metrics.state_transitions,
+                "dependency_chain_depth": metrics.dependency_chain_depth,
+            }
+        return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════
