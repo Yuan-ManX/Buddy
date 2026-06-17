@@ -902,10 +902,17 @@ class AgentIntelligence:
         the historically best-performing tools (exploitation) using an
         epsilon-greedy strategy with decay.
         """
-        tool_names = [
-            t.name if hasattr(t, 'name') else t.get("name", t.get("function", {}).get("name", ""))
-            for t in available_tools
-        ]
+        # Normalize to tool name strings
+        def _extract_name(t):
+            if isinstance(t, str):
+                return t
+            if hasattr(t, 'name'):
+                return t.name
+            if isinstance(t, dict):
+                return t.get("name", t.get("function", {}).get("name", ""))
+            return str(t)
+
+        tool_names = [_extract_name(t) for t in available_tools]
 
         import random
         epsilon = self.config.epsilon
@@ -940,20 +947,11 @@ class AgentIntelligence:
                         selected_names.append(name)
                         break
 
-        # Map names back to tool objects
-        result = []
-        for name in selected_names:
-            for t in available_tools:
-                t_name = t.name if hasattr(t, 'name') else t.get("name", t.get("function", {}).get("name", ""))
-                if t_name == name:
-                    result.append(t)
-                    break
-
         logger.debug(
             "Adaptive tool selection: epsilon=%.3f, selected=%s",
             epsilon, selected_names
         )
-        return result
+        return selected_names
 
     def _compute_tool_exploitation_score(self, tool_name: str, prompt: str) -> float:
         """Compute exploitation score combining historical effectiveness and relevance."""
