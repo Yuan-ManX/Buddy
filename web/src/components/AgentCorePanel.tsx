@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
-import type { AgentCoreStats, CoreExecutionTrace, CoreInsight, ProactiveSignal, CoreAnalysis } from '../types';
+import type { AgentCoreStats, CoreExecutionTrace, CoreInsight, ProactiveSignal, CoreAnalysis, PipelineRun, StrategyEffectiveness, ExecutionTimelineEntry } from '../types';
 
 export const AgentCorePanel: React.FC = () => {
   const [stats, setStats] = useState<AgentCoreStats | null>(null);
@@ -12,7 +12,20 @@ export const AgentCorePanel: React.FC = () => {
   const [agentId, setAgentId] = useState('default');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<'overview' | 'traces' | 'insights' | 'signals' | 'analysis'>('overview');
+  const [activeSection, setActiveSection] = useState<'overview' | 'traces' | 'insights' | 'signals' | 'analysis' | 'pipeline' | 'strategy' | 'timeline'>('overview');
+
+  // Pipeline state
+  const [pipelinePrompt, setPipelinePrompt] = useState('');
+  const [pipelineRun, setPipelineRun] = useState<PipelineRun | null>(null);
+  const [pipelineLoading, setPipelineLoading] = useState(false);
+
+  // Strategy state
+  const [strategies, setStrategies] = useState<StrategyEffectiveness[]>([]);
+
+  // Timeline state
+  const [timelineEntries, setTimelineEntries] = useState<ExecutionTimelineEntry[]>([]);
+
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -35,7 +48,78 @@ export const AgentCorePanel: React.FC = () => {
     }
   }, [agentId]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  // Real-time polling every 5 seconds
+  useEffect(() => {
+    loadData();
+    pollingRef.current = setInterval(() => {
+      loadData();
+    }, 5000);
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [loadData]);
+
+  // ── Quick Actions ──
+  const handleQuickAction = async (action: string) => {
+    try {
+      switch (action) {
+        case 'checkpoint':
+          await api.agentCore.checkpoint(agentId);
+          loadData();
+          break;
+        case 'reflect':
+          await api.agentCore.reflect(agentId);
+          loadData();
+          break;
+        case 'generateInsights':
+          await handleGenerateInsights();
+          break;
+        case 'refresh':
+          loadData();
+          break;
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : `Action '${action}' failed`);
+    }
+  };
+
+  // ── Pipeline Runner ──
+  const handleRunPipeline = async () => {
+    if (!pipelinePrompt.trim()) return;
+    try {
+      setPipelineLoading(true);
+      setPipelineRun(null);
+      const result = await api.agentCore.runPipeline(agentId, pipelinePrompt);
+      setPipelineRun(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Pipeline run failed');
+    } finally {
+      setPipelineLoading(false);
+    }
+  };
+
+  const loadStrategyData = useCallback(async () => {
+    try {
+      const result = await api.agentCore.strategyEffectiveness(agentId);
+      setStrategies(result.strategies);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load strategy data');
+    }
+  }, [agentId]);
+
+  const loadTimelineData = useCallback(async () => {
+    try {
+      const result = await api.agentCore.timeline(agentId, 15);
+      setTimelineEntries(result.entries);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load timeline data');
+    }
+  }, [agentId]);
+
+  useEffect(() => {
+    if (activeSection === 'strategy') loadStrategyData();
+    if (activeSection === 'timeline') loadTimelineData();
+  }, [activeSection, loadStrategyData, loadTimelineData]);
 
   const handleAnalyze = async () => {
     if (!analysisPrompt.trim()) return;
@@ -55,6 +139,9 @@ export const AgentCorePanel: React.FC = () => {
       setError(e instanceof Error ? e.message : 'Failed to generate insights');
     }
   };
+
+  // Bar chart helper for strategy visualizer
+  const maxStrategyRate = Math.max(...strategies.map((s) => s.success_rate), 0);
 
   if (loading) return <div className="panel-loading">Loading agent core data...</div>;
 
@@ -76,8 +163,16 @@ export const AgentCorePanel: React.FC = () => {
 
       {error && <div className="alert alert-error">{error}</div>}
 
+      {/* Quick Actions Toolbar */}
+      <div className="quick-actions-toolbar">
+        <button onClick={() => handleQuickAction('checkpoint')} className="btn btn-sm" title="Save checkpoint">Checkpoint</button>
+        <button onClick={() => handleQuickAction('reflect')} className="btn btn-sm" title="Run reflection">Reflect</button>
+        <button onClick={() => handleQuickAction('generateInsights')} className="btn btn-sm" title="Generate insights">Generate Insights</button>
+        <button onClick={() => handleQuickAction('refresh')} className="btn btn-sm btn-primary" title="Refresh data">Refresh</button>
+      </div>
+
       <div className="section-tabs">
-        {(['overview', 'traces', 'insights', 'signals', 'analysis'] as const).map((s) => (
+        {(['overview', 'traces', 'insights', 'signals', 'analysis', 'pipeline', 'strategy', 'timeline'] as const).map((s) => (
           <button
             key={s}
             className={`tab-btn ${activeSection === s ? 'active' : ''}`}
@@ -263,6 +358,123 @@ export const AgentCorePanel: React.FC = () => {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Pipeline Runner Section */}
+      {activeSection === 'pipeline' && (
+        <div className="pipeline-section">
+          <h3>Pipeline Runner</h3>
+          <p className="section-description">Run the full observe → analyze → plan → execute → reflect pipeline.</p>
+          <div className="pipeline-form">
+            <textarea
+              value={pipelinePrompt}
+              onChange={(e) => setPipelinePrompt(e.target.value)}
+              placeholder="Enter a task prompt to run through the pipeline..."
+              className="textarea"
+              rows={3}
+            />
+            <button onClick={handleRunPipeline} className="btn btn-primary" disabled={pipelineLoading || !pipelinePrompt.trim()}>
+              {pipelineLoading ? 'Running...' : 'Run Pipeline'}
+            </button>
+          </div>
+
+          {pipelineRun && (
+            <div className="pipeline-result">
+              <div className="pipeline-run-header">
+                <span className="pipeline-run-id">Run: {pipelineRun.run_id}</span>
+                <span className={`badge badge-${pipelineRun.status === 'completed' ? 'success' : pipelineRun.status === 'failed' ? 'error' : 'warning'}`}>
+                  {pipelineRun.status}
+                </span>
+              </div>
+              <div className="pipeline-steps">
+                {pipelineRun.steps.map((step, i) => (
+                  <div key={i} className={`pipeline-step ${step.status}`}>
+                    <div className="pipeline-step-header">
+                      <span className={`pipeline-step-dot ${step.status}`} />
+                      <span className="pipeline-step-name">{step.step}</span>
+                      <span className={`pipeline-step-status ${step.status}`}>{step.status}</span>
+                    </div>
+                    {step.result && <div className="pipeline-step-result">{step.result}</div>}
+                    {step.error && <div className="pipeline-step-error">{step.error}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Strategy Visualizer Section */}
+      {activeSection === 'strategy' && (
+        <div className="strategy-section">
+          <h3>Strategy Visualizer</h3>
+          <p className="section-description">Effectiveness of different reasoning strategies.</p>
+          {strategies.length === 0 ? (
+            <p className="empty-state">No strategy data available. Run some executions first.</p>
+          ) : (
+            <div className="strategy-chart">
+              {strategies.map((s) => (
+                <div key={s.strategy} className="strategy-bar-item">
+                  <div className="strategy-bar-label">
+                    <span className="strategy-name">{s.strategy}</span>
+                    <span className="strategy-rate">{(s.success_rate * 100).toFixed(1)}%</span>
+                  </div>
+                  <div className="strategy-bar-track">
+                    <div
+                      className="strategy-bar-fill"
+                      style={{
+                        width: `${(s.success_rate / Math.max(maxStrategyRate, 0.01)) * 100}%`,
+                        background: s.success_rate >= 0.8 ? 'var(--green)' : s.success_rate >= 0.5 ? 'var(--amber)' : 'var(--red)',
+                      }}
+                    />
+                  </div>
+                  <div className="strategy-bar-meta">
+                    <span>{s.attempts} attempts</span>
+                    <span>Avg {s.avg_tokens.toLocaleString()} tokens</span>
+                    <span>{s.avg_time_ms.toFixed(0)}ms</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Execution Timeline Section */}
+      {activeSection === 'timeline' && (
+        <div className="execution-timeline-section">
+          <h3>Execution Timeline</h3>
+          <p className="section-description">Recent execution traces in chronological order.</p>
+          {timelineEntries.length === 0 ? (
+            <p className="empty-state">No timeline entries. Run some executions first.</p>
+          ) : (
+            <div className="timeline-view">
+              {timelineEntries.map((entry) => (
+                <div key={entry.id} className="timeline-item">
+                  <div
+                    className="timeline-dot"
+                    style={{ background: entry.success ? 'var(--green)' : 'var(--red)' }}
+                  />
+                  <div className="timeline-content">
+                    <div className="timeline-header">
+                      <span className="timeline-title">{entry.context}</span>
+                      <span className="timeline-time">{new Date(entry.timestamp).toLocaleString()}</span>
+                    </div>
+                    <div className="timeline-desc">{entry.prompt}</div>
+                    <div className="timeline-meta">
+                      <span className="timeline-badge event">{entry.steps} steps</span>
+                      <span className="timeline-badge tool">{(entry.confidence * 100).toFixed(0)}% confidence</span>
+                      <span className="timeline-badge task">{entry.total_time_ms.toFixed(0)}ms</span>
+                      {entry.tools_used.map((tool) => (
+                        <span key={tool} className="timeline-badge tool">{tool}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
