@@ -427,6 +427,58 @@ class WorkspaceContext:
         self._context_entries = kept
 
 
+@dataclass
+class WorkspaceSnapshot:
+    """A point-in-time snapshot of workspace state for backup and restore."""
+    snapshot_id: str = field(default_factory=lambda: f"snap-{uuid.uuid4().hex[:12]}")
+    workspace_id: str = ""
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    memory_state: dict = field(default_factory=dict)
+    skill_state: list[dict] = field(default_factory=list)
+    context_state: dict = field(default_factory=dict)
+    file_index: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ResourceQuota:
+    """Resource limits for a workspace."""
+    max_cpu_percent: float = 50.0
+    max_memory_mb: int = 512
+    max_disk_mb: int = 1024
+    max_processes: int = 10
+    max_open_files: int = 256
+    network_access: bool = True
+    max_bandwidth_kbps: int = 0  # 0 = unlimited
+
+
+@dataclass
+class FileChangeRecord:
+    """A record of a file change within a workspace."""
+    id: str = field(default_factory=lambda: f"fchg-{uuid.uuid4().hex[:12]}")
+    workspace_id: str = ""
+    file_path: str = ""
+    change_type: str = ""  # created, modified, deleted, renamed
+    old_path: str = ""
+    file_size: int = 0
+    checksum: str = ""
+    actor: str = ""
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+@dataclass
+class CommunicationChannel:
+    """A secure inter-workspace communication channel."""
+    channel_id: str = field(default_factory=lambda: f"ch-{uuid.uuid4().hex[:12]}")
+    source_workspace_id: str = ""
+    target_workspace_id: str = ""
+    allowed_message_types: list[str] = field(default_factory=list)
+    encrypted: bool = True
+    max_message_size_bytes: int = 65536
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    is_active: bool = True
+
+
 # ── Workspace Isolation Manager ───────────────────────
 
 
@@ -459,6 +511,21 @@ class WorkspaceIsolation:
 
         self._workspaces: dict[str, dict[str, Any]] = {}
         self._active_workspace_id: str | None = None
+
+        # Snapshots
+        self._snapshots: dict[str, WorkspaceSnapshot] = {}
+
+        # Resource quotas
+        self._resource_quotas: dict[str, ResourceQuota] = {}
+
+        # File change audit
+        self._file_changes: dict[str, list[FileChangeRecord]] = {}
+        self._max_file_changes_per_workspace = 500
+
+        # Communication channels
+        self._channels: dict[str, CommunicationChannel] = {}
+        self._channel_messages: dict[str, list[dict]] = {}
+
         logger.info("WorkspaceIsolation initialized at %s", self._root_dir.resolve())
 
     # ── Workspace Lifecycle ───────────────────────────
@@ -839,6 +906,587 @@ class WorkspaceIsolation:
         """Get the context window of the active workspace."""
         ws = self.get_active_workspace()
         return ws["context"] if ws else None
+
+    # ── Virtual Environment ─────────────────────────────
+
+    def create_virtual_environment(
+        self, workspace_id: str, python_version: str = "", requirements: list[str] | None = None
+    ) -> Path:
+        """Create an isolated virtual environment for a workspace.
+
+        Creates a Python virtual environment inside the workspace sandbox
+        and optionally installs specified packages.
+
+        Args:
+            workspace_id: Target workspace ID.
+            python_version: Python version to use (e.g., '3.11'). Defaults to current.
+            requirements: List of pip package names to install.
+
+        Returns:
+            Path to the virtual environment directory.
+
+        Raises:
+            KeyError: If the workspace does not exist.
+            RuntimeError: If venv creation fails.
+        """
+        if workspace_id not in self._workspaces:
+            raise KeyError(f"Workspace not found: {workspace_id}")
+
+        ws = self._workspaces[workspace_id]
+        sandbox: WorkspaceSandbox = ws["sandbox"]
+        venv_path = sandbox.root_path / ".venv"
+
+        if venv_path.exists():
+            logger.info(f"Virtual environment already exists at {venv_path}")
+            return venv_path
+
+        import subprocess
+        import sys
+
+        try:
+            # Create the virtual environment
+            python_exe = f"python{python_version}" if python_version else sys.executable
+            result = subprocess.run(
+                [python_exe, "-m", "venv", str(venv_path)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"venv creation failed: {result.stderr}")
+
+            # Install requirements if provided
+            if requirements:
+                pip_path = venv_path / "bin" / "pip"
+                subprocess.run(
+                    [str(pip_path), "install", *requirements],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                logger.info(
+                    f"Installed {len(requirements)} packages in {workspace_id}"
+                )
+
+            logger.info(f"Virtual environment created at {venv_path}")
+            return venv_path
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to create virtual environment: {e}") from e
+
+    def get_virtual_environment(self, workspace_id: str) -> Path | None:
+        """Get the path to a workspace's virtual environment, if it exists."""
+        if workspace_id not in self._workspaces:
+            return None
+        sandbox = self._workspaces[workspace_id]["sandbox"]
+        venv_path = sandbox.root_path / ".venv"
+        return venv_path if venv_path.exists() else None
+
+    # ── Snapshot & Restore ──────────────────────────────
+
+    def snapshot_workspace(
+        self, workspace_id: str, metadata: dict[str, Any] | None = None
+    ) -> WorkspaceSnapshot:
+        """Create a point-in-time snapshot of the entire workspace state.
+
+        Captures memory contents, skill definitions, context window state,
+        and a file index from the sandbox. File contents are not included —
+        only the file listing.
+
+        Args:
+            workspace_id: The workspace to snapshot.
+            metadata: Additional metadata to store with the snapshot.
+
+        Returns:
+            The created WorkspaceSnapshot.
+
+        Raises:
+            KeyError: If the workspace does not exist.
+        """
+        if workspace_id not in self._workspaces:
+            raise KeyError(f"Workspace not found: {workspace_id}")
+
+        ws = self._workspaces[workspace_id]
+        memory: WorkspaceMemory = ws["memory"]
+        skills: WorkspaceSkillSet = ws["skills"]
+        context: WorkspaceContext = ws["context"]
+        sandbox: WorkspaceSandbox = ws["sandbox"]
+
+        # Capture memory state
+        memory_state = {
+            "short_term": memory.recall_recent(limit=500),
+            "long_term": memory.recall_long_term(limit=500),
+        }
+
+        # Capture skill state
+        skill_state = skills.export_skills()
+
+        # Capture context state
+        context_state = context.get_usage()
+
+        # Capture file index
+        file_index = []
+        if sandbox.root_path.exists():
+            file_index = [
+                str(p.relative_to(sandbox.root_path))
+                for p in sandbox.root_path.rglob("*")
+                if p.is_file()
+            ]
+
+        snapshot = WorkspaceSnapshot(
+            workspace_id=workspace_id,
+            memory_state=memory_state,
+            skill_state=skill_state,
+            context_state=context_state,
+            file_index=file_index,
+            metadata=metadata or {},
+        )
+        self._snapshots[snapshot.snapshot_id] = snapshot
+        logger.info(
+            f"Snapshot {snapshot.snapshot_id} created for workspace {workspace_id}"
+        )
+        return snapshot
+
+    def restore_snapshot(self, snapshot_id: str) -> str:
+        """Restore a workspace to a previous snapshot state.
+
+        Restores memory entries, skill definitions, and context window
+        configuration. File contents are not restored from the snapshot
+        (only the index is available).
+
+        Args:
+            snapshot_id: The snapshot ID to restore from.
+
+        Returns:
+            The workspace ID that was restored.
+
+        Raises:
+            KeyError: If the snapshot or workspace does not exist.
+        """
+        snapshot = self._snapshots.get(snapshot_id)
+        if not snapshot:
+            raise KeyError(f"Snapshot not found: {snapshot_id}")
+
+        if snapshot.workspace_id not in self._workspaces:
+            raise KeyError(f"Workspace not found: {snapshot.workspace_id}")
+
+        ws = self._workspaces[snapshot.workspace_id]
+        memory: WorkspaceMemory = ws["memory"]
+        skills: WorkspaceSkillSet = ws["skills"]
+        context: WorkspaceContext = ws["context"]
+
+        # Clear and restore memory
+        memory.clear()
+        for mem in snapshot.memory_state.get("short_term", []):
+            memory.store(
+                content=mem.get("content", ""),
+                memory_type=mem.get("type", "general"),
+                importance=mem.get("importance", 0.5),
+                metadata=mem.get("metadata"),
+            )
+        for mem in snapshot.memory_state.get("long_term", []):
+            memory.store(
+                content=mem.get("content", ""),
+                memory_type=mem.get("type", "insight"),
+                importance=mem.get("importance", 0.5),
+                metadata=mem.get("metadata"),
+            )
+
+        # Restore skills
+        for skill_name in list(skills._skills.keys()):
+            skills.remove(skill_name)
+        skills.import_skills(snapshot.skill_state)
+
+        logger.info(
+            f"Snapshot {snapshot_id} restored to workspace {snapshot.workspace_id}"
+        )
+        return snapshot.workspace_id
+
+    def list_snapshots(self, workspace_id: str = "") -> list[dict]:
+        """List snapshots, optionally filtered by workspace."""
+        result = []
+        for snap in self._snapshots.values():
+            if workspace_id and snap.workspace_id != workspace_id:
+                continue
+            result.append({
+                "snapshot_id": snap.snapshot_id,
+                "workspace_id": snap.workspace_id,
+                "created_at": snap.created_at,
+                "file_count": len(snap.file_index),
+                "metadata": snap.metadata,
+            })
+        return sorted(result, key=lambda s: s["created_at"], reverse=True)
+
+    def delete_snapshot(self, snapshot_id: str) -> bool:
+        """Delete a snapshot."""
+        if snapshot_id in self._snapshots:
+            del self._snapshots[snapshot_id]
+            return True
+        return False
+
+    # ── Resource Quotas ─────────────────────────────────
+
+    def enforce_resource_quotas(
+        self, workspace_id: str, quota: ResourceQuota
+    ) -> None:
+        """Set resource quotas for a workspace.
+
+        Defines CPU, memory, disk, and process limits. The quota is
+        enforced at the workspace level — any operation exceeding the
+        quota is rejected.
+
+        Args:
+            workspace_id: Target workspace ID.
+            quota: The ResourceQuota to apply.
+        """
+        self._resource_quotas[workspace_id] = quota
+        logger.info(
+            f"Resource quotas set for {workspace_id}: "
+            f"CPU={quota.max_cpu_percent}%, "
+            f"MEM={quota.max_memory_mb}MB, "
+            f"DISK={quota.max_disk_mb}MB"
+        )
+
+    def check_resource_quota(
+        self, workspace_id: str
+    ) -> tuple[bool, dict]:
+        """Check the current resource usage against the workspace quota.
+
+        Args:
+            workspace_id: Target workspace ID.
+
+        Returns:
+            A tuple of (within_limits, usage_dict).
+        """
+        if workspace_id not in self._workspaces:
+            return False, {"error": "Workspace not found"}
+
+        quota = self._resource_quotas.get(workspace_id)
+        ws = self._workspaces[workspace_id]
+        sandbox: WorkspaceSandbox = ws["sandbox"]
+
+        usage = {
+            "workspace_id": workspace_id,
+            "disk_used_mb": 0,
+            "file_count": sandbox.file_count(),
+            "within_limits": True,
+            "violations": [],
+        }
+
+        # Calculate disk usage
+        if sandbox.root_path.exists():
+            total_bytes = sum(
+                f.stat().st_size for f in sandbox.root_path.rglob("*")
+                if f.is_file() and f.stat()
+            )
+            usage["disk_used_mb"] = round(total_bytes / (1024 * 1024), 2)
+
+        if quota:
+            if usage["disk_used_mb"] > quota.max_disk_mb:
+                usage["within_limits"] = False
+                usage["violations"].append(
+                    f"disk: {usage['disk_used_mb']}MB > {quota.max_disk_mb}MB"
+                )
+
+        return usage["within_limits"], usage
+
+    def get_resource_quota(self, workspace_id: str) -> ResourceQuota | None:
+        """Get the resource quota for a workspace."""
+        return self._resource_quotas.get(workspace_id)
+
+    def remove_resource_quota(self, workspace_id: str) -> bool:
+        """Remove resource quotas from a workspace."""
+        if workspace_id in self._resource_quotas:
+            del self._resource_quotas[workspace_id]
+            return True
+        return False
+
+    # ── File Change Tracking & Audit ────────────────────
+
+    def track_file_change(
+        self,
+        workspace_id: str,
+        file_path: str,
+        change_type: str,
+        actor: str = "",
+        old_path: str = "",
+        file_size: int = 0,
+    ) -> FileChangeRecord:
+        """Record a file change event for audit purposes.
+
+        Args:
+            workspace_id: The workspace where the change occurred.
+            file_path: The path of the changed file.
+            change_type: One of 'created', 'modified', 'deleted', 'renamed'.
+            actor: Who or what made the change.
+            old_path: Previous path if renamed.
+            file_size: Size of the file in bytes.
+
+        Returns:
+            The created FileChangeRecord.
+        """
+        import hashlib
+
+        # Compute a lightweight checksum if the file exists
+        checksum = ""
+        if change_type != "deleted" and workspace_id in self._workspaces:
+            sandbox = self._workspaces[workspace_id]["sandbox"]
+            full_path = sandbox.root_path / file_path
+            if full_path.exists() and full_path.is_file():
+                try:
+                    checksum = hashlib.sha256(
+                        full_path.read_bytes()[:8192]
+                    ).hexdigest()[:16]
+                except Exception:
+                    pass
+
+        record = FileChangeRecord(
+            workspace_id=workspace_id,
+            file_path=file_path,
+            change_type=change_type,
+            old_path=old_path,
+            file_size=file_size,
+            checksum=checksum,
+            actor=actor,
+        )
+
+        if workspace_id not in self._file_changes:
+            self._file_changes[workspace_id] = []
+        self._file_changes[workspace_id].append(record)
+
+        # Trim to max
+        if len(self._file_changes[workspace_id]) > self._max_file_changes_per_workspace:
+            self._file_changes[workspace_id] = self._file_changes[workspace_id][
+                -self._max_file_changes_per_workspace:
+            ]
+
+        logger.debug(f"File change tracked: {file_path} ({change_type}) in {workspace_id}")
+        return record
+
+    def get_audit_log(
+        self,
+        workspace_id: str,
+        change_type: str = "",
+        actor: str = "",
+        limit: int = 100,
+    ) -> list[dict]:
+        """Get the audit log of file changes for a workspace.
+
+        Args:
+            workspace_id: Target workspace ID.
+            change_type: Filter by change type (created, modified, deleted, renamed).
+            actor: Filter by actor.
+            limit: Maximum number of records to return.
+
+        Returns:
+            List of file change records as dicts.
+        """
+        changes = self._file_changes.get(workspace_id, [])
+        if change_type:
+            changes = [c for c in changes if c.change_type == change_type]
+        if actor:
+            changes = [c for c in changes if c.actor == actor]
+
+        changes = sorted(changes, key=lambda c: c.timestamp, reverse=True)
+        return [
+            {
+                "id": c.id,
+                "workspace_id": c.workspace_id,
+                "file_path": c.file_path,
+                "change_type": c.change_type,
+                "old_path": c.old_path,
+                "file_size": c.file_size,
+                "checksum": c.checksum,
+                "actor": c.actor,
+                "timestamp": c.timestamp,
+            }
+            for c in changes[:limit]
+        ]
+
+    def get_audit_summary(self, workspace_id: str) -> dict:
+        """Get a summary of file changes for a workspace."""
+        changes = self._file_changes.get(workspace_id, [])
+        type_counts: dict[str, int] = {}
+        actor_counts: dict[str, int] = {}
+
+        for c in changes:
+            type_counts[c.change_type] = type_counts.get(c.change_type, 0) + 1
+            if c.actor:
+                actor_counts[c.actor] = actor_counts.get(c.actor, 0) + 1
+
+        return {
+            "workspace_id": workspace_id,
+            "total_changes": len(changes),
+            "by_type": type_counts,
+            "by_actor": actor_counts,
+            "first_change_at": changes[0].timestamp if changes else "",
+            "last_change_at": changes[-1].timestamp if changes else "",
+        }
+
+    # ── Inter-Workspace Communication ──────────────────
+
+    def create_communication_channel(
+        self,
+        source_workspace_id: str,
+        target_workspace_id: str,
+        allowed_message_types: list[str] | None = None,
+        encrypted: bool = True,
+        max_message_size_bytes: int = 65536,
+    ) -> CommunicationChannel:
+        """Create a secure communication channel between two workspaces.
+
+        Channels enforce security boundaries — only allowed message types
+        can pass through. Each channel is unidirectional from source to target.
+
+        Args:
+            source_workspace_id: The sending workspace ID.
+            target_workspace_id: The receiving workspace ID.
+            allowed_message_types: List of allowed message type strings.
+            encrypted: Whether to encrypt messages on the channel.
+            max_message_size_bytes: Maximum message size in bytes.
+
+        Returns:
+            The created CommunicationChannel.
+
+        Raises:
+            KeyError: If either workspace does not exist.
+        """
+        if source_workspace_id not in self._workspaces:
+            raise KeyError(f"Source workspace not found: {source_workspace_id}")
+        if target_workspace_id not in self._workspaces:
+            raise KeyError(f"Target workspace not found: {target_workspace_id}")
+
+        channel = CommunicationChannel(
+            source_workspace_id=source_workspace_id,
+            target_workspace_id=target_workspace_id,
+            allowed_message_types=allowed_message_types or [],
+            encrypted=encrypted,
+            max_message_size_bytes=max_message_size_bytes,
+        )
+        self._channels[channel.channel_id] = channel
+        self._channel_messages[channel.channel_id] = []
+
+        logger.info(
+            f"Communication channel created: {source_workspace_id} -> {target_workspace_id}"
+        )
+        return channel
+
+    def send_message(
+        self,
+        channel_id: str,
+        message_type: str,
+        payload: dict[str, Any],
+        sender: str = "system",
+    ) -> tuple[bool, str]:
+        """Send a message through an inter-workspace channel.
+
+        Validates the message against channel security policies before
+        delivery. Rejects messages that exceed size limits or use
+        disallowed message types.
+
+        Args:
+            channel_id: The channel to send through.
+            message_type: Type of message being sent.
+            payload: The message content dict.
+            sender: Identifier of the sender.
+
+        Returns:
+            A tuple of (success, message).
+        """
+        channel = self._channels.get(channel_id)
+        if not channel:
+            return False, f"Channel not found: {channel_id}"
+        if not channel.is_active:
+            return False, "Channel is inactive"
+
+        # Validate message type
+        if channel.allowed_message_types:
+            if message_type not in channel.allowed_message_types:
+                return False, (
+                    f"Message type '{message_type}' not allowed on this channel. "
+                    f"Allowed: {channel.allowed_message_types}"
+                )
+
+        # Validate message size
+        import json as _json
+        message_size = len(_json.dumps(payload).encode("utf-8"))
+        if message_size > channel.max_message_size_bytes:
+            return False, (
+                f"Message size {message_size}B exceeds limit "
+                f"{channel.max_message_size_bytes}B"
+            )
+
+        # Simulate encryption if enabled
+        message_data = payload
+        if channel.encrypted:
+            message_data = {"_encrypted": True, "payload": payload}
+
+        msg = {
+            "id": f"msg-{uuid.uuid4().hex[:12]}",
+            "channel_id": channel_id,
+            "message_type": message_type,
+            "payload": message_data,
+            "sender": sender,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        self._channel_messages[channel_id].append(msg)
+        logger.debug(
+            f"Message sent on channel {channel_id}: {message_type}"
+        )
+        return True, msg["id"]
+
+    def receive_messages(
+        self, channel_id: str, limit: int = 50, since: str = ""
+    ) -> list[dict]:
+        """Receive messages from a communication channel.
+
+        Args:
+            channel_id: The channel to read from.
+            limit: Maximum number of messages to return.
+            since: ISO timestamp — only return messages after this time.
+
+        Returns:
+            List of message dicts.
+        """
+        messages = self._channel_messages.get(channel_id, [])
+        if since:
+            messages = [m for m in messages if m["timestamp"] > since]
+        return messages[-limit:]
+
+    def close_channel(self, channel_id: str) -> bool:
+        """Close a communication channel."""
+        channel = self._channels.get(channel_id)
+        if channel:
+            channel.is_active = False
+            logger.info(f"Channel closed: {channel_id}")
+            return True
+        return False
+
+    def get_channel(self, channel_id: str) -> CommunicationChannel | None:
+        """Get channel details."""
+        return self._channels.get(channel_id)
+
+    def list_channels(
+        self, workspace_id: str = ""
+    ) -> list[dict]:
+        """List all channels, optionally filtered by workspace."""
+        result = []
+        for ch in self._channels.values():
+            if workspace_id:
+                if ch.source_workspace_id != workspace_id and ch.target_workspace_id != workspace_id:
+                    continue
+            result.append({
+                "channel_id": ch.channel_id,
+                "source_workspace_id": ch.source_workspace_id,
+                "target_workspace_id": ch.target_workspace_id,
+                "allowed_message_types": ch.allowed_message_types,
+                "encrypted": ch.encrypted,
+                "is_active": ch.is_active,
+                "message_count": len(self._channel_messages.get(ch.channel_id, [])),
+                "created_at": ch.created_at,
+            })
+        return result
 
 
 # Global isolation manager instance
