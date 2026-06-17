@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import type { Agent, Message as MsgType } from '../types';
+import type { Agent, Message as MsgType, MessageBranch, QuickReply } from '../types';
 import { MessageBubble } from './MessageBubble';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { api } from '../api/client';
@@ -38,6 +38,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const streamingRef = useRef<HTMLDivElement>(null);
+
+  // Message branching state
+  const [messageBranches, setMessageBranches] = useState<MessageBranch[]>([]);
+  const [showBranches, setShowBranches] = useState(false);
+  const [branchMessageId, setBranchMessageId] = useState<string | null>(null);
+
+  // Quick reply state
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
 
   const { connect, send, disconnect, streaming: wsStreaming } = useWebSocket(agent.id);
 
@@ -350,6 +360,37 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     inputRef.current?.focus();
   };
 
+  const handleLoadBranches = async (messageId: string) => {
+    try {
+      const result = await api.chatBranches(messageId);
+      setMessageBranches(result.branches);
+      setBranchMessageId(messageId);
+      setShowBranches(true);
+    } catch {
+      // branches are optional
+    }
+  };
+
+  const handleSwitchBranch = (branchId: string) => {
+    const branch = messageBranches.find((b) => b.branch_id === branchId);
+    if (branch && branch.messages.length > 0) {
+      const lastMsg = branch.messages[branch.messages.length - 1];
+      setInput(lastMsg.content);
+      inputRef.current?.focus();
+    }
+    setShowBranches(false);
+  };
+
+  const handleLoadQuickReplies = async () => {
+    try {
+      const result = await api.chatQuickReplies(agent.id);
+      setQuickReplies(result.replies);
+      setShowQuickReplies(true);
+    } catch {
+      // quick replies are optional
+    }
+  };
+
   const suggestionPrompts: Record<string, string[]> = {
     strategy: ['Help me plan a product launch', 'Analyze the risks of this approach', 'Create a decision framework'],
     engineering: ['Review this code for improvements', 'Help me debug an issue', 'Explain how async works'],
@@ -381,6 +422,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         </div>
         <div className="chat-header-actions">
+          <button
+            className="chat-mode-btn"
+            onClick={handleLoadQuickReplies}
+            title="Quick replies"
+          >
+            Quick
+          </button>
           <button
             className={`chat-mode-btn ${useStreaming ? 'active' : ''}`}
             onClick={() => setUseStreaming(!useStreaming)}
@@ -482,7 +530,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             </div>
             <div className="msg-bubble bubble-assistant">
               <div className="msg-sender">{agent.name}</div>
-              <div className="msg-content streaming">{streamingContent}</div>
+              <div className="msg-content streaming" ref={streamingRef}>
+                {streamingContent}
+                <span className="cursor-blink">|</span>
+              </div>
             </div>
           </div>
         )}
@@ -510,6 +561,58 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Message Branches */}
+      {showBranches && messageBranches.length > 0 && (
+        <div className="message-branches">
+          <div className="branch-header">
+            <span className="branch-label">Alternative responses</span>
+            <button className="branch-close" onClick={() => setShowBranches(false)}>×</button>
+          </div>
+          <div className="branch-options">
+            {messageBranches.map((branch) => (
+              <div
+                key={branch.branch_id}
+                className="branch-option"
+                onClick={() => handleSwitchBranch(branch.branch_id)}
+              >
+                <div className="branch-preview">
+                  {branch.messages.length > 0 ? branch.messages[branch.messages.length - 1].content.slice(0, 100) + '...' : 'Empty branch'}
+                </div>
+                <div className="branch-meta">
+                  <span className="branch-time">{new Date(branch.created_at).toLocaleTimeString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quick Replies */}
+      {showQuickReplies && quickReplies.length > 0 && (
+        <div className="quick-replies">
+          <div className="quick-replies-header">
+            <span className="quick-replies-label">Quick replies</span>
+            <button className="quick-replies-close" onClick={() => setShowQuickReplies(false)}>×</button>
+          </div>
+          <div className="quick-replies-options">
+            {quickReplies.map((qr) => (
+              <button
+                key={qr.id}
+                className="quick-reply-btn"
+                onClick={() => {
+                  setInput(qr.text);
+                  setShowQuickReplies(false);
+                  inputRef.current?.focus();
+                }}
+              >
+                <span className="qr-category">{qr.category}</span>
+                <span className="qr-text">{qr.text}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Input area */}
       <div className="chat-input-area">
