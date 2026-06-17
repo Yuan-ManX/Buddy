@@ -8450,7 +8450,7 @@ async def get_proactive_signals(
 async def analyze_with_core(prompt: str = Query(..., min_length=1), agent_id: str = Query("default", min_length=1)):
     """Analyze a task using the agent core's strategy selection."""
     core = _get_or_create_core(agent_id)
-    result = core.select_strategy(prompt)
+    result = await core.select_strategy(prompt)
     tools = core.score_tools(prompt, [t.name for t in tool_registry.list_tools()])
     return {
         "fingerprint": result["fingerprint"],
@@ -8933,5 +8933,105 @@ async def get_conversation_timeline(days_back: int = Query(30, ge=1, le=365)):
 async def get_conversation_search_stats():
     """Get conversation search engine statistics."""
     return conversation_search.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# MCP Bridge API
+# ═══════════════════════════════════════════════════════════
+
+from agent.mcp_bridge import mcp_bridge, MCPServerConfig, MCPTransport
+
+
+@router.get("/mcp-bridge/stats")
+async def get_mcp_bridge_stats():
+    """Get MCP bridge statistics."""
+    return mcp_bridge.get_stats()
+
+
+@router.get("/mcp-bridge/tools")
+async def list_mcp_tools(server_name: str = Query("", max_length=100)):
+    """List MCP tools, optionally filtered by server."""
+    tools = mcp_bridge.get_tools(server_name=server_name or None)
+    return {
+        "tools": [
+            {
+                "name": t.name,
+                "description": t.description,
+                "server_name": t.server_name,
+                "input_schema": t.input_schema,
+            }
+            for t in tools
+        ]
+    }
+
+
+@router.post("/mcp-bridge/servers")
+async def register_mcp_server(config: MCPServerConfig):
+    """Register a new MCP server."""
+    server_name = mcp_bridge.register_server(config)
+    return {"server_name": server_name, "registered": True}
+
+
+@router.post("/mcp-bridge/servers/{server_name}/connect")
+async def connect_mcp_server(server_name: str):
+    """Connect to a registered MCP server."""
+    success = await mcp_bridge.connect_server(server_name)
+    return {"server_name": server_name, "connected": success}
+
+
+@router.post("/mcp-bridge/servers/{server_name}/disconnect")
+async def disconnect_mcp_server(server_name: str):
+    """Disconnect from an MCP server."""
+    await mcp_bridge.disconnect_server(server_name)
+    return {"server_name": server_name, "disconnected": True}
+
+
+# ═══════════════════════════════════════════════════════════
+# Learning Orchestrator API
+# ═══════════════════════════════════════════════════════════
+
+from agent.learning_orchestrator import learning_orchestrator
+
+
+@router.get("/learning/stats")
+async def get_learning_stats():
+    """Get learning orchestrator statistics."""
+    return learning_orchestrator.get_stats()
+
+
+@router.get("/learning/insights")
+async def get_learning_insights(
+    category: str = Query("", max_length=50),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """Get learning insights with optional category filter."""
+    insights = learning_orchestrator.get_insights(
+        category=category or None,
+        limit=limit,
+    )
+    return {"insights": insights}
+
+
+@router.get("/learning/strategies")
+async def get_learning_strategies(limit: int = Query(10, ge=1, le=50)):
+    """Get top-performing strategy profiles."""
+    strategies = learning_orchestrator.get_best_strategies(limit)
+    return {"strategies": strategies}
+
+
+@router.post("/learning/consolidate")
+async def trigger_learning_consolidation():
+    """Trigger a learning consolidation cycle."""
+    result = await learning_orchestrator.consolidate()
+    return result
+
+
+@router.get("/learning/best-strategy")
+async def get_best_strategy(prompt: str = Query(min_length=1, max_length=500)):
+    """Get the best known strategy for a given prompt."""
+    strategy = learning_orchestrator.get_best_strategy(prompt)
+    if strategy:
+        return {"found": True, "strategy": strategy}
+    return {"found": False, "message": "No strategy profile found for this task pattern"}
 
 
