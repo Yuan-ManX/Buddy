@@ -39,6 +39,7 @@ from agent.reactive_loop import ReactiveLoop, LoopMode
 from agent.proactive import ProactiveDiscoveryEngine
 from agent.metacognition import MetaCognition, StrategyDecision, ExecutionMode
 from agent.agent_evolution import AgentEvolution, ExperienceType, ExperienceOutcome
+from agent.learning_orchestrator import learning_orchestrator
 
 logger = logging.getLogger("buddy.engine")
 
@@ -562,6 +563,22 @@ class AgentEngine:
             tokens_consumed=self._total_tokens_used,
             latency_ms=0.0,
         )
+
+        # ── Feed learning orchestrator for strategy optimization ──
+        try:
+            learning_orchestrator.track_execution(
+                prompt=user_message,
+                success=True,
+                strategy={
+                    "reasoning_style": strategy.reasoning_style,
+                    "model": strategy.model,
+                    "execution_mode": strategy.execution_mode.value,
+                },
+                tokens_used=self._total_tokens_used,
+                tools_used=[t.name for t in self._last_tools_used] if hasattr(self, '_last_tools_used') else [],
+            )
+        except Exception:
+            pass  # Non-critical — learning is best-effort
 
         # Run evolution cycle if enough experiences accumulated
         if len(self.evolution._experiences) >= self.evolution._analysis_threshold:
