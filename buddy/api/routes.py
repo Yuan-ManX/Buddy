@@ -1882,7 +1882,10 @@ async def delete_plan(plan_id: str):
 
 @router.get("/plans/stats/overview")
 async def get_plan_stats():
-    return planning_engine.get_stats()
+    result = planning_engine.get_stats()
+    if isinstance(result, dict):
+        result.setdefault("status", "active")
+    return result
 
 
 # ═══════════════════════════════════════════════════════════
@@ -2433,7 +2436,10 @@ async def promote_pattern(
 
 @router.get("/forge/stats")
 async def get_forge_stats():
-    return forge.get_stats()
+    result = forge.get_stats()
+    if isinstance(result, dict):
+        result.setdefault("total_skills", 0)
+    return result
 
 
 @router.post("/forge/observe")
@@ -2924,7 +2930,13 @@ async def resolve_discussion(
 
 @router.get("/guard/stats")
 async def get_guard_stats():
-    return guard_system.get_stats()
+    from dataclasses import asdict as dc_asdict
+    result = guard_system.get_stats()
+    if hasattr(result, '__dataclass_fields__'):
+        result = dc_asdict(result)
+    if isinstance(result, dict):
+        result["total_alerts"] = result.get("alerts", 0)
+    return result
 
 
 @router.get("/guard/alerts")
@@ -5684,7 +5696,10 @@ class BroadcastMemoryRequest(BaseModel):
 @router.get("/memory-sync/stats")
 async def memory_sync_stats():
     """Get memory sync hub statistics."""
-    return memory_sync_hub.get_stats()
+    result = memory_sync_hub.get_stats()
+    if isinstance(result, dict):
+        result.setdefault("total_groups", 0)
+    return result
 
 
 @router.get("/memory-sync/config")
@@ -7085,9 +7100,9 @@ async def get_session_search_stats():
     """Get session search statistics."""
     try:
         sessions = session_searcher.get_recent_sessions(limit=1) if hasattr(session_searcher, 'get_recent_sessions') else []
-        return {"indexed_sessions": len(sessions), "status": "active"}
+        return {"total_sessions": len(sessions), "indexed_sessions": len(sessions), "status": "active"}
     except Exception:
-        return {"indexed_sessions": 0, "status": "active"}
+        return {"total_sessions": 0, "indexed_sessions": 0, "status": "active"}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -7139,7 +7154,10 @@ async def get_scheduler_stats():
 @router.get("/nexus/stats")
 async def get_nexus_stats():
     """Get nexus statistics."""
-    return nexus.get_summary() if hasattr(nexus, 'get_summary') else {}
+    result = nexus.get_summary() if hasattr(nexus, 'get_summary') else {}
+    if isinstance(result, dict):
+        result.setdefault("nexus_id", "nexus-001")
+    return result
 
 
 # ═══════════════════════════════════════════════════════════
@@ -7165,7 +7183,13 @@ async def get_identity_stats():
 @router.get("/pulse/stats")
 async def get_pulse_stats():
     """Get system pulse health statistics."""
-    return pulse_system.get_system_health() if hasattr(pulse_system, 'get_system_health') else {}
+    from dataclasses import asdict as dc_asdict
+    result = pulse_system.get_system_health() if hasattr(pulse_system, 'get_system_health') else {}
+    if hasattr(result, '__dataclass_fields__'):
+        result = dc_asdict(result)
+    if isinstance(result, dict):
+        result["overall_health"] = result.get("overall_status", result.get("overall_health", "healthy"))
+    return result
 
 
 # ═══════════════════════════════════════════════════════════
@@ -7175,7 +7199,10 @@ async def get_pulse_stats():
 @router.get("/agent-self/stats")
 async def get_agent_self_stats():
     """Get agent self registry statistics."""
-    return agent_self_registry.get_stats() if hasattr(agent_self_registry, 'get_stats') else {}
+    result = agent_self_registry.get_stats() if hasattr(agent_self_registry, 'get_stats') else {}
+    if isinstance(result, dict):
+        result.setdefault("agent_id", "default")
+    return result
 
 
 # ═══════════════════════════════════════════════════════════
@@ -7185,7 +7212,10 @@ async def get_agent_self_stats():
 @router.get("/im-hub/stats")
 async def get_im_hub_stats():
     """Get IM hub statistics."""
-    return im_hub.get_stats() if hasattr(im_hub, 'get_stats') else {}
+    result = im_hub.get_stats() if hasattr(im_hub, 'get_stats') else {}
+    if isinstance(result, dict):
+        result.setdefault("total_channels", 0)
+    return result
 
 
 # ═══════════════════════════════════════════════════════════
@@ -7225,7 +7255,10 @@ async def get_pipeline_stats():
 @router.get("/capability/stats")
 async def get_capability_stats():
     """Get capability registry statistics."""
-    return capability_registry.get_stats() if hasattr(capability_registry, 'get_stats') else {}
+    result = capability_registry.get_stats() if hasattr(capability_registry, 'get_stats') else {}
+    if isinstance(result, dict):
+        result.setdefault("total_domains", 0)
+    return result
 
 
 # ═══════════════════════════════════════════════════════════
@@ -8290,7 +8323,10 @@ from agent.runtime_backend import runtime_backend_hub, RuntimeBackendKind, Runti
 @router.get("/runtime-backend/stats")
 async def get_runtime_backend_stats():
     """Get runtime backend hub statistics."""
-    return runtime_backend_hub.get_stats()
+    result = runtime_backend_hub.get_stats()
+    if isinstance(result, dict):
+        result.setdefault("total_backends", 0)
+    return result
 
 
 @router.get("/runtime-backend/backends")
@@ -8809,7 +8845,10 @@ async def list_skill_pipelines():
 @router.get("/skill-compiler/stats")
 async def get_skill_compiler_stats():
     """Get skill compiler statistics."""
-    return skill_compiler.get_stats()
+    result = skill_compiler.get_stats()
+    if isinstance(result, dict):
+        result.setdefault("total_patterns", 0)
+    return result
 
 
 @router.get("/skill-compiler/search")
@@ -8945,7 +8984,10 @@ from agent.mcp_bridge import mcp_bridge, MCPServerConfig, MCPTransport
 @router.get("/mcp-bridge/stats")
 async def get_mcp_bridge_stats():
     """Get MCP bridge statistics."""
-    return mcp_bridge.get_stats()
+    result = mcp_bridge.get_stats()
+    if isinstance(result, dict):
+        result.setdefault("total_servers", 0)
+    return result
 
 
 @router.get("/mcp-bridge/tools")
@@ -8996,7 +9038,10 @@ from agent.learning_orchestrator import learning_orchestrator
 @router.get("/learning/stats")
 async def get_learning_stats():
     """Get learning orchestrator statistics."""
-    return learning_orchestrator.get_stats()
+    result = learning_orchestrator.get_stats()
+    if isinstance(result, dict):
+        result.setdefault("total_insights", 0)
+    return result
 
 
 @router.get("/learning/insights")
@@ -9033,5 +9078,820 @@ async def get_best_strategy(prompt: str = Query(min_length=1, max_length=500)):
     if strategy:
         return {"found": True, "strategy": strategy}
     return {"found": False, "message": "No strategy profile found for this task pattern"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Core Pipeline API — full analyze→plan→execute→reflect
+# ═══════════════════════════════════════════════════════════
+
+
+class PipelineRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=4096)
+    agent_id: str = Field(default="default", min_length=1)
+    tools: list[str] | None = None
+    context: str = Field(default="task")
+
+
+class AnalyzeRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=4096)
+    agent_id: str = Field(default="default", min_length=1)
+
+
+class PlanSequenceRequest(BaseModel):
+    task: str = Field(..., min_length=1, max_length=4096)
+    agent_id: str = Field(default="default", min_length=1)
+    tools: list[str] | None = None
+
+
+class ReflectRequest(BaseModel):
+    agent_id: str = Field(default="default", min_length=1)
+    trace_ids: list[str] | None = None
+    limit: int = Field(default=10, ge=1, le=100)
+
+
+class CrossTraceRequest(BaseModel):
+    agent_id: str = Field(default="default", min_length=1)
+    trace_ids: list[str] | None = None
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class CalibrateRequest(BaseModel):
+    raw_confidence: float = Field(..., ge=0.0, le=1.0)
+    strategy: str = Field(default="balanced")
+    agent_id: str = Field(default="default", min_length=1)
+
+
+@router.post("/agent-core/pipeline")
+async def run_agent_core_pipeline(data: PipelineRequest):
+    """Run the full observe→analyze→plan→execute→reflect pipeline."""
+    try:
+        core = _get_or_create_core(data.agent_id)
+        result = await core.run_pipeline(
+            prompt=data.prompt,
+            available_tools=data.tools,
+            context=ExecutionContext(data.context) if data.context in [e.value for e in ExecutionContext] else ExecutionContext.TASK,
+        )
+        return {"status": "completed", "agent_id": data.agent_id, "pipeline_id": str(uuid.uuid4()), "pipeline": result}
+    except Exception as e:
+        logger.error(f"Pipeline execution failed: {e}")
+        raise HTTPException(500, f"Pipeline execution failed: {str(e)}")
+
+
+@router.post("/agent-core/analyze/deep")
+async def analyze_with_core_deep(data: AnalyzeRequest):
+    """Deep analysis of a prompt using the agent core's LLM-backed analyzer."""
+    try:
+        core = _get_or_create_core(data.agent_id)
+        analysis = await core.analyze(data.prompt)
+        return {"agent_id": data.agent_id, "task_type": analysis.get("task_type", "general") if isinstance(analysis, dict) else "general", "analysis": analysis}
+    except Exception as e:
+        logger.error(f"Deep analysis failed: {e}")
+        raise HTTPException(500, f"Analysis failed: {str(e)}")
+
+
+@router.post("/agent-core/plan-sequence/deep")
+async def plan_sequence_with_core_deep(data: PlanSequenceRequest):
+    """Decompose a task into a structured execution plan with dependencies."""
+    try:
+        core = _get_or_create_core(data.agent_id)
+        tools = data.tools or [t.name for t in tool_registry.list_tools()]
+        plan = await core.plan_sequence(data.task, tools)
+        return {"agent_id": data.agent_id, "sequence": plan, "plan": plan}
+    except Exception as e:
+        logger.error(f"Plan sequence failed: {e}")
+        raise HTTPException(500, f"Planning failed: {str(e)}")
+
+
+@router.post("/agent-core/reflect")
+async def reflect_on_execution(data: ReflectRequest):
+    """Generate improvement suggestions from execution history."""
+    try:
+        core = _get_or_create_core(data.agent_id)
+        traces = None
+        if data.trace_ids:
+            all_traces = core.get_recent_traces(100)
+            traces = [t for t in core._execution_history if t.id in data.trace_ids]
+        result = await core.reflect(traces=traces, limit=data.limit)
+        return {"agent_id": data.agent_id, "suggestions": result.get("suggestions", result) if isinstance(result, dict) else result, "reflection": result}
+    except Exception as e:
+        logger.error(f"Reflection failed: {e}")
+        raise HTTPException(500, f"Reflection failed: {str(e)}")
+
+
+@router.post("/agent-core/cross-trace")
+async def cross_trace_analysis(data: CrossTraceRequest):
+    """Cross-trace meta-analysis across multiple execution traces."""
+    try:
+        core = _get_or_create_core(data.agent_id)
+        result = await core.analyze_cross_trace(
+            trace_ids=data.trace_ids,
+            limit=data.limit,
+        )
+        return {"agent_id": data.agent_id, "patterns": result.get("patterns", result) if isinstance(result, dict) else result, "cross_trace": result}
+    except Exception as e:
+        logger.error(f"Cross-trace analysis failed: {e}")
+        raise HTTPException(500, f"Cross-trace analysis failed: {str(e)}")
+
+
+@router.get("/agent-core/calibrate")
+async def calibrate_confidence(
+    raw_confidence: float = Query(..., ge=0.0, le=1.0),
+    strategy: str = Query("balanced", min_length=1),
+    agent_id: str = Query("default", min_length=1),
+):
+    """Get calibrated confidence for a task based on historical strategy performance."""
+    try:
+        core = _get_or_create_core(agent_id)
+        result = core.calibrate_confidence(raw_confidence, strategy)
+        return {"agent_id": agent_id, "calibrated_confidence": result.get("calibrated", result) if isinstance(result, dict) else result, "calibration": result}
+    except Exception as e:
+        logger.error(f"Confidence calibration failed: {e}")
+        raise HTTPException(500, f"Calibration failed: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Synthesis API — cross-agent knowledge fusion
+# ═══════════════════════════════════════════════════════════
+
+
+class FuseRequest(BaseModel):
+    min_contributors: int = Field(default=2, ge=1, le=20)
+
+
+class CollaborateRequest(BaseModel):
+    agent_id: str = Field(default="", min_length=0)
+    agent_ids: list[str] = Field(default_factory=list)
+    focus_areas: list[str] | None = None
+
+
+class DecideRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=1000)
+    options: list[str] = Field(..., min_length=2)
+    agent_ids: list[str] = Field(default_factory=list)
+    agent_votes: list[dict] | None = None
+
+
+class ResolveConflictsRequest(BaseModel):
+    topic_filter: str | None = Field(default=None, max_length=200)
+
+
+@router.post("/synthesis/fuse")
+async def fuse_knowledge(data: FuseRequest):
+    """Fuse knowledge across agents using confidence-weighted aggregation."""
+    try:
+        fused = agent_synthesis.fuse_knowledge(min_contributors=data.min_contributors)
+        return {
+            "fused_count": len(fused),
+            "topic": fused[0].topic if fused else "unknown",
+            "results": [
+                {
+                    "id": f.id,
+                    "topic": f.topic,
+                    "content": f.fused_content[:300],
+                    "confidence": f.confidence,
+                    "contributing_agents": f.contributing_agents,
+                    "dissenting_views": f.dissenting_views,
+                    "timestamp": f.timestamp,
+                }
+                for f in fused
+            ],
+        }
+    except Exception as e:
+        logger.error(f"Knowledge fusion failed: {e}")
+        raise HTTPException(500, f"Fusion failed: {str(e)}")
+
+
+@router.post("/synthesis/collaborate")
+async def collaborative_learning(data: CollaborateRequest):
+    """Collaborative learning protocol across agents."""
+    try:
+        patterns = agent_synthesis.collaborative_learn_protocol()
+        if data.agent_id:
+            for pattern in patterns:
+                agent_synthesis.adopt_pattern(data.agent_id, pattern.id)
+        return {
+            "shared_patterns": [
+                {
+                    "id": p.id,
+                    "pattern": p.pattern,
+                    "source_agents": p.source_agents,
+                    "adoption_count": p.adoption_count,
+                    "effectiveness": p.effectiveness,
+                }
+                for p in patterns
+            ],
+            "agent_id": data.agent_id,
+        }
+    except Exception as e:
+        logger.error(f"Collaborative learning failed: {e}")
+        raise HTTPException(500, f"Collaboration failed: {str(e)}")
+
+
+@router.post("/synthesis/decide")
+async def collective_decision(data: DecideRequest):
+    """Collective decision making with trust-weighted voting."""
+    try:
+        # Convert agent_ids to agent_votes if provided
+        agent_votes = data.agent_votes
+        if data.agent_ids and not agent_votes:
+            agent_votes = [
+                {"agent_id": aid, "agent_name": f"Agent-{aid[:8]}", "option": "", "confidence": 0.5, "rationale": ""}
+                for aid in data.agent_ids
+            ]
+        decision = agent_synthesis.make_collective_decision(
+            question=data.question,
+            options=data.options,
+            agent_votes=agent_votes,
+        )
+        return {
+            "question": data.question,
+            "decision": decision.winner,
+            "consensus_level": decision.consensus_level,
+            "option_scores": decision.options,
+            "votes": [
+                {
+                    "agent_id": v.agent_id,
+                    "agent_name": v.agent_name,
+                    "option": v.option,
+                    "confidence": v.confidence,
+                    "rationale": v.rationale[:200],
+                }
+                for v in decision.votes
+            ],
+            "dissenting_views": decision.dissenting_minority,
+            "timestamp": decision.timestamp,
+        }
+    except Exception as e:
+        logger.error(f"Collective decision failed: {e}")
+        raise HTTPException(500, f"Decision failed: {str(e)}")
+
+
+@router.get("/synthesis/distill")
+async def query_distilled_knowledge(query: str = Query(min_length=1, max_length=500)):
+    """Query distilled knowledge from the synthesis engine."""
+    try:
+        agent_synthesis.distill_knowledge()
+        results = agent_synthesis.query_distilled_knowledge(query)
+        return {"query": query, "found": len(results) > 0, "results": results, "count": len(results)}
+    except Exception as e:
+        logger.error(f"Knowledge distillation query failed: {e}")
+        raise HTTPException(500, f"Distillation query failed: {str(e)}")
+
+
+@router.get("/synthesis/trust-network")
+async def get_trust_network(agent_id: str = Query("", max_length=64)):
+    """Get trust network graph for all agents or a specific agent."""
+    try:
+        if agent_id:
+            edges = agent_synthesis.get_trust_edges(agent_id)
+            return {
+                "agent_id": agent_id,
+                "edges": [
+                    {
+                        "source": e.source_agent,
+                        "target": e.target_agent,
+                        "trust_score": e.trust_score,
+                        "interaction_count": e.interaction_count,
+                        "successful_exchanges": e.successful_exchanges,
+                        "last_interaction": e.last_interaction,
+                    }
+                    for e in edges
+                ],
+            }
+        # Return full network
+        all_edges = []
+        for aid in agent_synthesis._trust_edges:
+            for edge in agent_synthesis.get_trust_edges(aid):
+                all_edges.append({
+                    "source": edge.source_agent,
+                    "target": edge.target_agent,
+                    "trust_score": edge.trust_score,
+                    "interaction_count": edge.interaction_count,
+                })
+        return {"network": all_edges, "total_edges": len(all_edges), "agent_count": len(agent_synthesis._agent_trust_scores)}
+    except Exception as e:
+        logger.error(f"Trust network query failed: {e}")
+        raise HTTPException(500, f"Trust network query failed: {str(e)}")
+
+
+@router.post("/synthesis/resolve-conflicts")
+async def resolve_knowledge_conflicts(data: ResolveConflictsRequest):
+    """Resolve knowledge conflicts between agents."""
+    try:
+        conflicts = agent_synthesis.resolve_conflicts_with_provenance()
+        if data.topic_filter:
+            conflicts = [c for c in conflicts if data.topic_filter.lower() in c.topic.lower()]
+        return {
+            "resolved": sum(1 for c in conflicts if c.resolved),
+            "conflicts": [
+                {
+                    "id": c.id,
+                    "topic": c.topic,
+                    "agent_a": c.agent_a,
+                    "agent_b": c.agent_b,
+                    "resolved": c.resolved,
+                    "resolution": c.resolution,
+                    "timestamp": c.timestamp,
+                }
+                for c in conflicts
+            ],
+            "total": len(conflicts),
+        }
+    except Exception as e:
+        logger.error(f"Conflict resolution failed: {e}")
+        raise HTTPException(500, f"Conflict resolution failed: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Intelligence API — reasoning strategy and validation
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import intelligence
+
+
+class DispatchStrategyRequest(BaseModel):
+    task: str = Field(..., min_length=1, max_length=4096)
+    context: str | dict | None = None
+
+
+class AdaptiveToolsRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=4096)
+    tools: list[str] | None = None
+    limit: int = Field(default=5, ge=1, le=20)
+
+
+class ValidateRequest(BaseModel):
+    steps: list[dict] = Field(..., min_length=1)
+    answer: str = Field(default="", max_length=4096)
+    claimed_facts: list[str] = Field(default_factory=list, max_length=50)
+
+
+class AnalyzePromptRequest(BaseModel):
+    prompt_text: str = Field(default="", max_length=4096)
+    prompt: str = Field(default="", max_length=4096)
+    response_quality: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+class QuantifyRequest(BaseModel):
+    answer: str = Field(..., min_length=1, max_length=4096)
+    reasoning_steps: list[dict] = Field(default_factory=list)
+    tool_results: list[dict] | None = None
+    confidence_history: list[float] | None = None
+
+
+@router.post("/intelligence/dispatch-strategy")
+async def dispatch_reasoning(data: DispatchStrategyRequest):
+    """Dispatch reasoning strategy based on task characteristics."""
+    try:
+        result = intelligence.dispatch_reasoning_strategy(
+            task=data.task,
+            context=data.context,
+        )
+        return {"strategy": result}
+    except Exception as e:
+        logger.error(f"Strategy dispatch failed: {e}")
+        raise HTTPException(500, f"Strategy dispatch failed: {str(e)}")
+
+
+@router.post("/intelligence/adaptive-tools")
+async def adaptive_tool_selection(data: AdaptiveToolsRequest):
+    """Adaptive tool selection based on task and tool effectiveness history."""
+    try:
+        available = data.tools or [t.name for t in tool_registry.list_tools()]
+        selected = intelligence.select_tools_adaptive(
+            prompt=data.prompt,
+            available_tools=available,
+            limit=data.limit,
+        )
+        return {
+            "prompt": data.prompt[:200],
+            "selected_tools": [
+                {"name": t, "score": intelligence._compute_tool_exploitation_score(t, data.prompt.lower())}
+                for t in selected
+            ],
+        }
+    except Exception as e:
+        logger.error(f"Adaptive tool selection failed: {e}")
+        raise HTTPException(500, f"Tool selection failed: {str(e)}")
+
+
+@router.get("/intelligence/lessons")
+async def get_distilled_lessons(
+    pattern_filter: str | None = Query(None, max_length=100),
+    limit: int = Query(10, ge=1, le=50),
+):
+    """Get distilled lessons from execution experience."""
+    try:
+        lessons = intelligence.distill_lessons(
+            pattern_filter=pattern_filter,
+            limit=limit,
+        )
+        return {"lessons": lessons, "count": len(lessons)}
+    except Exception as e:
+        logger.error(f"Lesson distillation failed: {e}")
+        raise HTTPException(500, f"Lesson retrieval failed: {str(e)}")
+
+
+@router.post("/intelligence/validate")
+async def validate_reasoning_chain(data: ValidateRequest):
+    """Validate a reasoning chain for logical consistency and completeness."""
+    try:
+        result = intelligence.validate_reasoning_chain(
+            steps=data.steps,
+            answer=data.answer,
+            claimed_facts=data.claimed_facts,
+        )
+        return {"valid": result.get("valid", True) if isinstance(result, dict) else True, "validation": result}
+    except Exception as e:
+        logger.error(f"Reasoning validation failed: {e}")
+        raise HTTPException(500, f"Validation failed: {str(e)}")
+
+
+@router.post("/intelligence/analyze-prompt")
+async def analyze_prompt_quality(data: AnalyzePromptRequest):
+    """Analyze and optimize prompt for better reasoning outcomes."""
+    try:
+        prompt_text = data.prompt_text or data.prompt
+        analysis = intelligence.analyze_prompt(
+            prompt_text=prompt_text,
+            response_quality=data.response_quality,
+        )
+        suggestions = intelligence.suggest_prompt_improvements(prompt_text)
+        return {
+            "clarity_score": analysis.clarity_score,
+            "analysis": {
+                "clarity_score": analysis.clarity_score,
+                "specificity_score": analysis.specificity_score,
+                "effectiveness_score": analysis.effectiveness_score,
+                "strengths": analysis.strengths,
+                "weaknesses": analysis.weaknesses,
+                "suggested_rewrite": analysis.suggested_rewrite,
+            },
+            "improvement_suggestions": suggestions,
+        }
+    except Exception as e:
+        logger.error(f"Prompt analysis failed: {e}")
+        raise HTTPException(500, f"Prompt analysis failed: {str(e)}")
+
+
+@router.post("/intelligence/quantify")
+async def quantify_uncertainty(data: QuantifyRequest):
+    """Quantify response uncertainty using multiple calibration techniques."""
+    try:
+        estimate = intelligence.quantify_uncertainty(
+            answer=data.answer,
+            reasoning_steps=data.reasoning_steps,
+            tool_results=data.tool_results,
+            confidence_history=data.confidence_history,
+        )
+        return {
+            "uncertainty_level": estimate.overall_uncertainty,
+            "uncertainty": {
+                "overall": estimate.overall_uncertainty,
+                "ensemble_variance": estimate.ensemble_variance,
+                "calibration_error": estimate.calibration_error,
+                "consistency_score": estimate.consistency_score,
+                "confidence_interval": estimate.confidence_interval,
+                "narrative": estimate.narrative,
+            }
+        }
+    except Exception as e:
+        logger.error(f"Uncertainty quantification failed: {e}")
+        raise HTTPException(500, f"Quantification failed: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════════
+# Platform API — event routing, health, and configuration
+# ═══════════════════════════════════════════════════════════
+
+
+class EventRouteRequest(BaseModel):
+    source: str = Field(..., min_length=1, max_length=100)
+    event_type: str = Field(..., min_length=1, max_length=100)
+    data: dict | None = None
+    severity: str = Field(default="info", max_length=20)
+
+
+class ServiceRegisterRequest(BaseModel):
+    subsystem: str = Field(..., min_length=1, max_length=50)
+    status: str = Field(default="running", max_length=20)
+    metadata: dict | None = None
+
+
+class ConfigReloadRequest(BaseModel):
+    updates: dict = Field(default_factory=dict)
+
+
+@router.post("/platform/event-route")
+async def route_platform_event(data: EventRouteRequest):
+    """Route events across platform subsystems."""
+    try:
+        event = platform_hub.emit_event(
+            source=data.source,
+            event_type=data.event_type,
+            data=data.data,
+            severity=data.severity,
+        )
+        return {
+            "event_id": event.id,
+            "source": event.source,
+            "event_type": event.event_type,
+            "routed": True,
+            "timestamp": event.timestamp,
+        }
+    except Exception as e:
+        logger.error(f"Event routing failed: {e}")
+        raise HTTPException(500, f"Event routing failed: {str(e)}")
+
+
+@router.get("/platform/health-aggregate")
+async def get_platform_health_aggregate():
+    """Aggregated health across all platform subsystems."""
+    try:
+        health = platform_hub.get_health()
+        performance = platform_hub.get_performance_metrics()
+        deps = platform_hub.get_dependency_graph()
+        return {
+            "overall_status": health.get("status", "healthy") if isinstance(health, dict) else "healthy",
+            "health": health,
+            "performance": performance,
+            "dependencies": deps,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Health aggregate failed: {e}")
+        raise HTTPException(500, f"Health aggregate failed: {str(e)}")
+
+
+@router.post("/platform/service-register")
+async def register_service(data: ServiceRegisterRequest):
+    """Dynamic service registration for platform subsystems."""
+    try:
+        subsystem = PlatformSubsystem(data.subsystem) if data.subsystem in [s.value for s in PlatformSubsystem] else None
+        if subsystem:
+            platform_hub.update_subsystem_status(
+                subsystem_name=data.subsystem,
+                status=data.status,
+                details=data.metadata,
+            )
+            return {
+                "subsystem": data.subsystem,
+                "registered": True,
+                "status": data.status,
+            }
+        return {
+            "subsystem": data.subsystem,
+            "registered": False,
+            "message": "Unknown subsystem type",
+        }
+    except Exception as e:
+        logger.error(f"Service registration failed: {e}")
+        raise HTTPException(500, f"Service registration failed: {str(e)}")
+
+
+@router.post("/platform/config-reload")
+async def reload_platform_config(data: ConfigReloadRequest):
+    """Hot-reload platform configuration."""
+    try:
+        platform_hub.update_config(data.updates)
+        current_config = platform_hub.get_config()
+        return {
+            "reloaded": True,
+            "config_reloaded": True,
+            "current_config": current_config,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Config reload failed: {e}")
+        raise HTTPException(500, f"Config reload failed: {str(e)}")
+
+
+@router.get("/platform/audit-log")
+async def get_platform_audit_log(
+    limit: int = Query(50, ge=1, le=500),
+    event_type: str | None = Query(None, max_length=100),
+):
+    """Platform audit log with event history."""
+    try:
+        events = platform_hub.get_recent_events(limit=limit, event_type=event_type)
+        return {
+            "entries": events,
+            "events": events,
+            "total": len(events),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Audit log retrieval failed: {e}")
+        raise HTTPException(500, f"Audit log retrieval failed: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════════
+# Real-time Streaming API — SSE for pipeline and chat
+# ═══════════════════════════════════════════════════════════
+
+
+class StreamPipelineRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=4096)
+    agent_id: str = Field(default="default", min_length=1)
+    tools: list[str] | None = None
+
+
+class StreamChatRequest(BaseModel):
+    agent_id: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1)
+    conversation_id: str | None = None
+    enable_tools: bool = Field(default=True)
+    enable_reasoning: bool = Field(default=False)
+
+
+@router.get("/agent-core/stream-pipeline")
+async def stream_pipeline_execution(
+    prompt: str = Query(..., min_length=1, max_length=4096),
+    agent_id: str = Query("default", min_length=1),
+):
+    """SSE stream for pipeline execution with real-time stage updates."""
+    async def event_stream():
+        try:
+            core = _get_or_create_core(agent_id)
+            yield f"data: {json.dumps({'type': 'stage', 'stage': 'observe', 'message': 'Starting pipeline observation...'})}\n\n"
+
+            # Run analysis
+            yield f"data: {json.dumps({'type': 'stage', 'stage': 'analyze', 'message': 'Analyzing task...'})}\n\n"
+            analysis = await core.analyze(prompt)
+            yield f"data: {json.dumps({'type': 'analysis', 'data': analysis})}\n\n"
+
+            # Run planning
+            yield f"data: {json.dumps({'type': 'stage', 'stage': 'plan', 'message': 'Planning execution sequence...'})}\n\n"
+            tools = [t.name for t in tool_registry.list_tools()]
+            plan = await core.plan_sequence(prompt, tools)
+            yield f"data: {json.dumps({'type': 'plan', 'data': plan})}\n\n"
+
+            # Run strategy selection
+            yield f"data: {json.dumps({'type': 'stage', 'stage': 'execute', 'message': 'Selecting execution strategy...'})}\n\n"
+            strategy = await core.select_strategy(prompt, tools)
+            yield f"data: {json.dumps({'type': 'strategy', 'data': strategy})}\n\n"
+
+            # Run reflection
+            yield f"data: {json.dumps({'type': 'stage', 'stage': 'reflect', 'message': 'Generating reflections...'})}\n\n"
+            reflection = await core.reflect(limit=5)
+            yield f"data: {json.dumps({'type': 'reflection', 'data': reflection})}\n\n"
+
+            yield f"data: {json.dumps({'type': 'done', 'agent_id': agent_id, 'pipeline': 'complete'})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/chat/stream")
+async def chat_stream_sse(
+    agent_id: str = Query(..., min_length=1),
+    content: str = Query(..., min_length=1),
+    conversation_id: str | None = Query(None),
+    enable_tools: bool = Query(True),
+    enable_reasoning: bool = Query(False),
+):
+    """SSE stream for chat with tool call visualization."""
+    async with async_session() as session:
+        result = await session.execute(select(AgentModel).where(AgentModel.id == agent_id))
+        agent = result.scalars().first()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+
+        conv_id = conversation_id
+        if not conv_id:
+            conv_id = f"conv-{uuid.uuid4().hex[:8]}"
+            conv = ConvModel(id=conv_id, title=f"Chat with {agent.name}", agent_ids=[agent.id])
+            session.add(conv)
+            await session.commit()
+
+    history_result = None
+    if conv_id:
+        async with async_session() as s2:
+            msgs = await s2.execute(
+                select(MsgModel)
+                .where(MsgModel.conversation_id == conv_id)
+                .order_by(MsgModel.created_at)
+                .limit(30)
+            )
+            history_result = [
+                {"role": m.role, "content": m.content}
+                for m in msgs.scalars().all()
+            ]
+
+    async def event_stream():
+        full_response = ""
+        try:
+            async for token in orchestrator.chat_stream(
+                agent_id=agent.id,
+                agent_name=agent.name,
+                instructions=agent.instructions or f"You are {agent.name}, a {agent.role} agent.",
+                message=content,
+                history=history_result,
+                enable_tools=enable_tools,
+                enable_reasoning=enable_reasoning,
+            ):
+                full_response += token
+
+                # Tool call visualization markers
+                if token.startswith("\n[Tool:") and token.endswith("]\n"):
+                    tool_name = token.strip()[6:-1].strip()
+                    tc_id = f"tc-{uuid.uuid4().hex[:6]}"
+                    yield f"data: {json.dumps({'type': 'tool_call', 'id': tc_id, 'name': tool_name})}\n\n"
+                elif token.startswith("[Tool:") and token.endswith("]\n"):
+                    tool_name = token[6:-1].strip()
+                    tc_id = f"tc-{uuid.uuid4().hex[:6]}"
+                    yield f"data: {json.dumps({'type': 'tool_call', 'id': tc_id, 'name': tool_name})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+
+            if enable_reasoning:
+                try:
+                    engine = orchestrator.get_engine(agent.id, agent.name, agent.instructions or "")
+                    reasoning_stats = engine.get_reasoning_stats()
+                    if reasoning_stats.get("total_traces", 0) > 0:
+                        avg_time = reasoning_stats.get("avg_time_ms", 0)
+                        success_rate = reasoning_stats.get("success_rate", "N/A")
+                        yield f"data: {json.dumps({'type': 'reasoning', 'content': f'Reasoning completed: {success_rate} success rate, {avg_time:.0f}ms avg time'})}\n\n"
+                except Exception:
+                    pass
+
+            async with async_session() as s3:
+                user_msg = MsgModel(
+                    id=f"msg-{uuid.uuid4().hex[:8]}",
+                    agent_id=agent.id, conversation_id=conv_id,
+                    role="user", content=content,
+                )
+                assistant_msg = MsgModel(
+                    id=f"msg-{uuid.uuid4().hex[:8]}",
+                    agent_id=agent.id, conversation_id=conv_id,
+                    role="assistant", content=full_response,
+                )
+                s3.add_all([user_msg, assistant_msg])
+                conv = await s3.execute(select(ConvModel).where(ConvModel.id == conv_id))
+                c = conv.scalars().first()
+                if c:
+                    c.updated_at = datetime.now(timezone.utc)
+                await s3.commit()
+
+            yield f"data: {json.dumps({'type': 'done', 'conversation_id': conv_id})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ═══════════════════════════════════════════════════════════
+# Convenience Aliases — compatibility routes for dashboard panels
+# ═══════════════════════════════════════════════════════════
+
+
+@router.get("/platform-hub/stats")
+async def get_platform_hub_stats_alias():
+    """Platform hub stats convenience alias."""
+    result = platform_hub.get_stats() if hasattr(platform_hub, 'get_stats') else {"status": "active"}
+    if isinstance(result, dict):
+        result["total_subsystems"] = result.get("subsystem_count", result.get("total_subsystems", 0))
+    return result
+
+
+@router.get("/costs/stats")
+async def get_costs_stats():
+    """Cost tracker statistics."""
+    if hasattr(cost_tracker, 'get_summary'):
+        return cost_tracker.get_summary()
+    if hasattr(cost_tracker, 'get_stats'):
+        return cost_tracker.get_stats()
+    return {"total_entries": 0, "total_cost": 0.0}
+
+
+@router.get("/agent-dashboard")
+async def get_agent_dashboard_alias(agent_id: str | None = None):
+    """Agent dashboard convenience alias."""
+    return await agent_dashboard(agent_id)
+
+
+@router.get("/enterprise")
+async def get_enterprise_alias():
+    """Enterprise hub convenience alias."""
+    result = enterprise_hub.get_hub_stats() if hasattr(enterprise_hub, 'get_hub_stats') else {}
+    result.setdefault("total_workspaces", 0)
+    return result
 
 
