@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client';
-import type { SystemOverview, Agent } from '../types';
+import type { SystemOverview, Agent, SystemHealthStatus, TokenUsageData, AgentState, ActivityFeedEntry } from '../types';
 import { useTheme } from '../hooks/useTheme';
 
 interface MetricCardProps {
@@ -142,6 +142,19 @@ export default function Dashboard() {
   const { mode, toggle: toggleTheme, isDark } = useTheme();
   const wsRef = useRef<WebSocket | null>(null);
 
+  // Token usage state
+  const [tokenUsageData, setTokenUsageData] = useState<TokenUsageData | null>(null);
+  const [tokenUsageChart, setTokenUsageChart] = useState<Array<{ hour: number; tokens: number }>>([]);
+
+  // Active agents state
+  const [activeAgents, setActiveAgents] = useState<AgentState[]>([]);
+
+  // Recent activity state
+  const [recentActivities, setRecentActivities] = useState<ActivityFeedEntry[]>([]);
+
+  // Dashboard sections
+  const [activeSection, setActiveSection] = useState<'overview' | 'token-usage' | 'active-agents' | 'recent-activity'>('overview');
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -184,6 +197,39 @@ export default function Dashboard() {
     }
   }, []);
 
+  const loadTokenUsage = async () => {
+    try {
+      const data = await api.system.tokenUsage();
+      setTokenUsageData(data);
+      if (data.daily && data.daily.length > 0) {
+        setTokenUsageChart(data.daily.map((d) => {
+          const hour = new Date(d.date).getHours();
+          return { hour, tokens: d.tokens };
+        }));
+      }
+    } catch {
+      // token usage is optional
+    }
+  };
+
+  const loadActiveAgents = async () => {
+    try {
+      const result = await api.system.activeAgents();
+      setActiveAgents(result.agents);
+    } catch {
+      // active agents is optional
+    }
+  };
+
+  const loadRecentActivity = async () => {
+    try {
+      const result = await api.system.recentActivity(30);
+      setRecentActivities(result.activities);
+    } catch {
+      // recent activity is optional
+    }
+  };
+
   // WebSocket connection for real-time status
   useEffect(() => {
     try {
@@ -202,6 +248,28 @@ export default function Dashboard() {
               const updated = [...existing.slice(1), data.count || 1];
               return { ...prev, [data.agent_id]: updated };
             });
+          }
+          if (data.type === 'system_health_update') {
+            setPlatformHealth((prev: any) => ({ ...prev, ...data.payload }));
+            if (data.payload?.health_ratio !== undefined) {
+              setHealthScore(Math.round(data.payload.health_ratio * 100));
+            }
+          }
+          if (data.type === 'token_usage_update' && data.payload) {
+            setTokenUsageChart((prev) => {
+              const hour = new Date().getHours();
+              const updated = [...prev];
+              const existing = updated.find((h) => h.hour === hour);
+              if (existing) {
+                existing.tokens = data.payload.tokens || existing.tokens;
+              } else {
+                updated.push({ hour, tokens: data.payload.tokens || 0 });
+              }
+              return updated.slice(-24);
+            });
+          }
+          if (data.type === 'activity_update' && data.payload) {
+            setRecentActivities((prev) => [data.payload, ...prev].slice(0, 30));
           }
         } catch {}
       };
@@ -570,6 +638,138 @@ export default function Dashboard() {
           )}
         </div>
       )}
+
+      {/* Token Usage Chart */}
+      <div className="dashboard-section">
+        <div className="dashboard-section-header">
+          <h3>Token Usage (Last 24 Hours)</h3>
+          <button className="btn btn-sm btn-secondary" onClick={loadTokenUsage}>Load</button>
+        </div>
+        {tokenUsageChart.length > 0 ? (
+          <>
+            <div className="chart-container">
+              <div className="chart-bars">
+                {tokenUsageChart.map((hour, i) => {
+                  const maxTokens = Math.max(...tokenUsageChart.map((h) => h.tokens), 1);
+                  return (
+                    <div key={i} className="chart-bar">
+                      <div
+                        className="bar-fill"
+                        style={{ height: `${Math.min(100, (hour.tokens / maxTokens) * 100)}%` }}
+                      />
+                      <div className="bar-label">{hour.hour}:00</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {tokenUsageData && (
+              <div className="token-metrics">
+                <div className="metric-item">
+                  <span className="metric-label">Monthly Total</span>
+                  <span className="metric-value">{tokenUsageData.monthly_total.toLocaleString()} tokens</span>
+                </div>
+                <div className="metric-item">
+                  <span className="metric-label">Monthly Cost</span>
+                  <span className="metric-value">${tokenUsageData.monthly_cost.toFixed(4)}</span>
+                </div>
+                <div className="metric-item">
+                  <span className="metric-label">Projected Cost</span>
+                  <span className="metric-value">${tokenUsageData.projected_cost.toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+            {tokenUsageData && tokenUsageData.by_model && Object.keys(tokenUsageData.by_model).length > 0 && (
+              <div className="model-breakdown">
+                <h4>By Model</h4>
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Model</th>
+                        <th>Tokens</th>
+                        <th>Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(tokenUsageData.by_model).map(([model, data]) => (
+                        <tr key={model}>
+                          <td>{model}</td>
+                          <td>{data.tokens.toLocaleString()}</td>
+                          <td>${data.cost.toFixed(6)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="empty-state">No token usage data available.</p>
+        )}
+      </div>
+
+      {/* Active Agents */}
+      <div className="dashboard-section">
+        <div className="dashboard-section-header">
+          <h3>Active Agents</h3>
+          <button className="btn btn-sm btn-secondary" onClick={loadActiveAgents}>Load</button>
+        </div>
+        {activeAgents.length > 0 ? (
+          <div className="active-agents-list">
+            {activeAgents.map((a) => (
+              <div key={a.agent_id} className="active-agent-card">
+                <div className="active-agent-header">
+                  <span className="active-agent-name">{a.agent_name}</span>
+                  <span className={`badge ${a.state === 'running' ? 'badge-success' : a.state === 'idle' ? 'badge-warning' : 'badge-error'}`}>
+                    {a.state}
+                  </span>
+                </div>
+                {a.current_task && (
+                  <div className="active-agent-task">
+                    <span className="task-label">Current Task:</span>
+                    <span className="task-value truncate">{a.current_task}</span>
+                  </div>
+                )}
+                <div className="active-agent-meta">
+                  <span>Uptime: {a.uptime_seconds < 60 ? `${a.uptime_seconds}s` : a.uptime_seconds < 3600 ? `${Math.round(a.uptime_seconds / 60)}m` : `${Math.round(a.uptime_seconds / 3600)}h`}</span>
+                  <span>Last Active: {new Date(a.last_active).toLocaleTimeString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-state">No active agent data available.</p>
+        )}
+      </div>
+
+      {/* Recent Activity */}
+      <div className="dashboard-section">
+        <div className="dashboard-section-header">
+          <h3>Recent Activity</h3>
+          <button className="btn btn-sm btn-secondary" onClick={loadRecentActivity}>Load</button>
+        </div>
+        {recentActivities.length > 0 ? (
+          <div className="activity-feed">
+            {recentActivities.map((activity) => (
+              <div key={activity.id} className="activity-entry">
+                <div className="activity-dot" />
+                <div className="activity-content">
+                  <div className="activity-header">
+                    <span className="activity-agent">{activity.agent_name || activity.agent_id}</span>
+                    <span className="badge badge-sm">{activity.type}</span>
+                  </div>
+                  <p className="activity-description">{activity.description}</p>
+                  <span className="activity-time">{new Date(activity.timestamp).toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-state">No recent activity data available.</p>
+        )}
+      </div>
     </div>
   );
 }
