@@ -1,4 +1,4 @@
-export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse' | 'persona' | 'learning' | 'gateway' | 'daemon' | 'swarm' | 'knowledge' | 'runtime' | 'scheduler' | 'studio' | 'workflow' | 'board' | 'compounding' | 'whitememory' | 'pipeline' | 'capability' | 'kgraph' | 'memorysync' | 'phub' | 'costs' | 'workspaces' | 'agentdashboard' | 'proactive' | 'metacognition' | 'evolution' | 'kanban' | 'activity' | 'runtimemonitor' | 'skillmanager' | 'agent-comparison' | 'agentself' | 'plugins' | 'imhub' | 'marketplace' | 'taskqueue' | 'runtimebackend' | 'agentcore' | 'synthesis' | 'intelligence' | 'runtimepanel' | 'skillcompiler' | 'conversationsearch';
+export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse' | 'persona' | 'learning' | 'gateway' | 'daemon' | 'swarm' | 'knowledge' | 'runtime' | 'scheduler' | 'studio' | 'workflow' | 'board' | 'compounding' | 'whitememory' | 'pipeline' | 'capability' | 'kgraph' | 'memorysync' | 'phub' | 'costs' | 'workspaces' | 'agentdashboard' | 'proactive' | 'metacognition' | 'evolution' | 'kanban' | 'activity' | 'runtimemonitor' | 'skillmanager' | 'agent-comparison' | 'agentself' | 'plugins' | 'imhub' | 'marketplace' | 'taskqueue' | 'runtimebackend' | 'agentcore' | 'synthesis' | 'intelligence' | 'runtimepanel' | 'skillcompiler' | 'conversationsearch' | 'governance' | 'smartrouter' | 'identitycore' | 'agentmesh' | 'learningloop' | 'experience' | 'collabspace' | 'contextengine' | 'automation' | 'skillfabric';
 
 export interface Agent {
   id: string;
@@ -1410,4 +1410,578 @@ export interface ConversationSearchStats {
   unique_topics: number;
   unique_keywords: number;
   last_indexed_at: string;
+}
+
+// ── Pipeline Execution Types ──
+
+export interface PipelineStep {
+  step: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  result?: string;
+  error?: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface PipelineRun {
+  run_id: string;
+  agent_id: string;
+  status: string;
+  steps: PipelineStep[];
+  started_at: string;
+  completed_at?: string;
+}
+
+export interface StrategyEffectiveness {
+  strategy: string;
+  success_rate: number;
+  attempts: number;
+  avg_tokens: number;
+  avg_time_ms: number;
+}
+
+export interface ExecutionTimelineEntry {
+  id: string;
+  context: string;
+  prompt: string;
+  steps: number;
+  success: boolean;
+  confidence: number;
+  total_time_ms: number;
+  tools_used: string[];
+  timestamp: string;
+}
+
+// ── Synthesis Types ──
+
+export interface FusionResult {
+  fusion_id: string;
+  source_agents: string[];
+  synthetic_knowledge: string;
+  confidence: number;
+  supporting_evidence: string[];
+  timestamp: string;
+}
+
+export interface TrustNetworkNode {
+  agent_id: string;
+  agent_name: string;
+  trust_score: number;
+  connections: Array<{ target: string; weight: number }>;
+}
+
+export interface TrustNetwork {
+  nodes: TrustNetworkNode[];
+  edges: Array<{ source: string; target: string; weight: number }>;
+  avg_trust: number;
+}
+
+export interface CollectiveDecision {
+  decision_id: string;
+  topic: string;
+  options: string[];
+  votes: Record<string, Record<string, number>>;
+  winner: string;
+  confidence: number;
+  timestamp: string;
+}
+
+export interface ResolvedConflict {
+  id: string;
+  topic: string;
+  agent_a: string;
+  agent_b: string;
+  resolution: string;
+  resolution_strategy: string;
+  resolved_at: string;
+}
+
+export interface DistilledKnowledge {
+  id: string;
+  topic: string;
+  summary: string;
+  source_agents: string[];
+  confidence: number;
+  created_at: string;
+}
+
+// ── Intelligence Types ──
+
+export interface StrategyDispatch {
+  strategy: string;
+  usage_count: number;
+  success_rate: number;
+  avg_tokens: number;
+  avg_latency_ms: number;
+}
+
+export interface ToolEffectiveness {
+  tool_name: string;
+  total_calls: number;
+  success_rate: number;
+  avg_duration_ms: number;
+  error_rate: number;
+}
+
+export interface LessonLearned {
+  id: string;
+  category: string;
+  lesson: string;
+  impact: number;
+  source: string;
+  timestamp: string;
+}
+
+export interface UncertaintyGaugeData {
+  response_id: string;
+  confidence: number;
+  factors: Array<{ name: string; impact: number; direction: string }>;
+  overall: string;
+}
+
+export interface PromptAnalysis {
+  original: string;
+  complexity: string;
+  clarity_score: number;
+  suggestions: string[];
+  optimized_version: string;
+}
+
+// ── Dashboard Types ──
+
+export interface SystemHealthStatus {
+  overall: string;
+  components: Record<string, { status: string; latency_ms: number; last_checked: string }>;
+  uptime_seconds: number;
+}
+
+export interface TokenUsageData {
+  daily: Array<{ date: string; tokens: number; cost: number }>;
+  monthly_total: number;
+  monthly_cost: number;
+  projected_cost: number;
+  by_model: Record<string, { tokens: number; cost: number }>;
+}
+
+export interface AgentState {
+  agent_id: string;
+  agent_name: string;
+  state: string;
+  current_task: string;
+  last_active: string;
+  uptime_seconds: number;
+}
+
+export interface ActivityFeedEntry {
+  id: string;
+  type: string;
+  agent_id: string;
+  agent_name: string;
+  description: string;
+  timestamp: string;
+  metadata: Record<string, unknown>;
+}
+
+// ── Chat Types ──
+
+export interface MessageBranch {
+  branch_id: string;
+  parent_message_id: string;
+  messages: Array<{ role: string; content: string }>;
+  created_at: string;
+}
+
+export interface QuickReply {
+  id: string;
+  text: string;
+  category: string;
+  confidence: number;
+}
+
+// ── Agent Persona (New) Types ──
+
+export interface AgentPersonaProfile {
+  persona_id: string;
+  name: string;
+  description: string;
+  traits: Record<string, number>;
+  interaction_style: string;
+  decision_style: string;
+  role: string;
+  domain_expertise: string[];
+  languages: string[];
+  tone_guidelines: string[];
+  response_rules: string[];
+  forbidden_topics: string[];
+  created_at: string;
+  updated_at: string;
+  interaction_count: number;
+  adaptation_history: Array<Record<string, unknown>>;
+}
+
+export interface PersonaStats {
+  total_personas: number;
+  active_persona: string;
+  roles: Record<string, number>;
+  personas: AgentPersonaProfile[];
+}
+
+// ── Agent Governance Types ──
+
+export interface PolicyRule {
+  rule_id: string;
+  name: string;
+  description: string;
+  category: string;
+  level: string;
+  action: string;
+  tool_patterns: string[];
+  file_patterns: string[];
+  domain_patterns: string[];
+  max_tokens_per_call: number;
+  max_tokens_per_session: number;
+  max_cost_per_session: number;
+  max_tool_calls_per_session: number;
+  require_approval_above_cost: number;
+  enabled: boolean;
+  priority: number;
+  created_at: string;
+}
+
+export interface ApprovalRequest {
+  request_id: string;
+  rule_id: string;
+  agent_id: string;
+  session_id: string;
+  action_description: string;
+  context: Record<string, unknown>;
+  status: string;
+  created_at: string;
+  resolved_at: string | null;
+  resolution: string | null;
+}
+
+export interface BudgetStatus {
+  agent_id: string;
+  budget_limit: number;
+  total_spent: number;
+  remaining: number;
+  total_tokens: number;
+  total_tool_calls: number;
+  warnings_issued: number;
+  budget_exceeded: boolean;
+}
+
+export interface GovernanceStats {
+  total_server_policies: number;
+  total_agent_policies: number;
+  total_session_policies: number;
+  pending_approvals: number;
+  total_approvals_processed: number;
+  active_budgets: number;
+  budgets: Record<string, BudgetStatus>;
+  recent_audit: Array<Record<string, unknown>>;
+}
+
+export interface GovernanceEvaluation {
+  action: string;
+  reason: string;
+  triggered_rules: PolicyRule[];
+}
+
+// ── Smart Router Types ──
+
+export interface RouterModelConfig {
+  provider: string;
+  model_name: string;
+  tier: string;
+  cost_per_1k_tokens: number;
+  max_tokens: number;
+  supports_tools: boolean;
+  supports_vision: boolean;
+  latency_ms: number;
+  reliability_score: number;
+}
+
+export interface RoutingDecision {
+  task_complexity: string;
+  selected_model: RouterModelConfig;
+  alternative_model: RouterModelConfig | null;
+  estimated_cost: number;
+  estimated_tokens: number;
+  confidence: number;
+  reasoning: string;
+  timestamp: string;
+}
+
+export interface SmartRouterStats {
+  total_models: number;
+  models_by_tier: Record<string, RouterModelConfig[]>;
+  total_decisions: number;
+  distribution: Record<string, number>;
+  cost_savings: {
+    total_savings: number;
+    per_model: Record<string, number>;
+    total_routing_decisions: number;
+  };
+  recent_decisions: RoutingDecision[];
+}
+
+export interface ComplexityAnalysis {
+  complexity: string;
+  score: number;
+  recommended_tier: string;
+}
+
+// ── Identity Core Types ──
+
+export interface IdentityTrait {
+  trait_id: string;
+  name: string;
+  category: string;
+  value: number;
+  confidence: number;
+  source_experiences: string[];
+  last_updated: string;
+  stability: number;
+}
+
+export interface EpisodicEntry {
+  entry_id: string;
+  content: string;
+  context: Record<string, unknown>;
+  emotional_valence: number;
+  importance: number;
+  timestamp: string;
+}
+
+export interface SemanticNode {
+  node_id: string;
+  concept: string;
+  relationships: Record<string, number>;
+  confidence: number;
+  source_episodes: string[];
+  timestamp: string;
+}
+
+export interface ProceduralPattern {
+  pattern_id: string;
+  pattern_type: string;
+  trigger_conditions: string[];
+  action_sequence: string[];
+  success_rate: number;
+  execution_count: number;
+  timestamp: string;
+}
+
+export interface IdentityCoreProfile {
+  agent_id: string;
+  agent_name: string;
+  self_awareness: number;
+  identity_coherence: number;
+  traits: Record<string, IdentityTrait>;
+  memory_stats: {
+    episodic_entries: number;
+    semantic_nodes: number;
+    procedural_patterns: number;
+    total_experiences: number;
+    total_abstractions: number;
+  };
+  evolution_history: Array<Record<string, unknown>>;
+}
+
+export interface IdentityCoreStats {
+  agent_id: string;
+  agent_name: string;
+  self_awareness: number;
+  identity_coherence: number;
+  total_traits: number;
+  episodic_entries: number;
+  semantic_nodes: number;
+  procedural_patterns: number;
+  total_experiences: number;
+  total_abstractions: number;
+  traits: Record<string, { value: number; confidence: number; stability: number; category: string }>;
+}
+
+export interface IdentityRegistryStats {
+  total_identities: number;
+  identities: Record<string, IdentityCoreStats>;
+}
+
+// ── WorkSpace Manager Types ──
+
+export interface WorkSpaceManagerConfig {
+  workspace_id: string;
+  name: string;
+  description: string;
+  isolate_files: boolean;
+  isolate_memory: boolean;
+  isolate_skills: boolean;
+  isolate_models: boolean;
+  max_file_size_mb: number;
+  max_total_size_mb: number;
+  max_memory_entries: number;
+  max_skills: number;
+  auto_cleanup_days: number;
+  auto_snapshot_enabled: boolean;
+  snapshot_interval_hours: number;
+  created_at: string;
+  updated_at: string;
+  tags: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface WorkSpaceManagerSnapshot {
+  snapshot_id: string;
+  workspace_id: string;
+  description: string;
+  created_at: string;
+  file_count: number;
+  memory_entries: number;
+  skill_count: number;
+  total_size_bytes: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface WorkSpaceManagerStats {
+  total_workspaces: number;
+  active_workspace: string;
+  total_files: number;
+  total_memories: number;
+  total_skills: number;
+  workspaces: Array<{
+    workspace_id: string;
+    name: string;
+    description: string;
+    file_count: number;
+    memory_entries: number;
+    skill_count: number;
+    is_active: boolean;
+    created_at: string;
+    tags: string[];
+  }>;
+}
+
+// ── Agent Mesh Types ──
+
+export interface MeshNodeStatus {
+  agent_id: string;
+  agent_name: string;
+  role: string;
+  state: string;
+  capabilities: string[];
+  metrics: {
+    total_tasks: number;
+    completed_tasks: number;
+    failed_tasks: number;
+    success_rate: number;
+    current_load: number;
+    max_concurrent: number;
+    avg_response_time_ms: number;
+    total_cost: number;
+    health_score: number;
+    uptime_seconds: number;
+  };
+  active_tasks: number;
+  peers: number;
+  started_at: string | null;
+  tags: string[];
+}
+
+export interface MeshStatus {
+  total_nodes: number;
+  healthy_nodes: number;
+  degraded_nodes: number;
+  total_tasks: number;
+  completed_tasks: number;
+  failed_tasks: number;
+  pending_tasks: number;
+  overall_success_rate: number;
+  delegation_strategy: string;
+  nodes: MeshNodeStatus[];
+  recent_events: MeshEvent[];
+}
+
+export interface MeshEvent {
+  event_type: string;
+  agent_id: string | null;
+  task_id: string | null;
+  details: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface MeshTask {
+  task_id: string;
+  title: string;
+  priority: string;
+  target_agent_id: string | null;
+  created_at: string;
+}
+
+// ── Learning Loop Types ──
+
+export interface LearningLoopStatus {
+  observation: {
+    total_observations: number;
+    by_type: Record<string, number>;
+    unique_agents: number;
+    unique_sessions: number;
+  };
+  extraction: {
+    total_patterns: number;
+    by_type: Record<string, number>;
+    avg_confidence: number;
+  };
+  compounding: {
+    total_skills: number;
+    by_source: Record<string, number>;
+    avg_confidence: number;
+  };
+  evolution: {
+    total_evolutions: number;
+    agents_evolved: number;
+  };
+  nudge: {
+    total_nudges: number;
+    active_nudges: number;
+    dismissed: number;
+    acted_upon: number;
+  };
+  user_model: {
+    interaction_count: number;
+    session_count: number;
+    feedback_count: number;
+    last_active: string;
+  };
+  running: boolean;
+}
+
+export interface LearningNudge {
+  nudge_id: string;
+  category: string;
+  priority: string;
+  message: string;
+  suggested_action: string;
+  created_at: string;
+}
+
+export interface LearningPattern {
+  pattern_id: string;
+  pattern_type: string;
+  description: string;
+  confidence: number;
+  frequency: number;
+  related_agents: string[];
+}
+
+export interface LearningSkill {
+  skill_id: string;
+  name: string;
+  description: string;
+  confidence: number;
+  usage_count: number;
+  success_rate: number;
+  skill_source: string;
+  tools_required: string[];
 }
