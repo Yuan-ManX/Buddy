@@ -62,6 +62,15 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'runtimepanel', label: 'Runtime', icon: '⚡' },
   { id: 'skillcompiler', label: 'Skills', icon: '🔧' },
   { id: 'conversationsearch', label: 'Search', icon: '🔍' },
+  { id: 'governance', label: 'Governance', icon: '⚖️' },
+  { id: 'smartrouter', label: 'Router', icon: '🧭' },
+  { id: 'agentmesh', label: 'Mesh', icon: '🕸️' },
+  { id: 'learningloop', label: 'Learn', icon: '🧠' },
+  { id: 'experience', label: 'Experience', icon: '📊' },
+  { id: 'collabspace', label: 'Collab', icon: '🤝' },
+  { id: 'contextengine', label: 'Context', icon: '📝' },
+  { id: 'automation', label: 'Automation', icon: '⚡' },
+  { id: 'skillfabric', label: 'S-Fabric', icon: '🧵' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
@@ -89,6 +98,7 @@ const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'proactive', label: 'Proactive', icon: '🎯' },
   { id: 'metacognition', label: 'Meta', icon: '🧠' },
   { id: 'evolution', label: 'Evolution', icon: '🧬' },
+  { id: 'identitycore', label: 'ID-Core', icon: '🧬' },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({
