@@ -31,6 +31,12 @@ Core components:
 - WorkflowEngine: Agentic task lifecycle management with delegation
 - MemorySyncHub: Cross-agent memory sharing and sync groups
 - SessionSearch: Cross-session recall and recap system
+- AgentCommunicationProtocol: Structured inter-agent messaging with priority queues
+- ProviderRegistry: Multi-LLM provider abstraction with failover and cost tracking
+- PrioritizedReplayBuffer: Priority-based experience replay for agent learning
+- ToolChainExecutor: DAG-based tool orchestration with parallel execution
+- AgentDiscoveryService: Automatic capability registration and service discovery
+- ResourceManager: Quota-based resource allocation and throttling
 """
 from agent.session_search import SessionIndex, SessionSearcher, SessionEntry, SessionRecap, session_searcher
 from agent.engine import AgentEngine
@@ -61,6 +67,15 @@ from agent.memory_sync import MemorySyncHub, SyncGroup, SharedMemory
 from agent.platform_hub import PlatformHub, platform_hub, PlatformSubsystem, SubsystemStatus, PlatformEvent
 from agent.shared import memory_sync_hub
 from agent.agent_evolution import AgentEvolution, ExperienceType, ExperienceOutcome
+from agent.protocol import AgentCommunicationProtocol, AgentMessage, MessageType, MessagePriority, DeliveryStatus, ProtocolSession, acp
+from agent.provider import ProviderRegistry, ProviderType, ProviderStatus, ProviderConfig, ProviderHealth, UnifiedResponse, provider_registry
+from agent.experience_replay import PrioritizedReplayBuffer, ReplayExperience, ExperienceCategory
+from agent.tool_chain import ToolChainExecutor, ToolChain, ToolNode, ChainStatus, tool_chain_executor
+from agent.discovery import AgentDiscoveryService, AgentRegistration, AgentCapability, agent_discovery
+from agent.resource import ResourceManager, ResourceQuota, ResourceType, QuotaPeriod, TokenBucket, resource_manager
+from agent.agent_intelligence import AgentIntelligence, IntelligenceConfig, IntelligenceMode, ReasoningStrategy, TaskComplexity as IntelTaskComplexity, ThinkingStep, ReasoningTrace, Experience as IntelExperience, ToolRelevance
+from agent.agent_core import AgentCore, AgentCoreConfig, AgentState, ExecutionContext, AgentCapability, ExecutionStep as CoreExecutionStep, ExecutionTrace as CoreExecutionTrace, AgentInsight as CoreAgentInsight, ProactiveSignal as CoreProactiveSignal
+from agent.agent_synthesis import AgentSynthesis, agent_synthesis, SynthesisMode, InsightType, SynthesisInsight, AgentContribution
 
 __all__ = [
     "AgentEngine",
@@ -89,5 +104,14 @@ __all__ = [
     "MemorySyncHub", "SyncGroup", "SharedMemory", "memory_sync_hub",
     "PlatformHub", "platform_hub", "PlatformSubsystem", "SubsystemStatus", "PlatformEvent",
     "SessionIndex", "SessionSearcher", "SessionEntry", "SessionRecap", "session_searcher",
+    "AgentCommunicationProtocol", "AgentMessage", "MessageType", "MessagePriority", "DeliveryStatus", "ProtocolSession", "acp",
+    "ProviderRegistry", "ProviderType", "ProviderStatus", "ProviderConfig", "ProviderHealth", "UnifiedResponse", "provider_registry",
+    "PrioritizedReplayBuffer", "ReplayExperience", "ExperienceCategory",
+    "ToolChainExecutor", "ToolChain", "ToolNode", "ChainStatus", "tool_chain_executor",
+    "AgentDiscoveryService", "AgentRegistration", "AgentCapability", "agent_discovery",
+    "ResourceManager", "ResourceQuota", "ResourceType", "QuotaPeriod", "TokenBucket", "resource_manager",
+    "AgentIntelligence", "IntelligenceConfig", "IntelligenceMode", "ReasoningStrategy", "IntelTaskComplexity", "ThinkingStep", "ReasoningTrace", "IntelExperience", "ToolRelevance",
+    "AgentCore", "AgentCoreConfig", "AgentState", "ExecutionContext", "AgentCapability", "CoreExecutionStep", "CoreExecutionTrace", "CoreAgentInsight", "CoreProactiveSignal",
+    "AgentSynthesis", "agent_synthesis", "SynthesisMode", "InsightType", "SynthesisInsight", "AgentContribution",
     "orchestrator", "skills_registry",
 ]
