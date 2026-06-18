@@ -1711,4 +1711,183 @@ export const api = {
     bestStrategy: (prompt: string) =>
       request<{ found: boolean; strategy?: any; message?: string }>(`/learning/best-strategy?prompt=${encodeURIComponent(prompt)}`),
   },
+
+  // ── Agent Persona (New) ──
+  agentPersona: {
+    list: (role?: string) =>
+      request<{ personas: import('../types').AgentPersonaProfile[] }>(`/persona/list${role ? `?role=${role}` : ''}`),
+    getActive: () =>
+      request<import('../types').AgentPersonaProfile>('/persona/active'),
+    activate: (personaId: string) =>
+      request<{ success: boolean; active: import('../types').AgentPersonaProfile | null }>('/persona/activate', { method: 'POST', body: JSON.stringify({ persona_id: personaId }) }),
+    match: (task: string) =>
+      request<import('../types').AgentPersonaProfile>(`/persona/match?task=${encodeURIComponent(task)}`),
+    create: (data: { name: string; description: string; traits: Record<string, number>; style?: string; decision?: string; role?: string }) =>
+      request<import('../types').AgentPersonaProfile>('/persona/create', { method: 'POST', body: JSON.stringify(data) }),
+    stats: () =>
+      request<import('../types').PersonaStats>('/persona/stats'),
+  },
+
+  // ── Agent Governance ──
+  governance: {
+    stats: () =>
+      request<import('../types').GovernanceStats>('/governance/stats'),
+    approvals: (agentId?: string) => {
+      const qs = agentId ? `?agent_id=${agentId}` : '';
+      return request<{ approvals: import('../types').ApprovalRequest[] }>(`/governance/approvals${qs}`);
+    },
+    approve: (requestId: string) =>
+      request<{ success: boolean; approval: import('../types').ApprovalRequest }>(`/governance/approvals/${requestId}/approve`, { method: 'POST' }),
+    deny: (requestId: string) =>
+      request<{ success: boolean; approval: import('../types').ApprovalRequest }>(`/governance/approvals/${requestId}/deny`, { method: 'POST' }),
+    createPolicy: (data: {
+      name: string; description?: string; category?: string; level?: string; action?: string;
+      tool_patterns?: string[]; file_patterns?: string[]; domain_patterns?: string[];
+      max_tokens_per_call?: number; max_tokens_per_session?: number;
+      max_cost_per_session?: number; max_tool_calls_per_session?: number;
+      require_approval_above_cost?: number; priority?: number;
+    }) =>
+      request<{ rule_id: string; name: string }>('/governance/policies', { method: 'POST', body: JSON.stringify(data) }),
+    evaluate: (data: { context: Record<string, unknown>; agent_id?: string; session_id?: string }) =>
+      request<import('../types').GovernanceEvaluation>('/governance/evaluate', { method: 'POST', body: JSON.stringify(data) }),
+    budget: (agentId: string) =>
+      request<import('../types').BudgetStatus>(`/governance/budget/${agentId}`),
+    audit: (limit = 50) =>
+      request<{ audit_log: Array<Record<string, unknown>> }>(`/governance/audit?limit=${limit}`),
+  },
+
+  // ── Smart Router ──
+  smartRouter: {
+    stats: () =>
+      request<import('../types').SmartRouterStats>('/smart-router/stats'),
+    select: (data: { prompt: string; provider?: string; require_tools?: boolean }) =>
+      request<import('../types').RoutingDecision>('/smart-router/select', { method: 'POST', body: JSON.stringify(data) }),
+    analyze: (prompt: string) =>
+      request<import('../types').ComplexityAnalysis>('/smart-router/analyze', { method: 'POST', body: JSON.stringify({ prompt }) }),
+    costSavings: () =>
+      request<{ total_savings: number; per_model: Record<string, number>; total_routing_decisions: number }>('/smart-router/cost-savings'),
+    registerModel: (data: { provider: string; model_name: string; tier: string; cost_per_1k_tokens?: number; max_tokens?: number; supports_tools?: boolean; supports_vision?: boolean; latency_ms?: number }) =>
+      request<{ registered: boolean }>('/smart-router/register-model', { method: 'POST', body: JSON.stringify(data) }),
+  },
+
+  // ── Identity Core ──
+  identityCore: {
+    stats: () =>
+      request<import('../types').IdentityRegistryStats>('/identity-core/stats'),
+    profile: (agentId: string) =>
+      request<import('../types').IdentityCoreProfile>(`/identity-core/${agentId}/profile`),
+    recordExperience: (agentId: string, data: { content: string; context?: Record<string, unknown>; importance?: number; emotional_valence?: number; agent_name?: string }) =>
+      request<{ entry: import('../types').EpisodicEntry; traits_updated: boolean }>(`/identity-core/${agentId}/experience`, { method: 'POST', body: JSON.stringify(data) }),
+    episodic: (agentId: string, keyword?: string, limit?: number) => {
+      const qs = new URLSearchParams();
+      if (keyword) qs.set('keyword', keyword);
+      if (limit) qs.set('limit', String(limit));
+      return request<{ entries: import('../types').EpisodicEntry[] }>(`/identity-core/${agentId}/episodic?${qs.toString()}`);
+    },
+    semantic: (agentId: string, concept?: string) => {
+      const qs = concept ? `?concept=${encodeURIComponent(concept)}` : '';
+      return request<{ nodes: import('../types').SemanticNode[] }>(`/identity-core/${agentId}/semantic${qs}`);
+    },
+    learnPattern: (agentId: string, data: { pattern_type: string; trigger_conditions: string[]; action_sequence: string[] }) =>
+      request<import('../types').ProceduralPattern>(`/identity-core/${agentId}/pattern`, { method: 'POST', body: JSON.stringify(data) }),
+    updateTrait: (agentId: string, data: { name: string; delta: number; confidence_delta?: number }) =>
+      request<{ updated: boolean }>(`/identity-core/${agentId}/trait`, { method: 'POST', body: JSON.stringify(data) }),
+  },
+
+  // ── WorkSpace Manager (New) ──
+  workspaceManager: {
+    stats: () =>
+      request<import('../types').WorkSpaceManagerStats>('/workspace-manager/stats'),
+    list: () =>
+      request<{ workspaces: Array<import('../types').WorkSpaceManagerStats['workspaces'][0]> }>('/workspace-manager/list'),
+    create: (data: { name: string; description?: string; isolate_files?: boolean; isolate_memory?: boolean; isolate_skills?: boolean; tags?: string[] }) =>
+      request<{ workspace: import('../types').WorkSpaceManagerConfig }>('/workspace-manager/create', { method: 'POST', body: JSON.stringify(data) }),
+    activate: (wsId: string) =>
+      request<{ success: boolean }>('/workspace-manager/activate', { method: 'POST', body: JSON.stringify({ workspace_id: wsId }) }),
+    delete: (wsId: string) =>
+      request<{ deleted: boolean }>('/workspace-manager/delete', { method: 'POST', body: JSON.stringify({ workspace_id: wsId }) }),
+    get: (wsId: string) =>
+      request<import('../types').WorkSpaceManagerConfig>(`/workspace-manager/${wsId}`),
+    writeFile: (wsId: string, path: string, content: string) =>
+      request<{ success: boolean; path: string; size: number }>(`/workspace-manager/${wsId}/file`, { method: 'POST', body: JSON.stringify({ path, content }) }),
+    readFile: (wsId: string, path: string) =>
+      request<{ success: boolean; path: string; content: string }>(`/workspace-manager/${wsId}/file/read`, { method: 'POST', body: JSON.stringify({ path }) }),
+    listFiles: (wsId: string, prefix?: string) => {
+      const qs = prefix ? `?prefix=${encodeURIComponent(prefix)}` : '';
+      return request<{ files: Array<{ path: string; size: number; modified_at: string }> }>(`/workspace-manager/${wsId}/files${qs}`);
+    },
+    addMemory: (wsId: string, key: string, value: unknown, tags?: string[]) =>
+      request<{ success: boolean; key: string }>(`/workspace-manager/${wsId}/memory`, { method: 'POST', body: JSON.stringify({ key, value, tags }) }),
+    listMemories: (wsId: string, tag?: string) => {
+      const qs = tag ? `?tag=${encodeURIComponent(tag)}` : '';
+      return request<{ memories: Array<Record<string, unknown>> }>(`/workspace-manager/${wsId}/memories${qs}`);
+    },
+    addSkill: (wsId: string, name: string, definition: Record<string, unknown>) =>
+      request<{ success: boolean; name: string }>(`/workspace-manager/${wsId}/skill`, { method: 'POST', body: JSON.stringify({ name, definition }) }),
+    snapshot: (wsId: string, description?: string) =>
+      request<import('../types').WorkSpaceManagerSnapshot>(`/workspace-manager/${wsId}/snapshot`, { method: 'POST', body: JSON.stringify({ description }) }),
+    wsStats: (wsId: string) =>
+      request<Record<string, unknown>>(`/workspace-manager/${wsId}/stats`),
+  },
+
+  // ── Agent Mesh (New) ──
+  agentMesh: {
+    status: () =>
+      request<import('../types').MeshStatus>('/mesh/status'),
+    nodes: () =>
+      request<{ nodes: import('../types').MeshNodeStatus[]; total: number }>('/mesh/nodes'),
+    getNode: (agentId: string) =>
+      request<import('../types').MeshNodeStatus>(`/mesh/nodes/${agentId}`),
+    registerNode: (data: { agent_id: string; agent_name: string; role?: string; capabilities?: string[]; max_concurrent_tasks?: number; tags?: string[] }) =>
+      request<import('../types').MeshNodeStatus>('/mesh/nodes/register', { method: 'POST', body: JSON.stringify(data) }),
+    pauseNode: (agentId: string) =>
+      request<{ status: string; agent_id: string }>(`/mesh/nodes/${agentId}/pause`, { method: 'POST' }),
+    resumeNode: (agentId: string) =>
+      request<{ status: string; agent_id: string }>(`/mesh/nodes/${agentId}/resume`, { method: 'POST' }),
+    submitTask: (data: { title: string; description?: string; priority?: string; target_agent_id?: string; context?: Record<string, unknown> }) =>
+      request<{ task_id: string; status: string }>('/mesh/tasks/submit', { method: 'POST', body: JSON.stringify(data) }),
+    processTasks: () =>
+      request<{ processed: number; results: Array<{ task_id: string; assigned_to: string; status: string }> }>('/mesh/tasks/process', { method: 'POST' }),
+    pendingTasks: () =>
+      request<{ pending: number; tasks: import('../types').MeshTask[] }>('/mesh/tasks/pending'),
+    delegate: (fromAgentId: string, toAgentId: string, data: { title: string; description?: string; priority?: string; context?: Record<string, unknown> }) =>
+      request<{ delegated: boolean; task_id: string }>('/mesh/delegate', { method: 'POST', body: JSON.stringify({ from_agent_id: fromAgentId, to_agent_id: toAgentId, ...data }) }),
+    setStrategy: (strategy: string) =>
+      request<{ strategy: string }>('/mesh/strategy', { method: 'PUT', body: JSON.stringify({ strategy }) }),
+    events: (limit = 50) =>
+      request<{ events: import('../types').MeshEvent[]; total: number }>(`/mesh/events?limit=${limit}`),
+  },
+
+  // ── Learning Loop (New) ──
+  learningLoop: {
+    status: () =>
+      request<import('../types').LearningLoopStatus>('/learning/status'),
+    observe: (data: { observation_type: string; agent_id: string; session_id?: string; content?: Record<string, unknown>; outcome?: string; metadata?: Record<string, unknown> }) =>
+      request<{ observation_id: string; observation_type: string; recorded: boolean }>('/learning/observe', { method: 'POST', body: JSON.stringify(data) }),
+    extract: (agentId?: string, sessionId?: string) =>
+      request<{ patterns: import('../types').LearningPattern[]; total: number }>('/learning/extract', { method: 'POST', body: JSON.stringify({ agent_id: agentId, session_id: sessionId }) }),
+    compound: (agentId: string) =>
+      request<{ skill_id: string; name: string; confidence: number; steps: number } | { error: string }>('/learning/compound', { method: 'POST', body: JSON.stringify({ agent_id: agentId }) }),
+    evolve: (agentId: string) =>
+      request<{ improvements: Array<Record<string, unknown>>; agent_id: string }>('/learning/evolve', { method: 'POST', body: JSON.stringify({ agent_id: agentId }) }),
+    nudges: () =>
+      request<{ nudges: import('../types').LearningNudge[]; total: number }>('/learning/nudges'),
+    dismissNudge: (nudgeId: string) =>
+      request<{ dismissed: boolean; nudge_id: string }>(`/learning/nudges/${nudgeId}/dismiss`, { method: 'POST' }),
+    actOnNudge: (nudgeId: string) =>
+      request<{ acted_upon: boolean; nudge_id: string }>(`/learning/nudges/${nudgeId}/act`, { method: 'POST' }),
+    runCycle: (agentId: string, sessionId?: string) =>
+      request<Record<string, unknown>>('/learning/cycle', { method: 'POST', body: JSON.stringify({ agent_id: agentId, session_id: sessionId }) }),
+    skills: (tag?: string) => {
+      const qs = tag ? `?tag=${encodeURIComponent(tag)}` : '';
+      return request<{ skills: import('../types').LearningSkill[]; total: number }>(`/learning/skills${qs}`);
+    },
+    patterns: (patternType?: string, minConfidence?: number) => {
+      const params = new URLSearchParams();
+      if (patternType) params.set('pattern_type', patternType);
+      if (minConfidence !== undefined) params.set('min_confidence', String(minConfidence));
+      const qs = params.toString();
+      return request<{ patterns: import('../types').LearningPattern[]; total: number }>(`/learning/patterns${qs ? '?' + qs : ''}`);
+    },
+  },
 };
