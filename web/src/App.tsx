@@ -45,6 +45,16 @@ import { PlatformHubPanel } from './components/PlatformHubPanel';
 import { CostAnalyticsPanel } from './components/CostAnalyticsPanel';
 import { WorkspacePanel } from './components/WorkspacePanel';
 import { AgentDashboard } from './components/AgentDashboard';
+import { GovernancePanel } from './components/GovernancePanel';
+import { SmartRouterPanel } from './components/SmartRouterPanel';
+import { AgentMeshPanel } from './components/AgentMeshPanel';
+import { LearningLoopPanel } from './components/LearningLoopPanel';
+import { IdentityCorePanel } from './components/IdentityCorePanel';
+import { ExperiencePanel } from './components/ExperiencePanel';
+import { CollabSpacePanel } from './components/CollabSpacePanel';
+import { ContextEnginePanel } from './components/ContextEnginePanel';
+import { AutomationPanel } from './components/AutomationPanel';
+import { SkillFabricPanel } from './components/SkillFabricPanel';
 import { ProactiveDiscoveryPanel } from './components/ProactiveDiscoveryPanel';
 import { MetaCognitionPanel } from './components/MetaCognitionPanel';
 import { EvolutionPanel } from './components/EvolutionPanel';
@@ -480,6 +490,15 @@ export default function App() {
         {activeTab === 'costs' && <CostAnalyticsPanel />}
         {activeTab === 'workspaces' && <WorkspacePanel />}
         {activeTab === 'agentdashboard' && <AgentDashboard />}
+        {activeTab === 'governance' && <GovernancePanel />}
+        {activeTab === 'smartrouter' && <SmartRouterPanel />}
+{activeTab === 'agentmesh' && <AgentMeshPanel />}
+{activeTab === 'learningloop' && <LearningLoopPanel />}
+{activeTab === 'experience' && <ExperiencePanel />}
+{activeTab === 'collabspace' && <CollabSpacePanel />}
+{activeTab === 'contextengine' && <ContextEnginePanel />}
+{activeTab === 'automation' && <AutomationPanel />}
+{activeTab === 'skillfabric' && <SkillFabricPanel />}
         {activeTab === 'proactive' && selectedAgent && <ProactiveDiscoveryPanel agent={selectedAgent} />}
         {activeTab === 'metacognition' && selectedAgent && <MetaCognitionPanel agent={selectedAgent} />}
         {activeTab === 'evolution' && selectedAgent && <EvolutionPanel agent={selectedAgent} />}
@@ -573,11 +592,14 @@ export default function App() {
           {activeTab === 'knowledge' && (
             <KnowledgeBasePanel agent={selectedAgent} />
           )}
+          {activeTab === 'identitycore' && (
+            <IdentityCorePanel agent={selectedAgent} />
+          )}
       </>
     )}
 
         {/* Empty state — no agent and no global panel selected */}
-        {!selectedAgent && !['overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend'].includes(activeTab) && (
+        {!selectedAgent && !['overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend', 'agentcore', 'synthesis', 'intelligence', 'runtimepanel', 'skillcompiler', 'conversationsearch', 'governance', 'smartrouter', 'agentmesh', 'learningloop', 'experience', 'collabspace', 'contextengine', 'automation', 'skillfabric'].includes(activeTab) && (
           <div className="main-empty">
             <div className="main-empty-icon">B</div>
             <h2>Welcome to Buddy</h2>
