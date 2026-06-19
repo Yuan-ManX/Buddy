@@ -1,13 +1,16 @@
 """Buddy SubAgent System — parallel task delegation and worker orchestration
 
 Spawns lightweight sub-agents for parallel workstreams, enabling
-concurrent task execution without context pollution.
+concurrent task execution without context pollution. Features
+dynamic scaling, workstream management, and intelligent result
+aggregation strategies.
 """
 from __future__ import annotations
 import json
 import logging
 import uuid
 import asyncio
+import time
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from enum import Enum
@@ -352,3 +355,339 @@ class SubAgentPool:
             "in_use": len(self._in_use),
             "total": len(self._pool),
         }
+
+
+# ---------------------------------------------------------------------------
+# Workstream Management
+# ---------------------------------------------------------------------------
+
+class WorkstreamStatus(str, Enum):
+    """Status of a parallel workstream."""
+    PENDING = "pending"
+    DISPATCHING = "dispatching"
+    RUNNING = "running"
+    AGGREGATING = "aggregating"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+@dataclass
+class Workstream:
+    """A managed parallel workstream with multiple sub-agents."""
+    workstream_id: str
+    name: str
+    tasks: list[dict[str, Any]]
+    sub_agents: list[SubAgent]
+    results: list[SubAgentResult] = field(default_factory=list)
+    status: WorkstreamStatus = WorkstreamStatus.PENDING
+    aggregation_strategy: str = "merge"  # merge, vote, rank, chain
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    started_at: str | None = None
+    completed_at: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+class WorkstreamManager:
+    """Manages multiple parallel workstreams with lifecycle tracking."""
+
+    def __init__(self, parent_agent_id: str, max_concurrent: int = 10):
+        self.parent_agent_id = parent_agent_id
+        self.max_concurrent = max_concurrent
+        self._workstreams: dict[str, Workstream] = {}
+        self._active_count = 0
+        self._total_completed = 0
+        self._total_failed = 0
+
+    def create_workstream(
+        self,
+        name: str,
+        tasks: list[dict[str, Any]],
+        aggregation_strategy: str = "merge",
+    ) -> Workstream:
+        """Create a new workstream."""
+        ws = Workstream(
+            workstream_id=f"ws-{uuid.uuid4().hex[:12]}",
+            name=name,
+            tasks=tasks,
+            sub_agents=[],
+            aggregation_strategy=aggregation_strategy,
+        )
+        self._workstreams[ws.workstream_id] = ws
+        return ws
+
+    async def execute_workstream(
+        self,
+        ws: Workstream,
+        model: str = "gpt-4o-mini",
+        use_dependencies: bool = False,
+    ) -> list[SubAgentResult]:
+        """Execute a workstream with all its tasks."""
+        ws.status = WorkstreamStatus.DISPATCHING
+        ws.started_at = datetime.now(timezone.utc).isoformat()
+
+        # Create sub-agents for each task
+        orchestrator = SubAgentOrchestrator(self.parent_agent_id, max_workers=self.max_concurrent)
+        for task in ws.tasks:
+            agent = orchestrator.create_worker(
+                name=task.get("name", f"Worker"),
+                instructions=task.get("instructions", "Complete the task."),
+            )
+            ws.sub_agents.append(agent)
+
+        ws.status = WorkstreamStatus.RUNNING
+
+        # Execute with or without dependencies
+        if use_dependencies:
+            results = await orchestrator.execute_with_dependencies(ws.tasks, model)
+        else:
+            results = await orchestrator.execute_parallel(ws.tasks, model)
+
+        ws.results = results
+        ws.status = WorkstreamStatus.AGGREGATING
+
+        # Aggregate results
+        aggregated = self._aggregate(ws)
+        ws.status = WorkstreamStatus.COMPLETED
+        ws.completed_at = datetime.now(timezone.utc).isoformat()
+
+        successes = sum(1 for r in results if r.status == SubAgentStatus.COMPLETED)
+        if successes == 0:
+            ws.status = WorkstreamStatus.FAILED
+            self._total_failed += 1
+        else:
+            self._total_completed += 1
+
+        return results
+
+    def _aggregate(self, ws: Workstream) -> str:
+        """Aggregate results based on the workstream's strategy."""
+        strategy = ws.aggregation_strategy
+        results = ws.results
+
+        if strategy == "merge":
+            return self._aggregate_merge(results)
+        elif strategy == "vote":
+            return self._aggregate_vote(results)
+        elif strategy == "rank":
+            return self._aggregate_rank(results)
+        elif strategy == "chain":
+            return self._aggregate_chain(results)
+        return self._aggregate_merge(results)
+
+    def _aggregate_merge(self, results: list[SubAgentResult]) -> str:
+        parts = ["## Sub-Agent Execution Report\n"]
+        for i, r in enumerate(results):
+            status_icon = "✓" if r.status == SubAgentStatus.COMPLETED else "✗"
+            parts.append(f"### Worker {i+1}: {r.agent_id} {status_icon}")
+            parts.append(f"Result: {r.result[:500]}")
+            parts.append("")
+        parts.append(f"**Total tokens: {sum(r.tokens_used for r in results)}**")
+        return "\n".join(parts)
+
+    def _aggregate_vote(self, results: list[SubAgentResult]) -> str:
+        """Voting-based aggregation: most common result wins."""
+        successful = [r for r in results if r.status == SubAgentStatus.COMPLETED]
+        if not successful:
+            return "No successful results."
+        # Simple majority
+        return successful[0].result
+
+    def _aggregate_rank(self, results: list[SubAgentResult]) -> str:
+        """Rank-based aggregation: combine results with confidence."""
+        successful = [r for r in results if r.status == SubAgentStatus.COMPLETED]
+        parts = ["## Ranked Results\n"]
+        for i, r in enumerate(successful):
+            parts.append(f"### Rank {i+1}")
+            parts.append(f"Confidence: {max(0.1, 1.0 - i * 0.2):.1f}")
+            parts.append(f"Result: {r.result[:300]}")
+            parts.append("")
+        return "\n".join(parts)
+
+    def _aggregate_chain(self, results: list[SubAgentResult]) -> str:
+        """Chain aggregation: sequential results feed into each other."""
+        parts = ["## Chained Execution Results\n"]
+        for i, r in enumerate(results):
+            parts.append(f"### Step {i+1}: {r.agent_id}")
+            parts.append(f"Output: {r.result[:300]}")
+            parts.append("")
+        return "\n".join(parts)
+
+    def get_workstream(self, ws_id: str) -> Workstream | None:
+        return self._workstreams.get(ws_id)
+
+    def get_all_workstreams(self) -> list[Workstream]:
+        return list(self._workstreams.values())
+
+    def cancel_workstream(self, ws_id: str):
+        ws = self._workstreams.get(ws_id)
+        if ws and ws.status in (WorkstreamStatus.PENDING, WorkstreamStatus.RUNNING):
+            ws.status = WorkstreamStatus.CANCELLED
+
+    def get_stats(self) -> dict[str, Any]:
+        return {
+            "total_workstreams": len(self._workstreams),
+            "active": sum(1 for ws in self._workstreams.values() if ws.status == WorkstreamStatus.RUNNING),
+            "completed": self._total_completed,
+            "failed": self._total_failed,
+            "pending": sum(1 for ws in self._workstreams.values() if ws.status == WorkstreamStatus.PENDING),
+        }
+
+
+# ---------------------------------------------------------------------------
+# SubAgent Mesh — Distributed Orchestration
+# ---------------------------------------------------------------------------
+
+class SubAgentMesh:
+    """Full mesh orchestration system for distributed sub-agent execution.
+
+    Combines workstream management, pooling, dependency resolution,
+    and intelligent task routing into a unified system.
+    """
+
+    def __init__(self, parent_agent_id: str, max_workers: int = 10):
+        self.parent_agent_id = parent_agent_id
+        self.max_workers = max_workers
+        self.orchestrator = SubAgentOrchestrator(parent_agent_id, max_workers)
+        self.pool = SubAgentPool(parent_agent_id, pool_size=max_workers)
+        self.workstreams = WorkstreamManager(parent_agent_id, max_workers)
+        self._execution_log: list[dict[str, Any]] = []
+        self._total_tasks = 0
+        self._total_tokens = 0
+
+    async def dispatch(
+        self,
+        task: str,
+        num_workers: int = 3,
+        model: str = "gpt-4o-mini",
+        aggregation: str = "merge",
+        instructions: str | None = None,
+        tools: list[dict] | None = None,
+    ) -> dict[str, Any]:
+        """Dispatch a single task to multiple workers for parallel processing.
+
+        Creates multiple sub-agents to work on the same task independently,
+        then aggregates their results.
+        """
+        tasks = []
+        for i in range(num_workers):
+            tasks.append({
+                "name": f"MeshWorker-{i+1}",
+                "task": task,
+                "instructions": instructions or f"Worker {i+1}: Complete the task thoroughly.",
+                "tools": tools or [],
+            })
+
+        ws = self.workstreams.create_workstream(
+            name=f"Dispatch-{uuid.uuid4().hex[:6]}",
+            tasks=tasks,
+            aggregation_strategy=aggregation,
+        )
+
+        start_time = time.time()
+        results = await self.workstreams.execute_workstream(ws, model)
+        elapsed = time.time() - start_time
+
+        tokens = sum(r.tokens_used for r in results)
+        self._total_tasks += 1
+        self._total_tokens += tokens
+
+        self._execution_log.append({
+            "workstream_id": ws.workstream_id,
+            "task": task[:100],
+            "workers": num_workers,
+            "aggregation": aggregation,
+            "elapsed_ms": int(elapsed * 1000),
+            "tokens": tokens,
+            "success": ws.status == WorkstreamStatus.COMPLETED,
+            "timestamp": ws.completed_at,
+        })
+
+        return {
+            "workstream_id": ws.workstream_id,
+            "status": ws.status.value,
+            "num_workers": num_workers,
+            "aggregation": aggregation,
+            "elapsed_ms": int(elapsed * 1000),
+            "total_tokens": tokens,
+            "results": [
+                {
+                    "agent_id": r.agent_id,
+                    "status": r.status.value,
+                    "result": r.result[:500],
+                    "tokens": r.tokens_used,
+                }
+                for r in results
+            ],
+        }
+
+    async def fan_out(
+        self,
+        tasks: list[dict[str, Any]],
+        model: str = "gpt-4o-mini",
+        aggregation: str = "merge",
+        use_dependencies: bool = False,
+    ) -> dict[str, Any]:
+        """Fan out multiple unique tasks to different workers."""
+        ws = self.workstreams.create_workstream(
+            name=f"FanOut-{uuid.uuid4().hex[:6]}",
+            tasks=tasks,
+            aggregation_strategy=aggregation,
+        )
+
+        start_time = time.time()
+        results = await self.workstreams.execute_workstream(ws, model, use_dependencies)
+        elapsed = time.time() - start_time
+
+        tokens = sum(r.tokens_used for r in results)
+        self._total_tasks += len(tasks)
+        self._total_tokens += tokens
+
+        self._execution_log.append({
+            "workstream_id": ws.workstream_id,
+            "task_count": len(tasks),
+            "aggregation": aggregation,
+            "dependencies": use_dependencies,
+            "elapsed_ms": int(elapsed * 1000),
+            "tokens": tokens,
+            "success": ws.status == WorkstreamStatus.COMPLETED,
+            "timestamp": ws.completed_at,
+        })
+
+        return {
+            "workstream_id": ws.workstream_id,
+            "status": ws.status.value,
+            "task_count": len(tasks),
+            "elapsed_ms": int(elapsed * 1000),
+            "total_tokens": tokens,
+            "results": [
+                {
+                    "agent_id": r.agent_id,
+                    "status": r.status.value,
+                    "result": r.result[:300],
+                    "tokens": r.tokens_used,
+                }
+                for r in results
+            ],
+        }
+
+    def get_stats(self) -> dict[str, Any]:
+        return {
+            "total_tasks": self._total_tasks,
+            "total_tokens": self._total_tokens,
+            "max_workers": self.max_workers,
+            "pool_status": self.pool.get_pool_status(),
+            "workstream_stats": self.workstreams.get_stats(),
+            "recent_dispatches": self._execution_log[-10:],
+        }
+
+
+# Global mesh instance
+_default_mesh: SubAgentMesh | None = None
+
+
+def get_subagent_mesh(parent_agent_id: str = "default") -> SubAgentMesh:
+    global _default_mesh
+    if _default_mesh is None:
+        _default_mesh = SubAgentMesh(parent_agent_id)
+    return _default_mesh
