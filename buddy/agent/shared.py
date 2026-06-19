@@ -63,6 +63,25 @@ from agent.collab_space import CollaborationSpace, CollaborationRoom, Collaborat
 from agent.context_engine import ContextEngine, ContextAssembler, ContextCompressor, ContextInjector, ContextWindow, ContextAnalytics, ContextSource, ContextPriority, CompressionStrategy, context_engine
 from agent.automation_core import AutomationCore, AutomationRegistry, CronScheduler, AutomationRunner, EventWatcher, AutomationAnalytics, AutomationType, TriggerType, AutomationLifecycle, automation_core
 from agent.skill_fabric import SkillFabric, SkillForge, SkillBundleManager, SkillMarket, SkillComposer, SkillAnalytics, SkillType, SkillLifecycleStatus, PricingModel, skill_fabric
+from agent.user_model import UserModelEngine, user_model_engine, TraitDimension, ConfidenceLevel, UserTrait, UserProfile, InteractionSnapshot
+from agent.evolving_skills import SelfEvolvingSkillRegistry, EvolvingSkill, SkillVariant, SkillEvolutionStage, VariantStrategy, ExecutionRecord, evolving_skills
+from agent.agent_protocol import ProtocolEngine, MessageRouter, EventBus, ComponentRegistry, StateSynchronizer, ProtocolMessage, MessageType, MessagePriority, ComponentState, ComponentInfo, protocol_engine
+from agent.subagent import SubAgentMesh, Workstream, WorkstreamStatus, WorkstreamManager, get_subagent_mesh
+from agent.sandbox import SandboxEngine, SandboxSession, SandboxConfig, SandboxPolicy, get_sandbox_engine
+from agent.streaming import StreamingEngine, StreamSession, StreamEvent, StreamEventType, get_streaming_engine
+from agent.tool_executor import ToolExecutor, ToolRegistry, ToolDefinition, ToolCategory, ToolRisk, ToolExecution, get_tool_executor
+from agent.browser_agent import BrowserAgent, BrowserSession, BrowserAction, BrowserState, get_browser_agent
+from agent.terminal_agent import TerminalAgent, TerminalSession, TerminalConfig, TerminalMode, TerminalResult, get_terminal_agent
+from agent.plan_executor import PlanExecutor, ExecutionPlan, PlanStep, PlanStatus, StepType, PlanGenerator, get_plan_executor
+from agent.model_orchestrator import ModelOrchestrator, ModelRouter, ModelConfig, ModelProvider, ModelCapability, ModelRequest, ModelResponse, get_model_orchestrator
+from agent.deployment import DeploymentPipeline, Deployment, DeploymentConfig, DeploymentStatus, DeploymentTarget, get_deployment_pipeline
+from agent.telemetry import TelemetryEngine, MetricRegistry, TraceCollector, MetricType, TraceLevel, TraceSpan, get_telemetry_engine
+from agent.mcp_connector import MCPConnector, MCPServerConnection, MCPServerConfig, MCPTool, MCPResource, MCPConnectionState, MCPTransport, get_mcp_connector
+from agent.integration_hub import IntegrationHub, Integration, IntegrationConfig, IntegrationType, AuthMethod, get_integration_hub
+from agent.product_composer import ProductComposer, ProductDefinition, ProductComponent, ComponentType, ProductStatus, get_product_composer
+from agent.agent_orchestrator import AgentOrchestrator, SubAgentProfile, Workstream, WorkstreamType, Squad, AgentLifecycle, agent_orchestrator
+from agent.dream_mode import DreamMode, DreamSession, DreamPhase, MemoryEntry, ProactiveTask, dream_mode
+from agent.white_memory import WhiteMemory, WhiteMemoryEntry, MemoryCategory, MemoryLifecycleStage, MemoryProvenance, MemoryAuditEntry, white_memory
 
 orchestrator = Orchestrator()
 skills_registry = SkillsRegistry()
@@ -86,3 +105,22 @@ intelligence = AgentIntelligence(IntelligenceConfig(
     enable_experience_replay=True,
     enable_strategy_adaptation=True,
 ))
+
+# New core module instances
+sandbox_engine = get_sandbox_engine()
+streaming_engine = get_streaming_engine()
+tool_executor = get_tool_executor()
+browser_agent = get_browser_agent()
+terminal_agent = get_terminal_agent()
+plan_executor = get_plan_executor()
+model_orchestrator = get_model_orchestrator()
+deployment_pipeline = get_deployment_pipeline()
+telemetry_engine = get_telemetry_engine()
+mcp_connector = get_mcp_connector()
+integration_hub = get_integration_hub()
+product_composer = get_product_composer()
+
+# New agent orchestration and memory modules
+agent_orchestrator_instance = agent_orchestrator
+dream_mode_instance = dream_mode
+white_memory_instance = white_memory
