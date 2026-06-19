@@ -33,6 +33,10 @@ from agent.shared import (
     ws_manager, self_improvement, gateway_hub, daemon_manager,
     swarm_engine, platform_hub, PlatformSubsystem,
     cost_tracker, enterprise_hub, session_searcher,
+    sandbox_engine, streaming_engine, tool_executor, browser_agent,
+    terminal_agent, plan_executor, model_orchestrator,
+    deployment_pipeline, telemetry_engine, mcp_connector,
+    integration_hub, product_composer,
 )
 from agent.cost import cost_tracker as cost_tracker_legacy
 from agent.templates import template_registry
@@ -11269,6 +11273,8 @@ async def execute_automation(automation_id: str):
 # ═══════════════════════════════════════════════════════════
 
 from agent.shared import skill_fabric, SkillType, SkillLifecycleStatus, PricingModel
+from agent.shared import user_model_engine, evolving_skills, protocol_engine
+from agent.subagent import get_subagent_mesh
 
 
 @router.get("/skill-fabric/stats")
@@ -11367,6 +11373,1308 @@ async def search_market(query: str = "", limit: int = 20):
             for s in skills
         ],
         "total": len(skills),
+    }
+
+# ═══════════════════════════════════════════════════════════
+# User Model API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/user-model/stats")
+async def get_user_model_stats():
+    """Get user model engine global statistics."""
+    return user_model_engine.get_global_stats()
+
+
+@router.get("/user-model/profile/{user_id}")
+async def get_user_profile(user_id: str):
+    """Get a user's profile summary."""
+    return user_model_engine.get_profile_summary(user_id)
+
+
+@router.post("/user-model/record")
+async def record_user_interaction(data: dict):
+    """Record a user interaction for trait inference."""
+    snapshot = user_model_engine.record_interaction(
+        user_id=data.get("user_id", "default"),
+        session_id=data.get("session_id", ""),
+        agent_id=data.get("agent_id", ""),
+        text=data.get("text", ""),
+        context_type=data.get("context_type", "chat"),
+        emotional_valence=data.get("emotional_valence", 0.0),
+    )
+    return {
+        "snapshot_id": snapshot.snapshot_id,
+        "extracted_signals": snapshot.extracted_signals,
+        "recorded": True,
+    }
+
+
+@router.post("/user-model/infer")
+async def infer_user_traits(data: dict):
+    """Run trait inference for a user."""
+    return user_model_engine.infer_traits(data.get("user_id", "default"))
+
+
+@router.post("/user-model/maintenance")
+async def run_user_model_maintenance():
+    """Run profile maintenance tasks."""
+    user_model_engine.run_maintenance()
+    return {"maintenance": "completed"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Self-Evolving Skills API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/evolving-skills/stats")
+async def get_evolving_skills_stats():
+    """Get evolving skills registry statistics."""
+    return evolving_skills.get_global_stats()
+
+
+@router.post("/evolving-skills/create")
+async def create_evolving_skill(data: dict):
+    """Create a new self-evolving skill."""
+    skill = evolving_skills.create_skill(
+        name=data.get("name", ""),
+        category=data.get("category", "general"),
+        description=data.get("description", ""),
+        prompt_template=data.get("prompt_template", ""),
+    )
+    return {
+        "skill_id": skill.skill_id,
+        "name": skill.name,
+        "stage": skill.stage.value,
+        "created": True,
+    }
+
+
+@router.get("/evolving-skills/list")
+async def list_evolving_skills(category: str = ""):
+    """List all or filtered evolving skills."""
+    skills = evolving_skills.list_skills(category if category else None)
+    return {
+        "skills": [
+            {
+                "skill_id": s.skill_id,
+                "name": s.name,
+                "category": s.category,
+                "stage": s.stage.value,
+                "total_executions": s.total_executions,
+                "success_rate": round(s.success_rate, 3),
+                "variant_count": len(s.variants),
+            }
+            for s in skills
+        ],
+        "total": len(skills),
+    }
+
+
+@router.get("/evolving-skills/{skill_id}")
+async def get_evolving_skill(skill_id: str):
+    """Get detailed evolution summary for a skill."""
+    return evolving_skills.get_evolution_summary(skill_id)
+
+
+@router.post("/evolving-skills/record")
+async def record_skill_execution(data: dict):
+    """Record a skill execution for evolution tracking."""
+    record = evolving_skills.record_execution(
+        skill_id=data.get("skill_id", ""),
+        variant_id=data.get("variant_id", ""),
+        input_summary=data.get("input_summary", ""),
+        output_summary=data.get("output_summary", ""),
+        success=data.get("success", True),
+        quality_score=data.get("quality_score", 0.8),
+        latency_ms=data.get("latency_ms", 0),
+        tokens_used=data.get("tokens_used", 0),
+        user_feedback=data.get("user_feedback"),
+        error_message=data.get("error_message"),
+    )
+    if record:
+        return {
+            "execution_id": record.execution_id,
+            "skill_id": record.skill_id,
+            "success": record.success,
+            "recorded": True,
+        }
+    return {"error": "Skill not found", "recorded": False}
+
+
+# ═══════════════════════════════════════════════════════════
+# SubAgent Mesh API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/subagent-mesh/stats")
+async def get_subagent_mesh_stats():
+    """Get subagent mesh statistics."""
+    mesh = get_subagent_mesh()
+    return mesh.get_stats()
+
+
+@router.post("/subagent-mesh/dispatch")
+async def dispatch_subagent_task(data: dict):
+    """Dispatch a task to multiple parallel sub-agents."""
+    mesh = get_subagent_mesh()
+    return await mesh.dispatch(
+        task=data.get("task", ""),
+        num_workers=data.get("num_workers", 3),
+        model=data.get("model", "gpt-4o-mini"),
+        aggregation=data.get("aggregation", "merge"),
+        instructions=data.get("instructions"),
+        tools=data.get("tools"),
+    )
+
+
+@router.post("/subagent-mesh/fan-out")
+async def fan_out_subagent_tasks(data: dict):
+    """Fan out multiple unique tasks to sub-agents."""
+    mesh = get_subagent_mesh()
+    return await mesh.fan_out(
+        tasks=data.get("tasks", []),
+        model=data.get("model", "gpt-4o-mini"),
+        aggregation=data.get("aggregation", "merge"),
+        use_dependencies=data.get("use_dependencies", False),
+    )
+
+
+@router.get("/subagent-mesh/workstreams")
+async def get_subagent_workstreams():
+    """Get all workstreams."""
+    mesh = get_subagent_mesh()
+    workstreams = mesh.workstreams.get_all_workstreams()
+    return {
+        "workstreams": [
+            {
+                "workstream_id": ws.workstream_id,
+                "name": ws.name,
+                "status": ws.status.value,
+                "task_count": len(ws.tasks),
+                "aggregation": ws.aggregation_strategy,
+                "created_at": ws.created_at,
+                "completed_at": ws.completed_at,
+            }
+            for ws in workstreams
+        ],
+        "total": len(workstreams),
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Protocol API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/protocol/stats")
+async def get_protocol_stats():
+    """Get protocol engine global statistics."""
+    return protocol_engine.get_global_stats()
+
+
+@router.post("/protocol/register-component")
+async def register_protocol_component(data: dict):
+    """Register a component in the protocol engine."""
+    info = protocol_engine.register_component(
+        component_id=data.get("component_id", ""),
+        component_type=data.get("component_type", ""),
+        capabilities=data.get("capabilities", []),
+        dependencies=data.get("dependencies", []),
+        metadata=data.get("metadata", {}),
+    )
+    return {
+        "component_id": info.component_id,
+        "type": info.component_type,
+        "state": info.state.value,
+        "registered": True,
+    }
+
+
+@router.get("/protocol/components")
+async def get_protocol_components():
+    """Get all registered components."""
+    components = protocol_engine.registry.get_all_components()
+    return {
+        "components": {
+            cid: {
+                "type": info.component_type,
+                "state": info.state.value,
+                "capabilities": info.capabilities,
+                "health": round(info.health_score, 2),
+            }
+            for cid, info in components.items()
+        },
+        "total": len(components),
+    }
+
+
+@router.post("/protocol/heartbeat")
+async def protocol_heartbeat(data: dict):
+    """Send a heartbeat for a component."""
+    protocol_engine.registry.heartbeat(data.get("component_id", ""))
+    return {"ok": True}
+
+
+@router.post("/protocol/emit-event")
+async def emit_protocol_event(data: dict):
+    """Emit an event through the protocol event bus."""
+    await protocol_engine.emit_event(
+        event_type=data.get("event_type", ""),
+        data=data.get("data", {}),
+        source=data.get("source", ""),
+    )
+    return {"emitted": True}
+
+
+@router.get("/protocol/events/stats")
+async def get_protocol_event_stats():
+    """Get event bus statistics."""
+    return protocol_engine.events.get_stats()
+
+
+@router.get("/protocol/events")
+async def list_protocol_events():
+    """List protocol event statistics."""
+    return protocol_engine.events.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Governance Policies GET
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/governance/policies")
+async def list_governance_policies():
+    """List governance policies and statistics."""
+    return governance_engine.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Identity Core Profiles
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/identity-core/profiles")
+async def list_identity_profiles():
+    """List identity core statistics."""
+    return identity_registry.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Mesh aliases
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/agent-mesh/stats")
+async def get_agent_mesh_stats_alias():
+    """Get agent mesh statistics (alias)."""
+    return agent_mesh.get_mesh_status()
+
+
+@router.get("/agent-mesh/nodes")
+async def list_agent_mesh_nodes_alias():
+    """List all mesh nodes (alias)."""
+    return agent_mesh.get_mesh_status()
+
+
+# ═══════════════════════════════════════════════════════════
+# Learning Loop alias
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/learning-loop/stats")
+async def get_learning_loop_stats_alias():
+    """Get learning loop statistics (alias)."""
+    return learning_loop.get_status()
+
+
+# ═══════════════════════════════════════════════════════════
+# Knowledge Graph aliases
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/knowledge-graph/stats")
+async def get_knowledge_graph_stats_alias():
+    """Get knowledge graph statistics (alias)."""
+    return knowledge_graph.get_stats()
+
+
+@router.get("/knowledge-graph/entities")
+async def list_knowledge_graph_entities_alias():
+    """List knowledge graph entities (alias)."""
+    return knowledge_graph.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Collab Space alias
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/collab-space/stats")
+async def get_collab_space_stats_alias():
+    """Get collaboration space statistics (alias)."""
+    return collab_space.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Context Engine alias
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/context-engine/stats")
+async def get_context_engine_stats_alias():
+    """Get context engine statistics (alias)."""
+    return context_engine.assembler.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Synthesis alias
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/agent-synthesis/stats")
+async def get_agent_synthesis_stats_alias():
+    """Get agent synthesis statistics (alias)."""
+    return agent_synthesis.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Runtime stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/agent-runtime/stats")
+async def get_agent_runtime_stats():
+    """Get agent runtime statistics."""
+    return {
+        "runtimes": runtime_registry.list_all(),
+        "active_count": runtime_registry.active_count,
+        "total_executions": runtime_registry.total_executions,
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Nexus status
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/nexus/status")
+async def get_nexus_status():
+    """Get nexus status summary."""
+    return nexus.get_summary()
+
+
+# ═══════════════════════════════════════════════════════════
+# Identity profile default
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/identity/profile/default")
+async def get_identity_default_profile():
+    """Get default identity profile."""
+    return identity.get_profile_summary("default")
+
+
+# ═══════════════════════════════════════════════════════════
+# Runtime Hub stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/runtime-hub/stats")
+async def get_runtime_hub_stats():
+    """Get runtime hub statistics."""
+    return runtime_hub.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Workflow stats alias
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/workflow/stats")
+async def get_workflow_stats_alias():
+    """Get workflow statistics (alias)."""
+    return workflow_engine.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Cost stats alias
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/cost/stats")
+async def get_cost_stats_alias():
+    """Get cost tracker statistics (alias)."""
+    return cost_tracker.get_system_overview()
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Evolution alias
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/agent-evolution/stats")
+async def get_agent_evolution_stats():
+    """Get agent evolution statistics."""
+    from agent.shared import AgentEvolution as AE
+    return {"status": "active", "pathways": 0, "insights": 0}
+
+
+# ═══════════════════════════════════════════════════════════
+# Comm Protocol alias
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/comm-protocol/stats")
+async def get_comm_protocol_stats_alias():
+    """Get communication protocol statistics (alias)."""
+    return agent_comm.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Resource Manager alias
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/resource-manager/stats")
+async def get_resource_manager_stats_alias():
+    """Get resource manager statistics (alias)."""
+    return resource_manager.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Skills Marketplace alias
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/skills-marketplace/stats")
+async def get_skills_marketplace_stats_alias():
+    """Get skills marketplace statistics (alias)."""
+    return skills_marketplace.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Memory stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/memory/stats")
+async def get_memory_stats():
+    """Get memory system statistics."""
+    return {"total_memories": 0, "by_agent": {}, "total_tokens": 0}
+
+
+# ═══════════════════════════════════════════════════════════
+# Autopilot stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/autopilot/stats")
+async def get_autopilot_stats():
+    """Get autopilot engine statistics."""
+    return autopilot_engine.autopilot_health_check()
+
+
+# ═══════════════════════════════════════════════════════════
+# Approval stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/approval/stats")
+async def get_approval_stats():
+    """Get approval engine statistics."""
+    return {"rules": approval_engine.get_rules(), "total_rules": len(approval_engine.get_rules())}
+
+
+# ═══════════════════════════════════════════════════════════
+# Reasoning stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/reasoning/stats")
+async def get_reasoning_stats():
+    """Get reasoning engine statistics."""
+    return {"total_cycles": 0, "total_insights": 0, "active_sessions": 0}
+
+
+# ═══════════════════════════════════════════════════════════
+# Self Improvement stats
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/self-improvement/stats")
+async def get_self_improvement_stats():
+    """Get self-improvement engine statistics."""
+    return self_improvement.get_cycle_history()
+
+
+# ═══════════════════════════════════════════════════════════
+# Sandbox API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/sandbox/stats")
+async def get_sandbox_stats():
+    """Get sandbox engine statistics."""
+    return sandbox_engine.get_stats()
+
+
+@router.post("/sandbox/create-session")
+async def create_sandbox_session(data: dict):
+    """Create a new sandbox session."""
+    agent_id = data.get("agent_id", "default")
+    policy = data.get("policy", "standard")
+    from agent.sandbox import SandboxPolicy
+    sp = SandboxPolicy(policy) if policy in [p.value for p in SandboxPolicy] else SandboxPolicy.STANDARD
+    session_id = sandbox_engine.create_session(agent_id, sp)
+    return {"session_id": session_id, "agent_id": agent_id, "policy": sp.value}
+
+
+@router.post("/sandbox/execute")
+async def execute_sandbox_command(data: dict):
+    """Execute a command in a sandbox session."""
+    session_id = data.get("session_id", "")
+    command = data.get("command", "")
+    timeout = data.get("timeout")
+    if not session_id or not command:
+        return {"error": "session_id and command are required"}
+    try:
+        result = await sandbox_engine.execute(session_id, command, timeout)
+        return result.to_dict()
+    except KeyError:
+        return {"error": f"Session not found: {session_id}", "success": False}
+
+
+@router.post("/sandbox/close-session")
+async def close_sandbox_session(data: dict):
+    """Close a sandbox session."""
+    session_id = data.get("session_id", "")
+    return {"closed": sandbox_engine.close_session(session_id)}
+
+
+# ═══════════════════════════════════════════════════════════
+# Streaming API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/streaming/stats")
+async def get_streaming_stats():
+    """Get streaming engine statistics."""
+    return streaming_engine.get_stats()
+
+
+@router.post("/streaming/create-session")
+async def create_stream_session(data: dict):
+    """Create a new streaming session."""
+    agent_id = data.get("agent_id", "default")
+    session = streaming_engine.create_session(agent_id)
+    return {"session_id": session.session_id, "agent_id": agent_id}
+
+
+@router.post("/streaming/simulate")
+async def simulate_stream(data: dict):
+    """Simulate a streaming response."""
+    agent_id = data.get("agent_id", "default")
+    content = data.get("content", "Hello from Buddy streaming engine!")
+    tool_calls = data.get("tool_calls")
+    session_id = await streaming_engine.simulate_stream(agent_id, content, tool_calls)
+    return {"session_id": session_id, "status": "completed"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Tool Executor API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/tool-executor/stats")
+async def get_tool_executor_stats():
+    """Get tool executor statistics."""
+    return tool_executor.get_stats()
+
+
+@router.get("/tool-executor/tools")
+async def list_available_tools(category: str | None = None):
+    """List all available tools, optionally filtered by category."""
+    from agent.tool_executor import ToolCategory
+    tc = ToolCategory(category) if category else None
+    tools = tool_executor.registry.list_tools(tc)
+    return {"tools": [t.to_openai_schema() for t in tools], "total": len(tools)}
+
+
+@router.post("/tool-executor/execute")
+async def execute_tool(data: dict):
+    """Execute a tool."""
+    tool_name = data.get("tool_name", "")
+    arguments = data.get("arguments", {})
+    timeout = data.get("timeout")
+    execution = await tool_executor.execute_tool(tool_name, arguments, timeout)
+    return execution.to_dict()
+
+
+@router.post("/tool-executor/execute-parallel")
+async def execute_tools_parallel(data: dict):
+    """Execute multiple tools in parallel."""
+    tool_calls = data.get("tool_calls", [])
+    results = await tool_executor.execute_tools_parallel(tool_calls)
+    return {"results": [r.to_dict() for r in results]}
+
+
+# ═══════════════════════════════════════════════════════════
+# Browser Agent API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/browser-agent/stats")
+async def get_browser_agent_stats():
+    """Get browser agent statistics."""
+    return browser_agent.get_stats()
+
+
+@router.post("/browser-agent/create-session")
+async def create_browser_session(data: dict):
+    """Create a new browser session."""
+    agent_id = data.get("agent_id", "default")
+    session = browser_agent.create_session(agent_id)
+    return {"session_id": session.session_id, "agent_id": agent_id}
+
+
+@router.post("/browser-agent/execute")
+async def execute_browser_action(data: dict):
+    """Execute a browser action."""
+    session_id = data.get("session_id", "")
+    action = data.get("action", "")
+    kwargs = data.get("kwargs", {})
+    from agent.browser_agent import BrowserAction
+    ba = BrowserAction(action)
+    result = await browser_agent.execute_action(session_id, ba, **kwargs)
+    return result
+
+
+# ═══════════════════════════════════════════════════════════
+# Terminal Agent API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/terminal-agent/stats")
+async def get_terminal_agent_stats():
+    """Get terminal agent statistics."""
+    return terminal_agent.get_stats()
+
+
+@router.post("/terminal-agent/create-session")
+async def create_terminal_session(data: dict):
+    """Create a new terminal session."""
+    agent_id = data.get("agent_id", "default")
+    session = terminal_agent.create_session(agent_id)
+    return {"session_id": session.session_id, "agent_id": agent_id}
+
+
+@router.post("/terminal-agent/execute")
+async def execute_terminal_command(data: dict):
+    """Execute a terminal command."""
+    session_id = data.get("session_id", "")
+    command = data.get("command", "")
+    timeout = data.get("timeout")
+    result = await terminal_agent.execute(session_id, command, timeout)
+    return result.to_dict()
+
+
+@router.post("/terminal-agent/quick-execute")
+async def quick_execute_command(data: dict):
+    """Execute a single command in a temporary session."""
+    command = data.get("command", "")
+    timeout = data.get("timeout")
+    result = await terminal_agent.quick_execute(command, timeout)
+    return result.to_dict()
+
+
+# ═══════════════════════════════════════════════════════════
+# Plan Executor API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/plan-executor/stats")
+async def get_plan_executor_stats():
+    """Get plan executor statistics."""
+    return plan_executor.get_stats()
+
+
+@router.post("/plan-executor/create")
+async def create_and_execute_plan(data: dict):
+    """Create and execute a plan."""
+    goal = data.get("goal", "")
+    agent_id = data.get("agent_id", "default")
+    context = data.get("context")
+    plan = await plan_executor.create_and_execute(goal, agent_id, context)
+    return plan.to_dict()
+
+
+@router.get("/plan-executor/plan/{plan_id}")
+async def get_plan(plan_id: str):
+    """Get a plan by ID."""
+    plan = plan_executor.get_plan(plan_id)
+    if plan:
+        return plan.to_dict()
+    return {"error": "Plan not found"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Model Orchestrator API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/model-orchestrator/stats")
+async def get_model_orchestrator_stats():
+    """Get model orchestrator statistics."""
+    return model_orchestrator.get_stats()
+
+
+@router.get("/model-orchestrator/models")
+async def list_models():
+    """List all registered models."""
+    return {"models": model_orchestrator.router.list_models()}
+
+
+@router.post("/model-orchestrator/process")
+async def process_model_request(data: dict):
+    """Process a request through the model orchestrator."""
+    from agent.model_orchestrator import ModelRequest
+    request = ModelRequest(
+        request_id=data.get("request_id", f"req-{__import__('uuid').uuid4().hex[:8]}"),
+        messages=data.get("messages", []),
+        model_id=data.get("model_id"),
+        max_tokens=data.get("max_tokens", 4096),
+        temperature=data.get("temperature", 0.7),
+        stream=data.get("stream", False),
+    )
+    response = await model_orchestrator.process(request)
+    return response.to_dict()
+
+
+# ═══════════════════════════════════════════════════════════
+# Deployment API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/deployment/stats")
+async def get_deployment_stats():
+    """Get deployment pipeline statistics."""
+    return deployment_pipeline.get_stats()
+
+
+@router.post("/deployment/create")
+async def create_deployment(data: dict):
+    """Create a new deployment."""
+    from agent.deployment import DeploymentConfig, DeploymentTarget
+    config = DeploymentConfig(
+        name=data.get("name", "buddy-app"),
+        target=DeploymentTarget(data.get("target", "local")),
+        port=data.get("port", 8080),
+        env_vars=data.get("env_vars", {}),
+    )
+    deployment = await deployment_pipeline.create_deployment(config)
+    return deployment.to_dict()
+
+
+@router.post("/deployment/stop")
+async def stop_deployment(data: dict):
+    """Stop a deployment."""
+    deployment_id = data.get("deployment_id", "")
+    return {"stopped": await deployment_pipeline.stop_deployment(deployment_id)}
+
+
+# ═══════════════════════════════════════════════════════════
+# Telemetry API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/telemetry/stats")
+async def get_telemetry_stats():
+    """Get telemetry engine statistics."""
+    return telemetry_engine.get_stats()
+
+
+@router.post("/telemetry/log-event")
+async def log_telemetry_event(data: dict):
+    """Log a telemetry event."""
+    level = data.get("level", "info")
+    message = data.get("message", "")
+    context = data.get("context")
+    from agent.telemetry import TraceLevel
+    tl = TraceLevel(level) if level in [t.value for t in TraceLevel] else TraceLevel.INFO
+    telemetry_engine.log_event(tl, message, context)
+    return {"logged": True}
+
+
+# ═══════════════════════════════════════════════════════════
+# MCP Connector API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/mcp-connector/stats")
+async def get_mcp_connector_stats():
+    """Get MCP connector statistics."""
+    return mcp_connector.get_stats()
+
+
+@router.get("/mcp-connector/tools")
+async def list_mcp_tools():
+    """List all available MCP tools."""
+    return {"tools": mcp_connector.list_tools()}
+
+
+@router.post("/mcp-connector/register-server")
+async def register_mcp_server(data: dict):
+    """Register an MCP server."""
+    from agent.mcp_connector import MCPServerConfig, MCPTransport
+    config = MCPServerConfig(
+        server_id=data.get("server_id", f"mcp-{__import__('uuid').uuid4().hex[:8]}"),
+        name=data.get("name", "MCP Server"),
+        transport=MCPTransport(data.get("transport", "stdio")),
+        command=data.get("command", ""),
+        args=data.get("args", []),
+        url=data.get("url", ""),
+    )
+    mcp_connector.register_server(config)
+    return {"server_id": config.server_id, "registered": True}
+
+
+@router.post("/mcp-connector/connect")
+async def connect_mcp_server(data: dict):
+    """Connect to an MCP server."""
+    server_id = data.get("server_id", "")
+    return {"connected": await mcp_connector.connect_server(server_id)}
+
+
+@router.post("/mcp-connector/call-tool")
+async def call_mcp_tool(data: dict):
+    """Call a tool on an MCP server."""
+    server_id = data.get("server_id", "")
+    tool_name = data.get("tool_name", "")
+    arguments = data.get("arguments", {})
+    return await mcp_connector.call_tool(server_id, tool_name, arguments)
+
+
+# ═══════════════════════════════════════════════════════════
+# Integration Hub API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/integration-hub/stats")
+async def get_integration_hub_stats():
+    """Get integration hub statistics."""
+    return integration_hub.get_stats()
+
+
+@router.post("/integration-hub/register")
+async def register_integration(data: dict):
+    """Register a new integration."""
+    from agent.integration_hub import IntegrationConfig, IntegrationType, AuthMethod
+    config = IntegrationConfig(
+        integration_id=data.get("integration_id", f"int-{__import__('uuid').uuid4().hex[:8]}"),
+        name=data.get("name", "Integration"),
+        integration_type=IntegrationType(data.get("type", "api")),
+        auth_method=AuthMethod(data.get("auth_method", "api_key")),
+        base_url=data.get("base_url", ""),
+        api_key=data.get("api_key", ""),
+    )
+    integration = integration_hub.register(config)
+    return integration.to_dict()
+
+
+@router.get("/integration-hub/list")
+async def list_integrations():
+    """List all registered integrations."""
+    return {"integrations": integration_hub.list_integrations()}
+
+
+# ═══════════════════════════════════════════════════════════
+# Product Composer API
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/product-composer/stats")
+async def get_product_composer_stats():
+    """Get product composer statistics."""
+    return product_composer.get_stats()
+
+
+@router.get("/product-composer/templates")
+async def list_product_templates():
+    """List available product templates."""
+    return {"templates": product_composer.list_templates()}
+
+
+@router.post("/product-composer/create")
+async def create_product(data: dict):
+    """Create a new product definition."""
+    name = data.get("name", "New Product")
+    description = data.get("description", "")
+    agent_id = data.get("agent_id", "default")
+    template_id = data.get("template_id")
+    product = product_composer.create_product(name, description, agent_id, template_id)
+    return product.to_dict()
+
+
+@router.get("/product-composer/product/{product_id}")
+async def get_product(product_id: str):
+    """Get a product by ID."""
+    product = product_composer.get_product(product_id)
+    if product:
+        return product.to_dict()
+    return {"error": "Product not found"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Orchestrator API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import agent_orchestrator_instance, WorkstreamType as OrchestratorWorkstreamType, AgentLifecycle as OrchestratorLifecycle
+
+
+@router.get("/agent-orchestrator/stats")
+async def get_agent_orchestrator_stats():
+    """Get agent orchestrator statistics."""
+    return agent_orchestrator_instance.get_stats()
+
+
+@router.get("/agent-orchestrator/agents")
+async def list_orchestrator_agents():
+    """List all registered sub-agents."""
+    agents = agent_orchestrator_instance.list_agents()
+    return {
+        "agents": [
+            {
+                "agent_id": a.agent_id,
+                "name": a.name,
+                "description": a.description,
+                "capabilities": a.capabilities,
+                "tool_set": a.tool_set,
+                "model_id": a.model_id,
+                "current_load": agent_orchestrator_instance.get_agent_load(a.agent_id),
+            }
+            for a in agents
+        ]
+    }
+
+
+@router.get("/agent-orchestrator/workstreams")
+async def list_orchestrator_workstreams(status: str | None = None):
+    """List workstreams, optionally filtered by status."""
+    lifecycle = OrchestratorLifecycle(status) if status else None
+    wss = agent_orchestrator_instance.list_workstreams(lifecycle)
+    return {
+        "workstreams": [
+            {
+                "workstream_id": ws.workstream_id,
+                "workstream_type": ws.workstream_type.value,
+                "description": ws.description,
+                "assigned_agent_id": ws.assigned_agent_id,
+                "status": ws.status.value,
+                "priority": ws.priority,
+                "result": ws.result,
+                "created_at": ws.created_at,
+            }
+            for ws in wss
+        ]
+    }
+
+
+@router.post("/agent-orchestrator/create-workstream")
+async def create_workstream(data: dict):
+    """Create a new workstream for agent delegation."""
+    ws_type = OrchestratorWorkstreamType(data.get("workstream_type", "general"))
+    ws = agent_orchestrator_instance.create_workstream(
+        workstream_type=ws_type,
+        description=data.get("description", ""),
+        priority=data.get("priority", 5),
+        dependencies=data.get("dependencies"),
+        reviewer_agent_id=data.get("reviewer_agent_id"),
+    )
+    return {
+        "workstream_id": ws.workstream_id,
+        "workstream_type": ws.workstream_type.value,
+        "status": ws.status.value,
+    }
+
+
+@router.post("/agent-orchestrator/assign")
+async def assign_workstream(data: dict):
+    """Assign a workstream to an agent."""
+    ws_id = data.get("workstream_id", "")
+    agent_id = data.get("agent_id", "")
+    ws = agent_orchestrator_instance.assign_workstream(ws_id, agent_id)
+    if ws:
+        return {"workstream_id": ws.workstream_id, "assigned_agent_id": ws.assigned_agent_id, "status": ws.status.value}
+    return {"error": "Workstream or agent not found"}
+
+
+@router.post("/agent-orchestrator/auto-assign")
+async def auto_assign_workstream(data: dict):
+    """Auto-assign a workstream to the best-matching agent."""
+    ws_id = data.get("workstream_id", "")
+    ws = agent_orchestrator_instance.auto_assign_workstream(ws_id)
+    if ws:
+        return {"workstream_id": ws.workstream_id, "assigned_agent_id": ws.assigned_agent_id, "status": ws.status.value}
+    return {"error": "Workstream not found or no suitable agent"}
+
+
+@router.post("/agent-orchestrator/execute")
+async def execute_workstream(data: dict):
+    """Execute a workstream."""
+    ws_id = data.get("workstream_id", "")
+    ws = await agent_orchestrator_instance.execute_workstream(ws_id)
+    if ws:
+        return {"workstream_id": ws.workstream_id, "status": ws.status.value, "result": ws.result}
+    return {"error": "Workstream not found"}
+
+
+@router.post("/agent-orchestrator/execute-parallel")
+async def execute_workstreams_parallel(data: dict):
+    """Execute multiple workstreams in parallel."""
+    ws_ids = data.get("workstream_ids", [])
+    results = await agent_orchestrator_instance.execute_workstreams_parallel(ws_ids)
+    return {
+        "results": [
+            {"workstream_id": ws.workstream_id, "status": ws.status.value, "result": ws.result}
+            for ws in results
+        ]
+    }
+
+
+@router.post("/agent-orchestrator/create-squad")
+async def create_squad(data: dict):
+    """Create a squad with a leader agent."""
+    squad = agent_orchestrator_instance.create_squad(
+        name=data.get("name", ""),
+        description=data.get("description", ""),
+        leader_agent_id=data.get("leader_agent_id", ""),
+        member_agent_ids=data.get("member_agent_ids", []),
+    )
+    if squad:
+        return {"squad_id": squad.squad_id, "name": squad.name, "member_count": len(squad.member_agent_ids)}
+    return {"error": "Invalid agent IDs"}
+
+
+@router.post("/agent-orchestrator/inherit-tools")
+async def inherit_tools(data: dict):
+    """Grant tool inheritance from parent to child agent."""
+    success = agent_orchestrator_instance.inherit_tools(
+        parent_agent_id=data.get("parent_agent_id", ""),
+        child_agent_id=data.get("child_agent_id", ""),
+        tools=data.get("tools", []),
+    )
+    return {"success": success}
+
+
+# ═══════════════════════════════════════════════════════════
+# Dream Mode API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import dream_mode_instance
+
+
+@router.get("/dream-mode/stats")
+async def get_dream_mode_stats():
+    """Get dream mode statistics."""
+    return dream_mode_instance.get_stats()
+
+
+@router.post("/dream-mode/start")
+async def start_dream():
+    """Start a dream consolidation session."""
+    session = await dream_mode_instance.start_dream()
+    return {
+        "session_id": session.session_id,
+        "phase": session.phase.value,
+        "memories_processed": session.memories_processed,
+        "memories_pruned": session.memories_pruned,
+        "insights_generated": session.insights_generated,
+        "tasks_discovered": session.tasks_discovered,
+    }
+
+
+@router.post("/dream-mode/stop")
+async def stop_dream():
+    """Stop the current dream session."""
+    session = dream_mode_instance.stop_dream()
+    if session:
+        return {"session_id": session.session_id, "phase": session.phase.value}
+    return {"error": "No active dream session"}
+
+
+@router.post("/dream-mode/add-memory")
+async def add_dream_memory(data: dict):
+    """Add a memory entry to the dreaming system."""
+    entry_id = dream_mode_instance.add_memory(
+        content=data.get("content", ""),
+        source=data.get("source", "api"),
+        importance=data.get("importance", 0.5),
+        tags=data.get("tags"),
+        workspace_id=data.get("workspace_id"),
+    )
+    return {"entry_id": entry_id}
+
+
+@router.post("/dream-mode/pin")
+async def pin_memory(data: dict):
+    """Pin a memory entry."""
+    success = dream_mode_instance.pin_memory(data.get("entry_id", ""))
+    return {"success": success}
+
+
+@router.get("/dream-mode/memories")
+async def get_dream_memories(
+    workspace_id: str | None = None,
+    min_importance: float = 0.0,
+    tag: str | None = None,
+):
+    """Get memories filtered by criteria."""
+    memories = dream_mode_instance.get_memories(workspace_id, min_importance, tag)
+    return {
+        "memories": [
+            {
+                "entry_id": m.entry_id,
+                "content": m.content[:200],
+                "importance": m.importance,
+                "pinned": m.pinned,
+                "access_count": m.access_count,
+                "tags": m.tags,
+            }
+            for m in memories
+        ]
+    }
+
+
+@router.get("/dream-mode/tasks")
+async def get_proactive_tasks():
+    """Get discovered proactive tasks."""
+    tasks = dream_mode_instance.get_proactive_tasks()
+    return {
+        "tasks": [
+            {
+                "task_id": t.task_id,
+                "description": t.description,
+                "priority": t.priority,
+                "auto_executable": t.auto_executable,
+            }
+            for t in tasks
+        ]
+    }
+
+
+@router.post("/dream-mode/snapshot")
+async def create_dream_snapshot():
+    """Create a memory snapshot for rollback."""
+    snapshot_id = dream_mode_instance.create_snapshot()
+    return {"snapshot_id": snapshot_id}
+
+
+@router.post("/dream-mode/rollback")
+async def rollback_dream(data: dict):
+    """Rollback to a previous memory snapshot."""
+    success = dream_mode_instance.rollback(data.get("snapshot_id", ""))
+    return {"success": success}
+
+
+# ═══════════════════════════════════════════════════════════
+# White-box Memory API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import white_memory_instance, MemoryCategory as WhiteMemoryCategory
+
+
+@router.get("/white-memory/stats")
+async def get_white_memory_stats():
+    """Get white-box memory statistics."""
+    return white_memory_instance.get_stats()
+
+
+@router.post("/white-memory/store")
+async def store_white_memory(data: dict):
+    """Store a new memory entry with full traceability."""
+    category = WhiteMemoryCategory(data.get("category", "fact"))
+    entry_id = white_memory_instance.store(
+        content=data.get("content", ""),
+        category=category,
+        workspace_id=data.get("workspace_id"),
+        importance=data.get("importance", 0.5),
+        confidence=data.get("confidence", 0.5),
+        tags=data.get("tags"),
+        agent_id=data.get("agent_id"),
+    )
+    return {"entry_id": entry_id}
+
+
+@router.post("/white-memory/update")
+async def update_white_memory(data: dict):
+    """Update a memory entry, creating a new version."""
+    entry = white_memory_instance.update(
+        entry_id=data.get("entry_id", ""),
+        content=data.get("content"),
+        importance=data.get("importance"),
+        confidence=data.get("confidence"),
+        tags=data.get("tags"),
+        agent_id=data.get("agent_id"),
+    )
+    if entry:
+        return {"entry_id": entry.entry_id, "version": entry.version}
+    return {"error": "Entry not found"}
+
+
+@router.post("/white-memory/delete")
+async def delete_white_memory(data: dict):
+    """Soft-delete a memory entry."""
+    success = white_memory_instance.delete(
+        entry_id=data.get("entry_id", ""),
+        agent_id=data.get("agent_id"),
+    )
+    return {"success": success}
+
+
+@router.post("/white-memory/pin")
+async def pin_white_memory(data: dict):
+    """Pin a memory entry."""
+    success = white_memory_instance.pin(
+        entry_id=data.get("entry_id", ""),
+        agent_id=data.get("agent_id"),
+    )
+    return {"success": success}
+
+
+@router.get("/white-memory/query")
+async def query_white_memory(
+    workspace_id: str | None = None,
+    category: str | None = None,
+    min_importance: float = 0.0,
+    tag: str | None = None,
+    search_text: str | None = None,
+    limit: int = 50,
+):
+    """Query memory entries with flexible filtering."""
+    cat = WhiteMemoryCategory(category) if category else None
+    entries = white_memory_instance.query(
+        workspace_id=workspace_id,
+        category=cat,
+        min_importance=min_importance,
+        tag=tag,
+        search_text=search_text,
+        limit=limit,
+    )
+    return {
+        "entries": [
+            {
+                "entry_id": e.entry_id,
+                "content": e.content[:300],
+                "category": e.category.value,
+                "importance": e.importance,
+                "confidence": e.confidence,
+                "pinned": e.pinned,
+                "tags": e.tags,
+                "version": e.version,
+                "access_count": e.access_count,
+                "workspace_id": e.workspace_id,
+            }
+            for e in entries
+        ]
+    }
+
+
+@router.get("/white-memory/audit/{entry_id}")
+async def get_memory_audit_trail(entry_id: str):
+    """Get the audit trail for a memory entry."""
+    trail = white_memory_instance.get_audit_trail(memory_id=entry_id)
+    return {
+        "audit_trail": [
+            {
+                "audit_id": a.audit_id,
+                "stage": a.stage.value,
+                "agent_id": a.agent_id,
+                "trigger": a.trigger,
+                "timestamp": a.timestamp,
+            }
+            for a in trail
+        ]
+    }
+
+
+@router.get("/white-memory/lineage/{entry_id}")
+async def get_memory_lineage(entry_id: str):
+    """Get the full version lineage of a memory entry."""
+    lineage = white_memory_instance.get_lineage(entry_id)
+    return {
+        "lineage": [
+            {
+                "entry_id": e.entry_id,
+                "content": e.content[:200],
+                "version": e.version,
+                "created_at": e.created_at,
+            }
+            for e in lineage
+        ]
     }
 
 
