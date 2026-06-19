@@ -34,7 +34,6 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'board', label: 'Board', icon: '📋' },
   { id: 'kanban', label: 'Kanban', icon: '📌' },
   { id: 'compounding', label: 'Compound', icon: '⚡' },
-  { id: 'whitememory', label: 'W-Memory', icon: '🧠' },
   { id: 'memorysync', label: 'M-Sync', icon: '🔄' },
   { id: 'plugins', label: 'Plugins', icon: '🔌' },
   { id: 'imhub', label: 'IM Hub', icon: '💬' },
@@ -71,6 +70,18 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'contextengine', label: 'Context', icon: '📝' },
   { id: 'automation', label: 'Automation', icon: '⚡' },
   { id: 'skillfabric', label: 'S-Fabric', icon: '🧵' },
+  { id: 'usermodel', label: 'User Model', icon: '👤' },
+  { id: 'evolvingskills', label: 'E-Skills', icon: '🧬' },
+  { id: 'subagentmesh', label: 'S-Mesh', icon: '🕸️' },
+  { id: 'protocol', label: 'Protocol', icon: '📡' },
+  { id: 'sandbox', label: 'Sandbox', icon: '🏖️' },
+  { id: 'toolexec', label: 'Tools', icon: '🔧' },
+  { id: 'modelorch', label: 'Models', icon: '🧠' },
+  { id: 'deployment', label: 'Deploy', icon: '🚀' },
+  { id: 'productcomposer', label: 'Composer', icon: '🎨' },
+  { id: 'agentorchestrator', label: 'Orchestrator', icon: '🎭' },
+  { id: 'dreammode', label: 'Dream', icon: '🌙' },
+  { id: 'whitememory', label: 'W-Memory', icon: '🧠' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
