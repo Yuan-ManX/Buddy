@@ -55,6 +55,18 @@ import { CollabSpacePanel } from './components/CollabSpacePanel';
 import { ContextEnginePanel } from './components/ContextEnginePanel';
 import { AutomationPanel } from './components/AutomationPanel';
 import { SkillFabricPanel } from './components/SkillFabricPanel';
+import { UserModelPanel } from './components/UserModelPanel';
+import { EvolvingSkillsPanel } from './components/EvolvingSkillsPanel';
+import { SubAgentMeshPanel } from './components/SubAgentMeshPanel';
+import { ProtocolPanel } from './components/ProtocolPanel';
+import { SandboxPanel } from './components/SandboxPanel';
+import { ToolExecutorPanel } from './components/ToolExecutorPanel';
+import { ModelOrchestratorPanel } from './components/ModelOrchestratorPanel';
+import { DeploymentPanel } from './components/DeploymentPanel';
+import { ProductComposerPanel } from './components/ProductComposerPanel';
+import { AgentOrchestratorPanel } from './components/AgentOrchestratorPanel';
+import { DreamModePanel } from './components/DreamModePanel';
+import { WhiteMemoryPanel } from './components/WhiteMemoryPanel';
 import { ProactiveDiscoveryPanel } from './components/ProactiveDiscoveryPanel';
 import { MetaCognitionPanel } from './components/MetaCognitionPanel';
 import { EvolutionPanel } from './components/EvolutionPanel';
@@ -499,6 +511,18 @@ export default function App() {
 {activeTab === 'contextengine' && <ContextEnginePanel />}
 {activeTab === 'automation' && <AutomationPanel />}
 {activeTab === 'skillfabric' && <SkillFabricPanel />}
+              {activeTab === 'usermodel' && <UserModelPanel />}
+              {activeTab === 'evolvingskills' && <EvolvingSkillsPanel />}
+              {activeTab === 'subagentmesh' && <SubAgentMeshPanel />}
+              {activeTab === 'protocol' && <ProtocolPanel />}
+              {activeTab === 'sandbox' && <SandboxPanel />}
+              {activeTab === 'toolexec' && <ToolExecutorPanel />}
+              {activeTab === 'modelorch' && <ModelOrchestratorPanel />}
+              {activeTab === 'deployment' && <DeploymentPanel />}
+              {activeTab === 'productcomposer' && <ProductComposerPanel />}
+              {activeTab === 'agentorchestrator' && <AgentOrchestratorPanel />}
+              {activeTab === 'dreammode' && <DreamModePanel />}
+              {activeTab === 'whitememory' && <WhiteMemoryPanel />}
         {activeTab === 'proactive' && selectedAgent && <ProactiveDiscoveryPanel agent={selectedAgent} />}
         {activeTab === 'metacognition' && selectedAgent && <MetaCognitionPanel agent={selectedAgent} />}
         {activeTab === 'evolution' && selectedAgent && <EvolutionPanel agent={selectedAgent} />}
@@ -599,7 +623,7 @@ export default function App() {
     )}
 
         {/* Empty state — no agent and no global panel selected */}
-        {!selectedAgent && !['overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend', 'agentcore', 'synthesis', 'intelligence', 'runtimepanel', 'skillcompiler', 'conversationsearch', 'governance', 'smartrouter', 'agentmesh', 'learningloop', 'experience', 'collabspace', 'contextengine', 'automation', 'skillfabric'].includes(activeTab) && (
+        {!selectedAgent && !['overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend', 'agentcore', 'synthesis', 'intelligence', 'runtimepanel', 'skillcompiler', 'conversationsearch', 'governance', 'smartrouter', 'agentmesh', 'learningloop', 'experience', 'collabspace', 'contextengine', 'automation', 'skillfabric', 'usermodel', 'evolvingskills', 'subagentmesh', 'protocol', 'sandbox', 'toolexec', 'modelorch', 'deployment', 'productcomposer', 'agentorchestrator', 'dreammode'].includes(activeTab) && (
           <div className="main-empty">
             <div className="main-empty-icon">B</div>
             <h2>Welcome to Buddy</h2>
