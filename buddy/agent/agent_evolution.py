@@ -1,421 +1,640 @@
-"""Buddy Agent Evolution — self-optimization through experience replay and adaptive learning
-
-The evolution system continuously refines the agent's behavior by:
-- Recording execution experiences with outcomes and context
-- Replaying past experiences to identify successful strategies
-- Adapting learning pathways based on performance metrics
-- Generating optimization insights for metacognition and routing
-- Maintaining a feedback loop between strategy selection and outcomes
 """
-from __future__ import annotations
-import asyncio
-import json
-import logging
+Agent Evolution Engine - Self-Learning Loop for Buddy Agents.
+
+The Evolution Engine enables agents to automatically create reusable skills
+from successful task completions, refine them during use, and persist
+user-specific knowledge across sessions. Implements a continuous learning
+cycle where the agent grows more capable with each interaction.
+
+Core capabilities:
+- Operation tracking with success/failure analysis
+- Pattern recognition across successful operations
+- Automatic skill creation from proven patterns
+- Skill refinement through iterative improvement
+- Version management with rollback support
+- Effectiveness scoring and ranking
+"""
+
 import uuid
+import time
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Callable
 
-from openai import AsyncOpenAI
-from config.settings import settings
-
-logger = logging.getLogger("buddy.evolution")
+logger = logging.getLogger("buddy.agent_evolution")
 
 
-class ExperienceType(str, Enum):
-    CHAT = "chat"
-    TOOL_CALL = "tool_call"
-    REASONING = "reasoning"
-    PLAN_EXECUTION = "plan_execution"
-    SKILL_EXECUTION = "skill_execution"
-    COLLABORATION = "collaboration"
-    SUBAGENT = "subagent"
+class EvolutionStage(str, Enum):
+    """Stages in the evolution lifecycle."""
+    OBSERVATION = "observation"      # Watching and recording operations
+    ANALYSIS = "analysis"            # Analyzing patterns in successes
+    SYNTHESIS = "synthesis"          # Creating new skills from patterns
+    VERIFICATION = "verification"    # Testing synthesized skills
+    PUBLICATION = "publication"      # Publishing verified skills
+    REFINEMENT = "refinement"        # Improving existing skills
+    DEPRECATION = "deprecation"      # Marking obsolete skills
 
 
-class ExperienceOutcome(str, Enum):
+class OperationOutcome(str, Enum):
+    """Outcome of an agent operation."""
     SUCCESS = "success"
-    PARTIAL = "partial"
+    PARTIAL_SUCCESS = "partial_success"
     FAILURE = "failure"
-    TIMEOUT = "timeout"
+    UNCERTAIN = "uncertain"
 
 
 @dataclass
-class Experience:
-    """A single execution experience for learning."""
-    id: str
+class OperationRecord:
+    """Record of a single agent operation."""
+    operation_id: str
     agent_id: str
-    experience_type: ExperienceType
-    task_signature: str
-    strategy_used: dict
-    outcome: ExperienceOutcome
-    quality_score: float
-    tokens_consumed: int
-    latency_ms: float
-    context: dict = field(default_factory=dict)
-    insights: list[str] = field(default_factory=list)
-    created_at: str = ""
+    task_description: str
+    outcome: OperationOutcome
+    steps_taken: list[str] = field(default_factory=list)
+    tools_used: list[str] = field(default_factory=list)
+    duration_ms: float = 0.0
+    error_message: str | None = None
+    user_feedback: str | None = None
+    context_snapshot: dict[str, Any] = field(default_factory=dict)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> dict:
         return {
-            "id": self.id,
+            "operation_id": self.operation_id,
             "agent_id": self.agent_id,
-            "experience_type": self.experience_type.value,
-            "task_signature": self.task_signature[:100],
-            "strategy_used": self.strategy_used,
+            "task_description": self.task_description,
             "outcome": self.outcome.value,
-            "quality_score": self.quality_score,
-            "tokens_consumed": self.tokens_consumed,
-            "latency_ms": self.latency_ms,
-            "insights": self.insights,
-            "created_at": self.created_at,
+            "steps_taken": self.steps_taken,
+            "tools_used": self.tools_used,
+            "duration_ms": self.duration_ms,
+            "error_message": self.error_message,
+            "user_feedback": self.user_feedback,
+            "timestamp": self.timestamp.isoformat(),
         }
 
 
 @dataclass
-class EvolutionPathway:
-    """A learned optimization pathway connecting task patterns to strategies."""
-    id: str
+class EvolutionSkill:
+    """A skill created through the evolution process."""
+    skill_id: str
     name: str
-    task_pattern: str
-    recommended_strategy: str
-    success_rate: float
-    sample_count: int
-    avg_tokens: int
-    avg_latency_ms: float
-    confidence: float
-    last_updated: str = ""
+    description: str
+    source_operations: list[str] = field(default_factory=list)
+    execution_pattern: list[str] = field(default_factory=list)
+    recommended_tools: list[str] = field(default_factory=list)
+    version: int = 1
+    effectiveness_score: float = 0.0
+    usage_count: int = 0
+    success_count: int = 0
+    tags: list[str] = field(default_factory=list)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    status: EvolutionStage = EvolutionStage.SYNTHESIS
+    versions: list[dict] = field(default_factory=list)
+
+    def record_usage(self, success: bool) -> None:
+        """Record a usage of this skill."""
+        self.usage_count += 1
+        if success:
+            self.success_count += 1
+        self.effectiveness_score = (
+            self.success_count / self.usage_count if self.usage_count > 0 else 0.0
+        )
+        self.updated_at = datetime.now(timezone.utc)
 
     def to_dict(self) -> dict:
         return {
-            "id": self.id,
+            "skill_id": self.skill_id,
             "name": self.name,
-            "task_pattern": self.task_pattern[:100],
-            "recommended_strategy": self.recommended_strategy,
-            "success_rate": self.success_rate,
-            "sample_count": self.sample_count,
-            "avg_tokens": self.avg_tokens,
-            "avg_latency_ms": self.avg_latency_ms,
-            "confidence": self.confidence,
-            "last_updated": self.last_updated,
+            "description": self.description,
+            "source_operations": self.source_operations,
+            "execution_pattern": self.execution_pattern,
+            "recommended_tools": self.recommended_tools,
+            "version": self.version,
+            "effectiveness_score": round(self.effectiveness_score, 3),
+            "usage_count": self.usage_count,
+            "success_count": self.success_count,
+            "tags": self.tags,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "status": self.status.value,
         }
 
 
-class AgentEvolution:
-    """Self-optimization engine that learns from execution experiences.
+@dataclass
+class EvolutionPattern:
+    """A recognized pattern from successful operations."""
+    pattern_id: str
+    pattern_type: str
+    description: str
+    frequency: int = 0
+    associated_operations: list[str] = field(default_factory=list)
+    common_tools: list[str] = field(default_factory=list)
+    common_steps: list[str] = field(default_factory=list)
+    confidence: float = 0.0
+    discovered_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
-    Maintains a replay buffer of past experiences, periodically analyzes
-    them to discover optimization pathways, and feeds insights back into
-    the metacognition and routing systems.
+
+class AgentEvolutionEngine:
+    """Self-learning evolution engine for Buddy agents.
+
+    Implements a continuous learning cycle where agents observe their own
+    operations, identify successful patterns, synthesize new skills, and
+    refine existing ones through iterative improvement.
+
+    The engine maintains an operation history, pattern database, and a
+    registry of evolution-created skills with full version management.
     """
 
-    def __init__(self, agent_id: str, client: AsyncOpenAI | None = None):
-        self.agent_id = agent_id
-        self._client = client or AsyncOpenAI(
-            api_key=settings.OPENAI_API_KEY,
-            base_url=settings.OPENAI_BASE_URL,
+    def __init__(self):
+        self._operations: dict[str, OperationRecord] = {}
+        self._skills: dict[str, EvolutionSkill] = {}
+        self._patterns: dict[str, EvolutionPattern] = {}
+        self._total_operations = 0
+        self._total_skills_created = 0
+        self._total_patterns_discovered = 0
+        self._evolution_log: list[dict] = []
+
+    # ── Operation Recording ─────────────────────────────────────────
+
+    def record_operation(
+        self,
+        agent_id: str,
+        task_description: str,
+        outcome: OperationOutcome,
+        steps_taken: list[str] | None = None,
+        tools_used: list[str] | None = None,
+        duration_ms: float = 0.0,
+        error_message: str | None = None,
+        user_feedback: str | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> OperationRecord:
+        """Record an agent operation for evolution analysis."""
+        op_id = f"op-{uuid.uuid4().hex[:12]}"
+        record = OperationRecord(
+            operation_id=op_id,
+            agent_id=agent_id,
+            task_description=task_description,
+            outcome=outcome,
+            steps_taken=steps_taken or [],
+            tools_used=tools_used or [],
+            duration_ms=duration_ms,
+            error_message=error_message,
+            user_feedback=user_feedback,
+            context_snapshot=context or {},
         )
-        self._experiences: list[Experience] = []
-        self._pathways: dict[str, EvolutionPathway] = {}
-        self._max_experiences = 200
-        self._analysis_threshold = 30
-        self._insights: list[str] = []
-        self._total_experiences = 0
-        self._success_count = 0
-        self._failure_count = 0
-        self._last_analysis_at: str = ""
+        self._operations[op_id] = record
+        self._total_operations += 1
+
+        # Log evolution event
+        self._evolution_log.append({
+            "event": "operation_recorded",
+            "operation_id": op_id,
+            "agent_id": agent_id,
+            "outcome": outcome.value,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+        # Trigger pattern analysis on success
+        if outcome == OperationOutcome.SUCCESS:
+            self._analyze_patterns(agent_id)
+
+        return record
 
     def record_experience(
         self,
-        experience_type: ExperienceType,
-        task_signature: str,
-        strategy_used: dict,
-        outcome: ExperienceOutcome,
-        quality_score: float,
-        tokens_consumed: int,
-        latency_ms: float,
-        context: dict | None = None,
-    ) -> Experience:
-        """Record an execution experience in the replay buffer."""
-        exp = Experience(
-            id=f"exp-{uuid.uuid4().hex[:8]}",
-            agent_id=self.agent_id,
-            experience_type=experience_type,
-            task_signature=task_signature,
-            strategy_used=strategy_used,
-            outcome=outcome,
-            quality_score=quality_score,
-            tokens_consumed=tokens_consumed,
-            latency_ms=latency_ms,
-            context=context or {},
-            created_at=datetime.now(timezone.utc).isoformat(),
-        )
+        agent_id: str = "",
+        experience_type: Any = None,
+        task_signature: str = "",
+        strategy_used: dict[str, Any] | None = None,
+        outcome: Any = None,
+        quality_score: float = 0.0,
+        tokens_consumed: int = 0,
+        latency_ms: float = 0.0,
+        cost: float = 0.0,
+        metadata: dict[str, Any] | None = None,
+    ) -> OperationRecord:
+        """Record a high-level experience for evolution learning.
 
-        self._experiences.append(exp)
-        self._total_experiences += 1
-
-        if outcome == ExperienceOutcome.SUCCESS:
-            self._success_count += 1
-        elif outcome == ExperienceOutcome.FAILURE:
-            self._failure_count += 1
-
-        # Prune old experiences if over limit
-        if len(self._experiences) > self._max_experiences:
-            self._experiences = self._experiences[-self._max_experiences:]
-
-        logger.debug(
-            f"Recorded experience {exp.id}: type={experience_type.value}, "
-            f"outcome={outcome.value}, quality={quality_score:.2f}"
-        )
-        return exp
-
-    async def analyze_experiences(self) -> list[EvolutionPathway]:
-        """Analyze recent experiences to discover optimization pathways.
-
-        Groups experiences by task patterns, identifies which strategies
-        perform best for each pattern, and generates or updates pathways.
+        Maps to record_operation internally, converting the experience
+        parameters into an operation record with full context.
         """
-        if len(self._experiences) < 10:
-            return []
+        op_outcome = OperationOutcome.SUCCESS
+        if outcome is not None:
+            try:
+                op_outcome = OperationOutcome(outcome.value if hasattr(outcome, 'value') else str(outcome))
+            except ValueError:
+                op_outcome = OperationOutcome.SUCCESS
 
-        self._last_analysis_at = datetime.now(timezone.utc).isoformat()
+        context_data = {
+            "quality_score": quality_score,
+            "tokens_consumed": tokens_consumed,
+            "latency_ms": latency_ms,
+            "cost": cost,
+            **(metadata or {}),
+        }
+        if strategy_used:
+            context_data["strategy"] = strategy_used
 
-        # Group experiences by task signature patterns
-        pattern_groups: dict[str, list[Experience]] = {}
-        for exp in self._experiences:
-            pattern = self._extract_pattern(exp.task_signature)
-            if pattern not in pattern_groups:
-                pattern_groups[pattern] = []
-            pattern_groups[pattern].append(exp)
+        return self.record_operation(
+            agent_id=agent_id,
+            task_description=task_signature,
+            outcome=op_outcome,
+            duration_ms=latency_ms,
+            context=context_data,
+        )
 
-        new_pathways = []
-        for pattern, experiences in pattern_groups.items():
-            if len(experiences) < 3:
+    # ── Pattern Analysis ────────────────────────────────────────────
+
+    def _analyze_patterns(self, agent_id: str) -> list[EvolutionPattern]:
+        """Analyze successful operations to discover patterns."""
+        successful_ops = [
+            op for op in self._operations.values()
+            if op.agent_id == agent_id and op.outcome == OperationOutcome.SUCCESS
+        ]
+
+        new_patterns: list[EvolutionPattern] = []
+
+        # Pattern: tool combinations
+        tool_sets: dict[str, list[str]] = {}
+        for op in successful_ops:
+            if op.tools_used:
+                key = "|".join(sorted(op.tools_used))
+                if key not in tool_sets:
+                    tool_sets[key] = []
+                tool_sets[key].append(op.operation_id)
+
+        for tools_key, op_ids in tool_sets.items():
+            if len(op_ids) >= 2:
+                pattern_id = f"pat-{uuid.uuid4().hex[:12]}"
+                tools = tools_key.split("|")
+                pattern = EvolutionPattern(
+                    pattern_id=pattern_id,
+                    pattern_type="tool_combination",
+                    description=f"Effective tool combination: {', '.join(tools)}",
+                    frequency=len(op_ids),
+                    associated_operations=op_ids,
+                    common_tools=tools,
+                    confidence=min(1.0, len(op_ids) / 5.0),
+                )
+                self._patterns[pattern_id] = pattern
+                self._total_patterns_discovered += 1
+                new_patterns.append(pattern)
+
+        # Pattern: step sequences
+        step_sequences: dict[str, list[str]] = {}
+        for op in successful_ops:
+            if len(op.steps_taken) >= 2:
+                # Create n-grams of step sequences
+                for i in range(len(op.steps_taken) - 1):
+                    bigram = f"{op.steps_taken[i]} -> {op.steps_taken[i + 1]}"
+                    if bigram not in step_sequences:
+                        step_sequences[bigram] = []
+                    step_sequences[bigram].append(op.operation_id)
+
+        for seq_key, op_ids in step_sequences.items():
+            if len(op_ids) >= 3:
+                pattern_id = f"pat-{uuid.uuid4().hex[:12]}"
+                pattern = EvolutionPattern(
+                    pattern_id=pattern_id,
+                    pattern_type="step_sequence",
+                    description=f"Common step sequence: {seq_key}",
+                    frequency=len(op_ids),
+                    associated_operations=op_ids,
+                    common_steps=seq_key.split(" -> "),
+                    confidence=min(1.0, len(op_ids) / 10.0),
+                )
+                self._patterns[pattern_id] = pattern
+                self._total_patterns_discovered += 1
+                new_patterns.append(pattern)
+
+        return new_patterns
+
+    # ── Skill Synthesis ─────────────────────────────────────────────
+
+    def synthesize_skill(
+        self,
+        name: str,
+        description: str,
+        source_operations: list[str] | None = None,
+        execution_pattern: list[str] | None = None,
+        tools: list[str] | None = None,
+        tags: list[str] | None = None,
+    ) -> EvolutionSkill:
+        """Synthesize a new skill from successful operation patterns."""
+        skill_id = f"evskill-{uuid.uuid4().hex[:12]}"
+
+        # Gather source operations if not specified
+        if source_operations is None:
+            source_operations = []
+            for op in self._operations.values():
+                if op.outcome == OperationOutcome.SUCCESS:
+                    source_operations.append(op.operation_id)
+
+        # Infer execution pattern from successful operations
+        if execution_pattern is None and source_operations:
+            all_steps: list[str] = []
+            for op_id in source_operations:
+                if op_id in self._operations:
+                    all_steps.extend(self._operations[op_id].steps_taken)
+            # Deduplicate while preserving order
+            seen: set[str] = set()
+            execution_pattern = []
+            for step in all_steps:
+                if step not in seen:
+                    seen.add(step)
+                    execution_pattern.append(step)
+
+        # Infer tools from successful operations
+        if tools is None and source_operations:
+            all_tools: set[str] = set()
+            for op_id in source_operations:
+                if op_id in self._operations:
+                    all_tools.update(self._operations[op_id].tools_used)
+            tools = list(all_tools)
+
+        skill = EvolutionSkill(
+            skill_id=skill_id,
+            name=name,
+            description=description,
+            source_operations=source_operations or [],
+            execution_pattern=execution_pattern or [],
+            recommended_tools=tools or [],
+            tags=tags or [],
+            status=EvolutionStage.SYNTHESIS,
+        )
+        self._skills[skill_id] = skill
+        self._total_skills_created += 1
+
+        self._evolution_log.append({
+            "event": "skill_synthesized",
+            "skill_id": skill_id,
+            "name": name,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+        return skill
+
+    def auto_synthesize_from_patterns(
+        self,
+        agent_id: str,
+        min_confidence: float = 0.5,
+    ) -> list[EvolutionSkill]:
+        """Automatically create skills from discovered patterns."""
+        new_skills: list[EvolutionSkill] = []
+
+        for pattern in self._patterns.values():
+            if pattern.confidence < min_confidence:
                 continue
 
-            # Calculate success rate for each strategy used with this pattern
-            strategy_outcomes: dict[str, dict] = {}
-            for exp in experiences:
-                strategy_key = exp.strategy_used.get("execution_mode", "direct")
-                if strategy_key not in strategy_outcomes:
-                    strategy_outcomes[strategy_key] = {
-                        "successes": 0,
-                        "failures": 0,
-                        "total_tokens": 0,
-                        "total_latency": 0,
-                        "count": 0,
-                    }
-                stats = strategy_outcomes[strategy_key]
-                stats["count"] += 1
-                stats["total_tokens"] += exp.tokens_consumed
-                stats["total_latency"] += exp.latency_ms
-                if exp.outcome == ExperienceOutcome.SUCCESS:
-                    stats["successes"] += 1
-                elif exp.outcome == ExperienceOutcome.FAILURE:
-                    stats["failures"] += 1
+            # Check if a similar skill already exists
+            existing = False
+            for skill in self._skills.values():
+                if set(pattern.common_tools) == set(skill.recommended_tools):
+                    existing = True
+                    break
 
-            # Find the best strategy for this pattern
-            best_strategy = None
-            best_score = -1.0
-            for strategy_key, stats in strategy_outcomes.items():
-                success_rate = stats["successes"] / max(stats["count"], 1)
-                # Weight by success rate and sample count
-                score = success_rate * 0.7 + min(stats["count"] / 10, 1.0) * 0.3
-                if score > best_score:
-                    best_score = score
-                    best_strategy = strategy_key
+            if existing:
+                continue
 
-            if best_strategy:
-                best_stats = strategy_outcomes[best_strategy]
-                success_rate = best_stats["successes"] / max(best_stats["count"], 1)
-                avg_tokens = best_stats["total_tokens"] // max(best_stats["count"], 1)
-                avg_latency = best_stats["total_latency"] / max(best_stats["count"], 1)
-
-                pathway_id = f"pw-{uuid.uuid4().hex[:8]}"
-                pathway = EvolutionPathway(
-                    id=pathway_id,
-                    name=f"Optimize {pattern[:30]}",
-                    task_pattern=pattern,
-                    recommended_strategy=best_strategy,
-                    success_rate=success_rate,
-                    sample_count=best_stats["count"],
-                    avg_tokens=avg_tokens,
-                    avg_latency_ms=avg_latency,
-                    confidence=best_score,
-                    last_updated=datetime.now(timezone.utc).isoformat(),
-                )
-                self._pathways[pathway_id] = pathway
-                new_pathways.append(pathway)
-
-        # Generate insights from analysis
-        await self._generate_insights(new_pathways)
-
-        logger.info(
-            f"Evolution analysis complete: {len(new_pathways)} pathways "
-            f"from {len(self._experiences)} experiences"
-        )
-        return new_pathways
-
-    async def _generate_insights(self, pathways: list[EvolutionPathway]):
-        """Generate actionable insights from pathway analysis."""
-        if not pathways:
-            return
-
-        # Synthesize insights from pathways
-        high_confidence = [p for p in pathways if p.confidence > 0.7]
-        if high_confidence:
-            self._insights.append(
-                f"High-confidence optimization: {len(high_confidence)} task patterns "
-                f"have clear winning strategies with >70% confidence"
+            skill = self.synthesize_skill(
+                name=f"auto-skill-{pattern.pattern_type}",
+                description=pattern.description,
+                source_operations=pattern.associated_operations,
+                tools=pattern.common_tools,
+                execution_pattern=pattern.common_steps,
+                tags=[pattern.pattern_type, "auto-generated"],
             )
+            skill.status = EvolutionStage.VERIFICATION
+            new_skills.append(skill)
 
-        # Look for strategy dominance patterns
-        strategy_counts: dict[str, int] = {}
-        for p in pathways:
-            strategy_counts[p.recommended_strategy] = strategy_counts.get(p.recommended_strategy, 0) + 1
+        return new_skills
 
-        dominant = max(strategy_counts, key=strategy_counts.get)
-        if strategy_counts[dominant] >= 3:
-            self._insights.append(
-                f"Strategy '{dominant}' dominates across {strategy_counts[dominant]} "
-                f"task patterns — consider as default for similar tasks"
-            )
+    # ── Skill Refinement ────────────────────────────────────────────
 
-        # Cost efficiency insights
-        avg_tokens = sum(p.avg_tokens for p in pathways) / len(pathways)
-        if avg_tokens > 2000:
-            self._insights.append(
-                f"Average token usage ({avg_tokens:.0f}) is elevated — "
-                f"consider enabling context compaction for complex patterns"
-            )
+    def refine_skill(
+        self,
+        skill_id: str,
+        new_execution_pattern: list[str] | None = None,
+        new_tools: list[str] | None = None,
+        new_description: str | None = None,
+    ) -> EvolutionSkill | None:
+        """Refine an existing evolution skill with improvements."""
+        if skill_id not in self._skills:
+            return None
 
-        # Keep only the most recent 20 insights
-        if len(self._insights) > 20:
-            self._insights = self._insights[-20:]
+        skill = self._skills[skill_id]
 
-    def _extract_pattern(self, task_signature: str) -> str:
-        """Extract a generalized pattern from a task signature.
+        # Save current version
+        skill.versions.append({
+            "version": skill.version,
+            "execution_pattern": list(skill.execution_pattern),
+            "recommended_tools": list(skill.recommended_tools),
+            "description": skill.description,
+            "effectiveness_score": skill.effectiveness_score,
+        })
 
-        Collapses specific details to create reusable pattern categories
-        that can group similar tasks together.
-        """
-        sig = task_signature.lower().strip()
+        # Apply refinements
+        if new_execution_pattern:
+            skill.execution_pattern = new_execution_pattern
+        if new_tools:
+            skill.recommended_tools = new_tools
+        if new_description:
+            skill.description = new_description
 
-        # Pattern-based categorization
-        if any(kw in sig for kw in ["code", "function", "bug", "debug", "implement"]):
-            return "coding_implementation"
-        if any(kw in sig for kw in ["explain", "what is", "how does", "define"]):
-            return "explanation_query"
-        if any(kw in sig for kw in ["compare", "vs", "difference", "pros and cons"]):
-            return "comparative_analysis"
-        if any(kw in sig for kw in ["create", "build", "generate", "design"]):
-            return "creation_generation"
-        if any(kw in sig for kw in ["fix", "error", "issue", "problem", "broken"]):
-            return "troubleshooting"
-        if any(kw in sig for kw in ["summarize", "summary", "tl;dr", "key points"]):
-            return "summarization"
-        if any(kw in sig for kw in ["plan", "strategy", "roadmap", "approach"]):
-            return "planning_strategy"
-        if any(kw in sig for kw in ["optimize", "improve", "better", "faster"]):
-            return "optimization"
-        if any(kw in sig for kw in ["hello", "hi", "hey", "greetings"]):
-            return "greeting_social"
-        if any(kw in sig for kw in ["search", "find", "lookup", "research"]):
-            return "research_lookup"
+        skill.version += 1
+        skill.status = EvolutionStage.REFINEMENT
+        skill.updated_at = datetime.now(timezone.utc)
 
-        # Fallback: use first 30 chars as pattern
-        return sig[:30] if len(sig) > 30 else sig
+        self._evolution_log.append({
+            "event": "skill_refined",
+            "skill_id": skill_id,
+            "new_version": skill.version,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
 
-    async def replay_experiences(self, limit: int = 20) -> dict:
-        """Replay recent experiences to validate current pathways.
+        return skill
 
-        Simulates replay by checking if current pathways would have
-        recommended the correct strategy for past experiences.
-        """
-        recent = self._experiences[-limit:]
-        if not recent:
-            return {"validated": 0, "total": 0, "accuracy": 0.0}
+    def rollback_skill(self, skill_id: str, target_version: int) -> EvolutionSkill | None:
+        """Rollback a skill to a previous version."""
+        if skill_id not in self._skills:
+            return None
 
-        correct = 0
-        for exp in recent:
-            pattern = self._extract_pattern(exp.task_signature)
-            # Find best matching pathway
-            best_pathway = None
-            for pathway in self._pathways.values():
-                if pathway.task_pattern == pattern:
-                    if best_pathway is None or pathway.confidence > best_pathway.confidence:
-                        best_pathway = pathway
+        skill = self._skills[skill_id]
+        for version_data in skill.versions:
+            if version_data["version"] == target_version:
+                skill.execution_pattern = version_data["execution_pattern"]
+                skill.recommended_tools = version_data["recommended_tools"]
+                skill.description = version_data["description"]
+                skill.version = target_version + 1
+                skill.updated_at = datetime.now(timezone.utc)
+                return skill
 
-            if best_pathway and best_pathway.recommended_strategy == exp.strategy_used.get("execution_mode", ""):
-                correct += 1
+        return None
 
-        accuracy = correct / len(recent) if recent else 0.0
-        return {
-            "validated": correct,
-            "total": len(recent),
-            "accuracy": accuracy,
-            "message": f"Pathway validation: {correct}/{len(recent)} correct ({accuracy:.1%})",
-        }
+    def mark_deprecated(self, skill_id: str) -> bool:
+        """Mark a skill as deprecated."""
+        if skill_id not in self._skills:
+            return False
+        self._skills[skill_id].status = EvolutionStage.DEPRECATION
+        return True
 
-    async def run_evolution_cycle(self) -> dict:
-        """Execute a complete evolution cycle: analyze → validate → generate insights."""
-        if len(self._experiences) < self._analysis_threshold:
-            return {
-                "agent_id": self.agent_id,
-                "status": "skipped",
-                "reason": f"Need {self._analysis_threshold} experiences, have {len(self._experiences)}",
-                "experiences_total": len(self._experiences),
-            }
+    # ── Query Methods ───────────────────────────────────────────────
 
-        pathways = await self.analyze_experiences()
-        replay_result = await self.replay_experiences()
+    def get_skill(self, skill_id: str) -> EvolutionSkill | None:
+        """Get a skill by ID."""
+        return self._skills.get(skill_id)
 
-        return {
-            "agent_id": self.agent_id,
-            "status": "completed",
-            "pathways_discovered": len(pathways),
-            "pathways_total": len(self._pathways),
-            "experiences_analyzed": len(self._experiences),
-            "replay_accuracy": replay_result["accuracy"],
-            "insights_generated": len(self._insights),
-            "last_analysis": self._last_analysis_at,
-        }
+    def list_skills(
+        self,
+        min_effectiveness: float = 0.0,
+        status: EvolutionStage | None = None,
+        tags: list[str] | None = None,
+    ) -> list[EvolutionSkill]:
+        """List skills with optional filters."""
+        result = list(self._skills.values())
 
-    def get_pathway(self, task_pattern: str) -> EvolutionPathway | None:
-        """Get the best optimization pathway for a task pattern."""
-        pattern = self._extract_pattern(task_pattern)
-        best = None
-        for pathway in self._pathways.values():
-            if pathway.task_pattern == pattern:
-                if best is None or pathway.confidence > best.confidence:
-                    best = pathway
-        return best
+        if min_effectiveness > 0:
+            result = [s for s in result if s.effectiveness_score >= min_effectiveness]
+        if status:
+            result = [s for s in result if s.status == status]
+        if tags:
+            result = [s for s in result if any(t in s.tags for t in tags)]
 
-    def get_pathways(self) -> list[dict]:
-        """Get all discovered optimization pathways."""
-        return [p.to_dict() for p in self._pathways.values()]
+        return sorted(result, key=lambda s: s.effectiveness_score, reverse=True)
 
-    def get_insights(self, limit: int = 20) -> list[str]:
-        """Get recent evolution insights."""
-        return self._insights[-limit:]
+    def get_operations(
+        self,
+        agent_id: str | None = None,
+        outcome: OperationOutcome | None = None,
+        limit: int = 50,
+    ) -> list[OperationRecord]:
+        """Get operation records with filters."""
+        result = list(self._operations.values())
 
-    def get_experiences(self, limit: int = 50) -> list[dict]:
-        """Get recent experiences."""
-        return [e.to_dict() for e in self._experiences[-limit:]]
+        if agent_id:
+            result = [op for op in result if op.agent_id == agent_id]
+        if outcome:
+            result = [op for op in result if op.outcome == outcome]
+
+        result.sort(key=lambda op: op.timestamp, reverse=True)
+        return result[:limit]
+
+    def get_patterns(
+        self,
+        min_confidence: float = 0.0,
+        pattern_type: str | None = None,
+    ) -> list[EvolutionPattern]:
+        """Get discovered patterns with filters."""
+        result = list(self._patterns.values())
+
+        if min_confidence > 0:
+            result = [p for p in result if p.confidence >= min_confidence]
+        if pattern_type:
+            result = [p for p in result if p.pattern_type == pattern_type]
+
+        return sorted(result, key=lambda p: p.confidence, reverse=True)
+
+    def get_evolution_log(self, limit: int = 100) -> list[dict]:
+        """Get the evolution event log."""
+        return self._evolution_log[-limit:]
 
     def get_stats(self) -> dict:
         """Get evolution engine statistics."""
         return {
-            "agent_id": self.agent_id,
-            "total_experiences": self._total_experiences,
-            "buffer_size": len(self._experiences),
-            "success_count": self._success_count,
-            "failure_count": self._failure_count,
+            "total_operations": self._total_operations,
+            "total_skills_created": self._total_skills_created,
+            "total_patterns_discovered": self._total_patterns_discovered,
+            "active_skills": len([
+                s for s in self._skills.values()
+                if s.status not in (EvolutionStage.DEPRECATION,)
+            ]),
+            "deprecated_skills": len([
+                s for s in self._skills.values()
+                if s.status == EvolutionStage.DEPRECATION
+            ]),
             "success_rate": (
-                self._success_count / max(self._total_experiences, 1)
+                len([op for op in self._operations.values()
+                     if op.outcome == OperationOutcome.SUCCESS]) /
+                max(1, self._total_operations)
             ),
-            "pathways_count": len(self._pathways),
-            "insights_count": len(self._insights),
-            "last_analysis_at": self._last_analysis_at,
-            "analysis_threshold": self._analysis_threshold,
+            "top_skills": [
+                {"name": s.name, "effectiveness": round(s.effectiveness_score, 3)}
+                for s in sorted(
+                    self._skills.values(),
+                    key=lambda x: x.effectiveness_score,
+                    reverse=True,
+                )[:5]
+            ],
+            "top_patterns": [
+                {"type": p.pattern_type, "confidence": round(p.confidence, 3)}
+                for p in sorted(
+                    self._patterns.values(),
+                    key=lambda x: x.confidence,
+                    reverse=True,
+                )[:5]
+            ],
         }
+
+
+# Singleton instance
+evolution_engine = AgentEvolutionEngine()
+
+
+# ═══════════════════════════════════════════════════════════
+# Backward-compatible aliases for existing code
+# ═══════════════════════════════════════════════════════════
+
+class ExperienceType(str, Enum):
+    """Experience types for agent evolution tracking (backward compat)."""
+    CHAT = "chat"
+    TASK = "task"
+    TOOL = "tool"
+    CODE = "code"
+    REASONING = "reasoning"
+    PLAN = "plan"
+    COLLABORATION = "collaboration"
+    USER_INTERACTION = "user_interaction"
+    ERROR = "error"
+
+
+ExperienceOutcome = OperationOutcome  # Backward-compatible alias
+
+
+class AgentEvolution:
+    """Backward-compatible wrapper for AgentEvolutionEngine.
+
+    Accepts agent_id and client parameters for compatibility with
+    existing engine.py initialization, while delegating all
+    functionality to the singleton AgentEvolutionEngine.
+    """
+
+    def __init__(self, agent_id: str = "", client: Any = None):
+        self.agent_id = agent_id
+        self.client = client
+        self._engine = evolution_engine
+
+    def get_stats(self) -> dict:
+        return self._engine.get_stats()
+
+    def record_operation(self, **kwargs) -> OperationRecord:
+        kwargs.setdefault("agent_id", self.agent_id)
+        return self._engine.record_operation(**kwargs)
+
+    def synthesize_skill(self, **kwargs) -> EvolutionSkill:
+        return self._engine.synthesize_skill(**kwargs)
+
+    def get_skills(self) -> list[EvolutionSkill]:
+        return self._engine.list_skills()
+
+    def get_patterns(self) -> list[EvolutionPattern]:
+        return self._engine.get_patterns()
+
+    def get_evolution_log(self, limit: int = 100) -> list[dict]:
+        return self._engine.get_evolution_log(limit)
+
+    def record_experience(self, **kwargs) -> OperationRecord:
+        kwargs.setdefault("agent_id", self.agent_id)
+        return self._engine.record_experience(**kwargs)
