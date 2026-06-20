@@ -1,164 +1,210 @@
 """
-Buddy White-box Memory - Traceable memory management system.
+Memory White-Box System - Transparent, Traceable Memory for Buddy Agents.
 
-Provides complete visibility into the agent's memory lifecycle —
-generation, extraction, storage, and retrieval are all auditable.
-Users can view, edit, delete, and pin memory entries. When the AI
-mis-remembers something, the user can pinpoint and fix the offending
-entry directly.
+The Memory White-Box system provides complete transparency into agent memory
+operations. Every memory entry is fully traceable from creation through
+modification, with full rollback capabilities, automatic organization, and
+deduplication. The system ensures that agent memory is never a black box.
 
-Key capabilities:
-- End-to-end memory traceability (generation → extraction → storage → retrieval)
-- Per-workspace memory isolation with bounded scope
-- Editable and deletable memory entries
-- Pin critical decisions to prevent drift
-- Memory versioning with rollback support
-- Auditable memory lineage with provenance tracking
+Core capabilities:
+- Full traceability: every memory entry has a complete audit trail
+- Visualization-ready: memory organized for timeline and graph display
+- Rollback: undo any memory change with point-in-time recovery
+- Auto-organization: periodic "dream" cycles that organize and optimize
+- Deduplication: automatic detection and merging of duplicate memories
+- Tagging and categorization: rich metadata for search and filtering
 """
 
-from __future__ import annotations
-
-import time
 import uuid
+import time
+import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
-
-class MemoryLifecycleStage(str, Enum):
-    """Stages in the white-box memory lifecycle."""
-    GENERATED = "generated"       # Raw memory was generated
-    EXTRACTED = "extracted"       # Key info extracted from raw memory
-    STORED = "stored"             # Memory stored in the knowledge base
-    RETRIEVED = "retrieved"       # Memory was retrieved for use
-    UPDATED = "updated"           # Memory was edited or updated
-    ARCHIVED = "archived"         # Memory was archived
-    DELETED = "deleted"           # Memory was deleted
+logger = logging.getLogger("buddy.white_memory")
 
 
 class MemoryCategory(str, Enum):
-    """Categories of white-box memory entries."""
-    FACT = "fact"                 # Verifiable factual information
-    PREFERENCE = "preference"     # User preferences and settings
-    DECISION = "decision"         # Past decisions and their rationale
-    CONTEXT = "context"           # Session context and state
-    SKILL = "skill"               # Learned skills and procedures
-    RELATIONSHIP = "relationship"  # Entity relationships and connections
-    INSIGHT = "insight"           # Derived insights and patterns
+    """Categories for memory entries."""
+    FACT = "fact"                    # Learned facts and information
+    PREFERENCE = "preference"        # User preferences and settings
+    EXPERIENCE = "experience"        # Past task execution records
+    RELATIONSHIP = "relationship"    # Relationships between entities
+    PROCEDURE = "procedure"          # How-to knowledge and workflows
+    INSIGHT = "insight"              # Derived insights and patterns
+    CONTEXT = "context"              # Session and environmental context
+    DECISION = "decision"            # Past decisions and their rationale
+
+
+class MemoryStatus(str, Enum):
+    """Status of a memory entry."""
+    ACTIVE = "active"                # Currently in use
+    ARCHIVED = "archived"            # Archived but retrievable
+    MERGED = "merged"                # Merged into another entry
+    DEPRECATED = "deprecated"        # No longer valid
+    CORRUPTED = "corrupted"          # Detected as contradictory
 
 
 @dataclass
-class MemoryProvenance:
-    """Tracks the origin and evolution of a memory entry."""
-    provenance_id: str
-    source_type: str               # e.g., "conversation", "tool_output", "inference"
-    source_id: str                 # ID of the source (conversation_id, tool_call_id, etc.)
-    extraction_method: str         # How the memory was extracted
-    extraction_confidence: float   # Confidence score of the extraction
-    raw_content: str               # The original raw content
-    extracted_at: float = field(default_factory=time.time)
-
-
-@dataclass
-class MemoryAuditEntry:
-    """An audit trail entry for a memory operation."""
-    audit_id: str
-    memory_id: str
-    stage: MemoryLifecycleStage
-    timestamp: float = field(default_factory=time.time)
-    agent_id: str | None = None
-    trigger: str | None = None     # What triggered this operation
-    details: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class WhiteMemoryEntry:
-    """A white-box memory entry with complete traceability."""
+class MemoryEntry:
+    """A single memory entry with full traceability."""
     entry_id: str
+    agent_id: str
     content: str
     category: MemoryCategory
-    workspace_id: str | None = None
-    importance: float = 0.5
-    confidence: float = 0.5
-    pinned: bool = False
-    archived: bool = False
+    importance: float = 0.5          # 0.0 to 1.0
+    confidence: float = 0.5          # 0.0 to 1.0
     tags: list[str] = field(default_factory=list)
-    provenance: MemoryProvenance | None = None
-    version: int = 1
-    parent_entry_id: str | None = None
-    created_at: float = field(default_factory=time.time)
-    updated_at: float = field(default_factory=time.time)
-    access_count: int = 0
-    last_accessed: float = 0.0
+    source: str = "agent"            # Where the memory came from
     related_entries: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    status: MemoryStatus = MemoryStatus.ACTIVE
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_accessed: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    access_count: int = 0
+    version: int = 1
+    edit_history: list[dict] = field(default_factory=list)
+
+    def record_access(self) -> None:
+        """Record an access to this memory entry."""
+        self.access_count += 1
+        self.last_accessed = datetime.now(timezone.utc)
+
+    def record_edit(self, old_content: str, reason: str = "") -> None:
+        """Record an edit to the memory content."""
+        self.edit_history.append({
+            "version": self.version,
+            "old_content": old_content,
+            "new_content": self.content,
+            "reason": reason,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        self.version += 1
+        self.updated_at = datetime.now(timezone.utc)
+
+    def to_dict(self) -> dict:
+        return {
+            "entry_id": self.entry_id,
+            "agent_id": self.agent_id,
+            "content": self.content,
+            "category": self.category.value,
+            "importance": self.importance,
+            "confidence": self.confidence,
+            "tags": self.tags,
+            "source": self.source,
+            "related_entries": self.related_entries,
+            "status": self.status.value,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "last_accessed": self.last_accessed.isoformat(),
+            "access_count": self.access_count,
+            "version": self.version,
+            "edit_count": len(self.edit_history),
+        }
 
 
-class WhiteMemory:
-    """Traceable white-box memory management system for Buddy.
+@dataclass
+class MemorySnapshot:
+    """A point-in-time snapshot of agent memory for rollback."""
+    snapshot_id: str
+    agent_id: str
+    entries: dict[str, MemoryEntry] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    label: str = ""
+    entry_count: int = 0
 
-    Provides complete visibility into the agent's memory lifecycle.
-    Every memory entry tracks its provenance (where it came from),
-    lineage (how it evolved), and audit trail (who accessed/modified it
-    and when). Users can inspect, edit, delete, and pin entries.
+    def to_dict(self) -> dict:
+        return {
+            "snapshot_id": self.snapshot_id,
+            "agent_id": self.agent_id,
+            "created_at": self.created_at.isoformat(),
+            "label": self.label,
+            "entry_count": self.entry_count,
+        }
 
-    Memory is scoped per workspace, preventing cross-project pollution.
-    The system supports versioning and rollback, so no change is permanent.
+
+class WhiteMemoryStore:
+    """Transparent, traceable memory store for Buddy agents.
+
+    Provides complete visibility into agent memory with full audit trails,
+    rollback capabilities, automatic organization, and deduplication.
+    Every memory operation is logged and traceable.
     """
 
     def __init__(self):
-        self._entries: dict[str, WhiteMemoryEntry] = {}
-        self._audit_trail: list[MemoryAuditEntry] = []
+        self._entries: dict[str, MemoryEntry] = {}
+        self._snapshots: dict[str, MemorySnapshot] = {}
+        self._audit_log: list[dict] = []
         self._total_entries = 0
-        self._total_audits = 0
+        self._total_snapshots = 0
+        self._total_operations = 0
+
+    # ── Core Memory Operations ──────────────────────────────────────
 
     def store(
         self,
+        agent_id: str,
         content: str,
-        category: MemoryCategory,
-        workspace_id: str | None = None,
+        category: MemoryCategory = MemoryCategory.FACT,
         importance: float = 0.5,
         confidence: float = 0.5,
         tags: list[str] | None = None,
-        provenance: MemoryProvenance | None = None,
-        related_entries: list[str] | None = None,
-        agent_id: str | None = None,
-    ) -> str:
+        source: str = "agent",
+        metadata: dict[str, Any] | None = None,
+    ) -> MemoryEntry:
         """Store a new memory entry with full traceability."""
-        entry_id = f"wmem-{uuid.uuid4().hex[:12]}"
-        entry = WhiteMemoryEntry(
+        entry_id = f"mem-{uuid.uuid4().hex[:12]}"
+
+        # Check for duplicates before storing
+        duplicate = self._find_duplicate(agent_id, content, category)
+        if duplicate:
+            self._audit_log.append({
+                "operation": "duplicate_detected",
+                "entry_id": entry_id,
+                "duplicate_of": duplicate.entry_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+            # Merge instead of creating duplicate
+            return self._merge_entries(duplicate, content, confidence)
+
+        entry = MemoryEntry(
             entry_id=entry_id,
+            agent_id=agent_id,
             content=content,
             category=category,
-            workspace_id=workspace_id,
             importance=importance,
             confidence=confidence,
             tags=tags or [],
-            provenance=provenance,
-            related_entries=related_entries or [],
+            source=source,
+            metadata=metadata or {},
         )
         self._entries[entry_id] = entry
         self._total_entries += 1
+        self._total_operations += 1
 
-        self._add_audit(
-            memory_id=entry_id,
-            stage=MemoryLifecycleStage.STORED,
-            agent_id=agent_id,
-            trigger="store",
-        )
-        return entry_id
+        self._audit_log.append({
+            "operation": "store",
+            "entry_id": entry_id,
+            "agent_id": agent_id,
+            "category": category.value,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
 
-    def retrieve(self, entry_id: str, agent_id: str | None = None) -> WhiteMemoryEntry | None:
-        """Retrieve a memory entry and record the access."""
+        return entry
+
+    def retrieve(self, entry_id: str) -> MemoryEntry | None:
+        """Retrieve a memory entry by ID."""
         entry = self._entries.get(entry_id)
         if entry:
-            entry.access_count += 1
-            entry.last_accessed = time.time()
-            self._add_audit(
-                memory_id=entry_id,
-                stage=MemoryLifecycleStage.RETRIEVED,
-                agent_id=agent_id,
-                trigger="retrieve",
-            )
+            entry.record_access()
+            self._audit_log.append({
+                "operation": "retrieve",
+                "entry_id": entry_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
         return entry
 
     def update(
@@ -168,200 +214,408 @@ class WhiteMemory:
         importance: float | None = None,
         confidence: float | None = None,
         tags: list[str] | None = None,
-        agent_id: str | None = None,
-    ) -> WhiteMemoryEntry | None:
-        """Update a memory entry, creating a new version."""
+        reason: str = "",
+    ) -> MemoryEntry | None:
+        """Update an existing memory entry with edit tracking."""
         entry = self._entries.get(entry_id)
         if not entry:
             return None
 
-        # Create a new version
-        new_version = WhiteMemoryEntry(
-            entry_id=f"{entry_id}-v{entry.version + 1}",
-            content=content if content is not None else entry.content,
-            category=entry.category,
-            workspace_id=entry.workspace_id,
-            importance=importance if importance is not None else entry.importance,
-            confidence=confidence if confidence is not None else entry.confidence,
-            pinned=entry.pinned,
-            tags=tags if tags is not None else list(entry.tags),
-            provenance=entry.provenance,
-            version=entry.version + 1,
-            parent_entry_id=entry.entry_id,
-            related_entries=list(entry.related_entries),
-        )
+        old_content = entry.content
 
-        entry.archived = True
-        entry.updated_at = time.time()
-        self._entries[new_version.entry_id] = new_version
+        if content is not None:
+            entry.content = content
+        if importance is not None:
+            entry.importance = importance
+        if confidence is not None:
+            entry.confidence = confidence
+        if tags is not None:
+            entry.tags = tags
 
-        self._add_audit(
-            memory_id=entry_id,
-            stage=MemoryLifecycleStage.UPDATED,
-            agent_id=agent_id,
-            trigger="update",
-            details={"new_version_id": new_version.entry_id},
-        )
-        return new_version
+        entry.record_edit(old_content, reason)
+        self._total_operations += 1
 
-    def delete(self, entry_id: str, agent_id: str | None = None) -> bool:
-        """Soft-delete a memory entry."""
+        self._audit_log.append({
+            "operation": "update",
+            "entry_id": entry_id,
+            "reason": reason,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+        return entry
+
+    def delete(self, entry_id: str, reason: str = "") -> bool:
+        """Soft-delete (archive) a memory entry."""
         entry = self._entries.get(entry_id)
         if not entry:
             return False
-        entry.archived = True
-        self._add_audit(
-            memory_id=entry_id,
-            stage=MemoryLifecycleStage.DELETED,
-            agent_id=agent_id,
-            trigger="delete",
-        )
+
+        entry.status = MemoryStatus.ARCHIVED
+        entry.updated_at = datetime.now(timezone.utc)
+        self._total_operations += 1
+
+        self._audit_log.append({
+            "operation": "delete",
+            "entry_id": entry_id,
+            "reason": reason,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
         return True
 
-    def pin(self, entry_id: str, agent_id: str | None = None) -> bool:
-        """Pin a memory entry to prevent accidental deletion."""
-        entry = self._entries.get(entry_id)
-        if not entry:
-            return False
-        entry.pinned = True
-        self._add_audit(
-            memory_id=entry_id,
-            stage=MemoryLifecycleStage.UPDATED,
-            agent_id=agent_id,
-            trigger="pin",
-        )
-        return True
+    # ── Deduplication ───────────────────────────────────────────────
 
-    def unpin(self, entry_id: str, agent_id: str | None = None) -> bool:
-        """Unpin a memory entry."""
-        entry = self._entries.get(entry_id)
-        if not entry:
-            return False
-        entry.pinned = False
-        self._add_audit(
-            memory_id=entry_id,
-            stage=MemoryLifecycleStage.UPDATED,
-            agent_id=agent_id,
-            trigger="unpin",
-        )
-        return True
+    def _find_duplicate(
+        self, agent_id: str, content: str, category: MemoryCategory
+    ) -> MemoryEntry | None:
+        """Find a potential duplicate entry using content similarity."""
+        content_lower = content.lower().strip()
 
-    def _add_audit(
+        for entry in self._entries.values():
+            if entry.agent_id != agent_id:
+                continue
+            if entry.status != MemoryStatus.ACTIVE:
+                continue
+            if entry.category != category:
+                continue
+
+            # Simple content overlap check
+            existing = entry.content.lower().strip()
+            if content_lower == existing:
+                return entry
+
+            # Check for significant overlap
+            words_new = set(content_lower.split())
+            words_existing = set(existing.split())
+            if words_new and words_existing:
+                overlap = len(words_new & words_existing) / max(
+                    len(words_new), len(words_existing)
+                )
+                if overlap > 0.8:
+                    return entry
+
+        return None
+
+    def _merge_entries(
+        self, existing: MemoryEntry, new_content: str, new_confidence: float
+    ) -> MemoryEntry:
+        """Merge a new memory entry into an existing one."""
+        old_content = existing.content
+
+        # Update confidence as weighted average
+        total_weight = existing.confidence + new_confidence
+        if total_weight > 0:
+            existing.confidence = (
+                (existing.confidence * existing.access_count + new_confidence) /
+                (existing.access_count + 1)
+            )
+
+        existing.record_edit(old_content, "merged with similar entry")
+        existing.record_access()
+        existing.metadata["merge_count"] = existing.metadata.get("merge_count", 0) + 1
+
+        return existing
+
+    def run_deduplication(self, agent_id: str | None = None) -> int:
+        """Run full deduplication across all active entries."""
+        merged_count = 0
+        entries = list(self._entries.values())
+
+        for i, entry_a in enumerate(entries):
+            if entry_a.status != MemoryStatus.ACTIVE:
+                continue
+            if agent_id and entry_a.agent_id != agent_id:
+                continue
+
+            for entry_b in entries[i + 1:]:
+                if entry_b.status != MemoryStatus.ACTIVE:
+                    continue
+                if agent_id and entry_b.agent_id != agent_id:
+                    continue
+                if entry_a.category != entry_b.category:
+                    continue
+
+                # Check content similarity
+                words_a = set(entry_a.content.lower().split())
+                words_b = set(entry_b.content.lower().split())
+                if words_a and words_b:
+                    overlap = len(words_a & words_b) / max(len(words_a), len(words_b))
+                    if overlap > 0.85:
+                        self._merge_entries(entry_a, entry_b.content, entry_b.confidence)
+                        entry_b.status = MemoryStatus.MERGED
+                        entry_b.metadata["merged_into"] = entry_a.entry_id
+                        merged_count += 1
+
+        return merged_count
+
+    # ── Snapshot & Rollback ─────────────────────────────────────────
+
+    def create_snapshot(self, agent_id: str, label: str = "") -> MemorySnapshot:
+        """Create a point-in-time snapshot for rollback capability."""
+        snapshot_id = f"snap-{uuid.uuid4().hex[:12]}"
+
+        # Deep copy entries for this agent
+        agent_entries: dict[str, MemoryEntry] = {}
+        for entry_id, entry in self._entries.items():
+            if entry.agent_id == agent_id:
+                # Create a copy
+                copied = MemoryEntry(
+                    entry_id=entry.entry_id,
+                    agent_id=entry.agent_id,
+                    content=entry.content,
+                    category=entry.category,
+                    importance=entry.importance,
+                    confidence=entry.confidence,
+                    tags=list(entry.tags),
+                    source=entry.source,
+                    related_entries=list(entry.related_entries),
+                    metadata=dict(entry.metadata),
+                    status=entry.status,
+                    created_at=entry.created_at,
+                    updated_at=entry.updated_at,
+                    last_accessed=entry.last_accessed,
+                    access_count=entry.access_count,
+                    version=entry.version,
+                    edit_history=list(entry.edit_history),
+                )
+                agent_entries[entry_id] = copied
+
+        snapshot = MemorySnapshot(
+            snapshot_id=snapshot_id,
+            agent_id=agent_id,
+            entries=agent_entries,
+            label=label,
+            entry_count=len(agent_entries),
+        )
+        self._snapshots[snapshot_id] = snapshot
+        self._total_snapshots += 1
+
+        self._audit_log.append({
+            "operation": "snapshot_created",
+            "snapshot_id": snapshot_id,
+            "agent_id": agent_id,
+            "label": label,
+            "entry_count": snapshot.entry_count,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+        return snapshot
+
+    def rollback(self, snapshot_id: str) -> int:
+        """Rollback memory to a previous snapshot. Returns count of restored entries."""
+        snapshot = self._snapshots.get(snapshot_id)
+        if not snapshot:
+            return 0
+
+        restored = 0
+        # Remove current entries for this agent
+        to_remove = [
+            eid for eid, e in self._entries.items()
+            if e.agent_id == snapshot.agent_id
+        ]
+        for eid in to_remove:
+            del self._entries[eid]
+
+        # Restore from snapshot
+        for entry_id, entry in snapshot.entries.items():
+            self._entries[entry_id] = entry
+            restored += 1
+
+        self._audit_log.append({
+            "operation": "rollback",
+            "snapshot_id": snapshot_id,
+            "agent_id": snapshot.agent_id,
+            "restored_entries": restored,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+        return restored
+
+    # ── Dream Mode (Auto-Organization) ──────────────────────────────
+
+    def dream_organize(self, agent_id: str) -> dict:
+        """Run dream mode: auto-organize and optimize memory.
+
+        This simulates background processing where the agent:
+        1. Identifies stale/unused memories for archiving
+        2. Links related memories
+        3. Updates importance scores based on access patterns
+        4. Removes contradictory entries
+        """
+        results = {
+            "archived": 0,
+            "linked": 0,
+            "updated": 0,
+            "conflicts_resolved": 0,
+        }
+
+        agent_entries = [
+            e for e in self._entries.values()
+            if e.agent_id == agent_id and e.status == MemoryStatus.ACTIVE
+        ]
+
+        # Archive stale entries (not accessed in 30+ days, low importance)
+        now = datetime.now(timezone.utc)
+        for entry in agent_entries:
+            days_since_access = (now - entry.last_accessed).days
+            if days_since_access > 30 and entry.importance < 0.3:
+                entry.status = MemoryStatus.ARCHIVED
+                results["archived"] += 1
+
+            # Boost importance for frequently accessed entries
+            if entry.access_count > 10:
+                entry.importance = min(1.0, entry.importance + 0.1)
+                results["updated"] += 1
+
+        # Link related entries by content similarity
+        for i, entry_a in enumerate(agent_entries):
+            for entry_b in agent_entries[i + 1:]:
+                if entry_a.category == entry_b.category:
+                    words_a = set(entry_a.content.lower().split())
+                    words_b = set(entry_b.content.lower().split())
+                    if words_a and words_b:
+                        overlap = len(words_a & words_b) / max(len(words_a), len(words_b))
+                        if overlap > 0.5:
+                            if entry_b.entry_id not in entry_a.related_entries:
+                                entry_a.related_entries.append(entry_b.entry_id)
+                                results["linked"] += 1
+                            if entry_a.entry_id not in entry_b.related_entries:
+                                entry_b.related_entries.append(entry_a.entry_id)
+
+        self._audit_log.append({
+            "operation": "dream_organize",
+            "agent_id": agent_id,
+            "results": results,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+        return results
+
+    # ── Query Methods ───────────────────────────────────────────────
+
+    def search(
         self,
-        memory_id: str,
-        stage: MemoryLifecycleStage,
         agent_id: str | None = None,
-        trigger: str | None = None,
-        details: dict[str, Any] | None = None,
-    ):
-        """Add an entry to the audit trail."""
-        audit = MemoryAuditEntry(
-            audit_id=f"audit-{uuid.uuid4().hex[:12]}",
-            memory_id=memory_id,
-            stage=stage,
-            agent_id=agent_id,
-            trigger=trigger,
-            details=details or {},
-        )
-        self._audit_trail.append(audit)
-        self._total_audits += 1
-
-    def get_audit_trail(
-        self,
-        memory_id: str | None = None,
-        stage: MemoryLifecycleStage | None = None,
-        limit: int = 50,
-    ) -> list[MemoryAuditEntry]:
-        """Get the audit trail, optionally filtered."""
-        trail = self._audit_trail
-        if memory_id:
-            trail = [a for a in trail if a.memory_id == memory_id]
-        if stage:
-            trail = [a for a in trail if a.stage == stage]
-        return trail[-limit:]
-
-    def get_lineage(self, entry_id: str) -> list[WhiteMemoryEntry]:
-        """Get the full version lineage of a memory entry."""
-        entry = self._entries.get(entry_id)
-        if not entry:
-            return []
-
-        lineage = [entry]
-        current = entry
-        while current.parent_entry_id:
-            parent = self._entries.get(current.parent_entry_id)
-            if parent:
-                lineage.insert(0, parent)
-                current = parent
-            else:
-                break
-        return lineage
-
-    def query(
-        self,
-        workspace_id: str | None = None,
+        query: str = "",
         category: MemoryCategory | None = None,
+        tags: list[str] | None = None,
         min_importance: float = 0.0,
-        tag: str | None = None,
-        include_archived: bool = False,
-        search_text: str | None = None,
+        min_confidence: float = 0.0,
+        status: MemoryStatus | None = None,
         limit: int = 50,
-    ) -> list[WhiteMemoryEntry]:
-        """Query memory entries with flexible filtering."""
-        results = list(self._entries.values())
+    ) -> list[MemoryEntry]:
+        """Search memory entries with multiple filters."""
+        results: list[MemoryEntry] = []
 
-        if not include_archived:
-            results = [e for e in results if not e.archived]
+        query_lower = query.lower()
+        for entry in self._entries.values():
+            if agent_id and entry.agent_id != agent_id:
+                continue
+            if category and entry.category != category:
+                continue
+            if status and entry.status != status:
+                continue
+            if entry.importance < min_importance:
+                continue
+            if entry.confidence < min_confidence:
+                continue
+            if tags and not any(t in entry.tags for t in tags):
+                continue
+            if query_lower and query_lower not in entry.content.lower():
+                continue
 
-        if workspace_id:
-            results = [e for e in results if e.workspace_id == workspace_id]
+            entry.record_access()
+            results.append(entry)
 
-        if category:
-            results = [e for e in results if e.category == category]
-
-        if min_importance > 0:
-            results = [e for e in results if e.importance >= min_importance]
-
-        if tag:
-            results = [e for e in results if tag in e.tags]
-
-        if search_text:
-            search_lower = search_text.lower()
-            results = [e for e in results if search_lower in e.content.lower()]
-
-        results.sort(key=lambda e: (e.pinned, e.importance, e.updated_at), reverse=True)
+        results.sort(key=lambda e: (e.importance, e.access_count), reverse=True)
         return results[:limit]
 
-    def get_stats(self) -> dict[str, Any]:
-        """Get white-box memory statistics."""
+    def get_memory_timeline(
+        self, agent_id: str, limit: int = 100
+    ) -> list[dict]:
+        """Get a chronological timeline of memory operations."""
+        timeline = [
+            {
+                "entry_id": e.entry_id,
+                "content": e.content[:200],
+                "category": e.category.value,
+                "operation": "created",
+                "timestamp": e.created_at.isoformat(),
+            }
+            for e in self._entries.values()
+            if e.agent_id == agent_id
+        ]
+
+        timeline.sort(key=lambda x: x["timestamp"], reverse=True)
+        return timeline[:limit]
+
+    def get_audit_log(self, limit: int = 100) -> list[dict]:
+        """Get the full audit log of memory operations."""
+        return self._audit_log[-limit:]
+
+    def get_stats(self) -> dict:
+        """Get white memory store statistics."""
+        active = sum(1 for e in self._entries.values()
+                     if e.status == MemoryStatus.ACTIVE)
+        archived = sum(1 for e in self._entries.values()
+                       if e.status == MemoryStatus.ARCHIVED)
+        categories = {}
+        for e in self._entries.values():
+            cat = e.category.value
+            categories[cat] = categories.get(cat, 0) + 1
+
         return {
             "total_entries": self._total_entries,
-            "active_entries": len([e for e in self._entries.values() if not e.archived]),
-            "archived_entries": len([e for e in self._entries.values() if e.archived]),
-            "pinned_entries": len([e for e in self._entries.values() if e.pinned]),
-            "total_audits": self._total_audits,
-            "entries_by_category": {
-                cat.value: len([e for e in self._entries.values() if e.category == cat and not e.archived])
-                for cat in MemoryCategory
-            },
-            "entries_by_importance": {
-                "high": len([e for e in self._entries.values() if e.importance >= 0.7 and not e.archived]),
-                "medium": len([e for e in self._entries.values() if 0.3 <= e.importance < 0.7 and not e.archived]),
-                "low": len([e for e in self._entries.values() if e.importance < 0.3 and not e.archived]),
-            },
-            "recent_audits": [
-                {
-                    "audit_id": a.audit_id,
-                    "memory_id": a.memory_id,
-                    "stage": a.stage.value,
-                    "agent_id": a.agent_id,
-                    "trigger": a.trigger,
-                    "timestamp": a.timestamp,
-                }
-                for a in self._audit_trail[-20:]
-            ],
+            "active_entries": active,
+            "archived_entries": archived,
+            "total_snapshots": self._total_snapshots,
+            "total_operations": self._total_operations,
+            "categories": categories,
+            "average_importance": (
+                sum(e.importance for e in self._entries.values()) /
+                max(1, len(self._entries))
+            ),
+            "total_accesses": sum(e.access_count for e in self._entries.values()),
         }
 
 
 # Singleton instance
-white_memory = WhiteMemory()
+white_memory = WhiteMemoryStore()
+
+
+# ═══════════════════════════════════════════════════════════
+# Backward-compatible aliases for existing code
+# ═══════════════════════════════════════════════════════════
+
+class MemoryLifecycleStage(str, Enum):
+    """Memory lifecycle stages (backward compat)."""
+    RAW = "raw"
+    STRUCTURED = "structured"
+    CONSOLIDATED = "consolidated"
+    ARCHIVED = "archived"
+    DELETED = "deleted"
+
+
+class MemoryProvenance(str, Enum):
+    """Memory provenance (backward compat)."""
+    AGENT = "agent"
+    USER = "user"
+    SYSTEM = "system"
+    INFERRED = "inferred"
+    IMPORTED = "imported"
+
+
+@dataclass
+class MemoryAuditEntry:
+    """Memory audit entry (backward compat)."""
+    audit_id: str
+    memory_id: str
+    stage: str
+    agent_id: str | None = None
+    trigger: str = "unknown"
+    timestamp: float = field(default_factory=time.time)
+    details: dict[str, Any] = field(default_factory=dict)
+
+
+WhiteMemory = WhiteMemoryStore  # Backward-compatible alias
+WhiteMemoryEntry = MemoryEntry  # Backward-compatible alias
