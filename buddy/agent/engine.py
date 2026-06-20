@@ -581,11 +581,13 @@ class AgentEngine:
             pass  # Non-critical — learning is best-effort
 
         # Run evolution cycle if enough experiences accumulated
-        if len(self.evolution._experiences) >= self.evolution._analysis_threshold:
-            try:
+        try:
+            exp_count = len(getattr(self.evolution, '_experiences', getattr(getattr(self.evolution, '_engine', None), '_experiences', [])))
+            threshold = getattr(self.evolution, '_analysis_threshold', getattr(getattr(self.evolution, '_engine', None), '_analysis_threshold', 100))
+            if exp_count >= threshold:
                 await self.evolution.run_evolution_cycle()
-            except Exception:
-                pass  # Non-critical background task
+        except Exception:
+            pass  # Non-critical background task
 
         # ── Feed proactive discovery with this interaction ──
         try:
