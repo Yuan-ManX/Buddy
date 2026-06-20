@@ -82,6 +82,17 @@ from agent.product_composer import ProductComposer, ProductDefinition, ProductCo
 from agent.agent_orchestrator import AgentOrchestrator, SubAgentProfile, Workstream, WorkstreamType, Squad, AgentLifecycle, agent_orchestrator
 from agent.dream_mode import DreamMode, DreamSession, DreamPhase, MemoryEntry, ProactiveTask, dream_mode
 from agent.white_memory import WhiteMemory, WhiteMemoryEntry, MemoryCategory, MemoryLifecycleStage, MemoryProvenance, MemoryAuditEntry, white_memory
+from agent.agent_reflection import AgentReflectionEngine, ReflectionRecord, ReflectionDimension, ErrorCategory, ReflectionStatus, QualityScore, DetectedError, reflection_engine
+from agent.agent_intent import AgentIntentEngine, IntentResult, IntentCategory, IntentComplexity, IntentUrgency, IntentEntity, IntentSession, intent_engine
+from agent.agent_fleet import AgentFleetManager, FleetAgent, FleetAgentStatus, FleetHealth, FleetLoadReport, FleetHealthReport, fleet_manager
+from agent.event_pipeline import EventPipeline, PipelineEvent, EventSource, EventPriority, EventSubscription, DeadLetterEntry, event_pipeline
+from agent.knowledge_network import KnowledgeNetwork, KnowledgeEntry, KnowledgeType, KnowledgeStatus, VerificationLevel, KnowledgeTopic, knowledge_network
+from agent.agent_reasoning import AgentReasoningEngine, ReasoningTrace, ReasoningStep, ReasoningStrategy, Hypothesis, reasoning_engine
+from agent.agent_tool_composer import AgentToolComposer, ToolPipeline, PipelineStage, ToolNode, PipelineResult, ExecutionMode as ToolExecutionMode, tool_composer
+from agent.agent_context_manager import AgentContextManager, ContextItem, ContextType, ContextPriority, ContextSnapshot, context_manager
+from agent.model_proxy import ModelProxyLayer, ModelProfile, ProviderType, ModelCapability, ProxyStrategy, ProxyRequest, ProxyResponse, model_proxy
+from agent.skill_compiler import SkillCompiler, SkillDefinition, SkillStatus, SkillLanguage, SkillParameter, CompilationResult, skill_compiler
+from agent.unified_runtime import UnifiedAgentRuntime, RuntimeSession, RuntimeMode, RuntimePhase, unified_runtime
 
 orchestrator = Orchestrator()
 skills_registry = SkillsRegistry()
@@ -124,3 +135,33 @@ product_composer = get_product_composer()
 agent_orchestrator_instance = agent_orchestrator
 dream_mode_instance = dream_mode
 white_memory_instance = white_memory
+
+# New agent reflection, intent, fleet, event, and knowledge modules
+reflection_engine_instance = reflection_engine
+intent_engine_instance = intent_engine
+fleet_manager_instance = fleet_manager
+event_pipeline_instance = event_pipeline
+knowledge_network_instance = knowledge_network
+
+# New reasoning, tool composer, context, model proxy, and skill compiler modules
+reasoning_engine_instance = reasoning_engine
+tool_composer_instance = tool_composer
+agent_context_manager_instance = context_manager
+model_proxy_instance = model_proxy
+skill_compiler_instance = skill_compiler
+
+# Unified runtime instance
+unified_runtime_instance = unified_runtime
+
+# New evolution, white memory, experience, protocol, and experiment modules
+from agent.agent_evolution import AgentEvolutionEngine, EvolutionStage, EvolutionSkill, EvolutionPattern, OperationOutcome, OperationRecord, evolution_engine
+from agent.white_memory import WhiteMemoryStore, MemoryCategory, MemoryStatus, MemoryEntry, MemorySnapshot, white_memory
+from agent.experience_db import ExperienceDatabase, ExperienceType, ExperienceOutcome, ExperienceQuality, ExperienceRecord, ExperienceCluster, experience_db
+from agent.agent_protocol import AgentProtocol, MessageType, MessagePriority, ProtocolVersion, AgentMessage as ProtoMessage, Conversation, AgentSession, agent_protocol
+from agent.experiment_tracker import ExperimentTracker, ExperimentStatus, ExperimentType, MetricType, Experiment, ExperimentVariant, TrialResult, experiment_tracker
+
+evolution_engine_instance = evolution_engine
+white_memory_instance = white_memory
+experience_db_instance = experience_db
+agent_protocol_instance = agent_protocol
+experiment_tracker_instance = experiment_tracker
