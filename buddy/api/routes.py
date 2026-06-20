@@ -7471,18 +7471,6 @@ async def stream_events(
     )
 
 
-@router.get("/events/stats")
-async def get_event_stats():
-    """Get event statistics by type and agent."""
-    bus_stats = event_bus.get_stats()
-    return {
-        "total_events": bus_stats["total_events"],
-        "type_counts": bus_stats["type_counts"],
-        "listener_count": bus_stats["listener_count"],
-        "pending_tasks": bus_stats["pending_tasks"],
-    }
-
-
 # ═══════════════════════════════════════════════════════════
 # Runtime Status API
 # ═══════════════════════════════════════════════════════════
@@ -8796,30 +8784,6 @@ async def get_system_dashboard():
         dashboard["synthesis"] = {"status": "active"}
 
     return dashboard
-
-
-@router.get("/system/health")
-async def get_system_health():
-    """Get comprehensive system health check."""
-    health = {
-        "status": "ok",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "components": {
-            "api": "ok",
-            "database": "ok",
-            "runtime_registry": f"ok ({runtime_registry.active_count} active)",
-            "orchestrator": f"ok ({orchestrator.active_agents} agents)",
-        },
-    }
-
-    # Check pulse system
-    try:
-        pulse = pulse_system.get_health()
-        health["components"]["pulse"] = pulse.get("status", "ok") if isinstance(pulse, dict) else "ok"
-    except Exception as e:
-        health["components"]["pulse"] = f"error: {e}"
-
-    return health
 
 
 # ═══════════════════════════════════════════════════════════
@@ -10974,17 +10938,17 @@ async def get_experience_stats():
 async def record_experience(data: dict):
     """Record a new experience."""
     exp = experience_engine.recorder.record(
-        experience_type=ExperienceKind(data.get("experience_type", "conversation")),
         agent_id=data.get("agent_id", ""),
+        kind=ExperienceKind(data.get("kind", "conversation")),
+        result=ExperienceResult(data.get("result", "success")),
         session_id=data.get("session_id", ""),
-        description=data.get("description", ""),
-        outcome=ExperienceResult(data.get("outcome", "success")),
         tokens_used=data.get("tokens_used", 0),
         latency_ms=data.get("latency_ms", 0),
         cost=data.get("cost", 0.0),
-        metadata=data.get("metadata", {}),
+        context=data.get("metadata", {}),
+        action_description=data.get("description", ""),
     )
-    return {"experience_id": exp.experience_id, "recorded": True}
+    return {"experience_id": exp.id, "recorded": True}
 
 
 @router.post("/experience/replay/sample")
@@ -10997,10 +10961,9 @@ async def sample_experiences(data: dict):
     return {
         "experiences": [
             {
-                "experience_id": e.experience_id,
-                "experience_type": e.experience_type.value,
-                "description": e.description,
-                "outcome": e.outcome.value,
+                "experience_id": e.id,
+                "kind": e.kind.value,
+                "result": e.result.value,
                 "priority": e.priority,
             }
             for e in batch
@@ -11563,12 +11526,6 @@ async def get_subagent_workstreams():
 # ═══════════════════════════════════════════════════════════
 # Agent Protocol API
 # ═══════════════════════════════════════════════════════════
-
-@router.get("/protocol/stats")
-async def get_protocol_stats():
-    """Get protocol engine global statistics."""
-    return protocol_engine.get_global_stats()
-
 
 @router.post("/protocol/register-component")
 async def register_protocol_component(data: dict):
@@ -12560,7 +12517,6 @@ async def store_white_memory(data: dict):
     entry_id = white_memory_instance.store(
         content=data.get("content", ""),
         category=category,
-        workspace_id=data.get("workspace_id"),
         importance=data.get("importance", 0.5),
         confidence=data.get("confidence", 0.5),
         tags=data.get("tags"),
@@ -12676,5 +12632,1538 @@ async def get_memory_lineage(entry_id: str):
             for e in lineage
         ]
     }
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Reflection API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import reflection_engine_instance, ReflectionDimension as ReflDimension, ErrorCategory as ReflErrorCategory, QualityScore as ReflQualityScore
+
+
+@router.get("/reflection/stats")
+async def get_reflection_stats(agent_id: str | None = None):
+    """Get reflection engine statistics."""
+    return reflection_engine_instance.get_stats(agent_id)
+
+
+@router.get("/reflection/confidence/{agent_id}")
+async def get_agent_confidence(agent_id: str):
+    """Get calibrated confidence for an agent."""
+    return {"agent_id": agent_id, "confidence": reflection_engine_instance.get_confidence(agent_id)}
+
+
+@router.post("/reflection/start")
+async def start_reflection(data: dict):
+    """Start a new reflection session on an agent output."""
+    record = reflection_engine_instance.start_reflection(
+        agent_id=data.get("agent_id", ""),
+        original_output=data.get("output", ""),
+        session_id=data.get("session_id"),
+    )
+    return {
+        "reflection_id": record.reflection_id,
+        "status": record.status.value,
+        "original_length": len(record.original_output),
+    }
+
+
+@router.post("/reflection/assess")
+async def assess_reflection_quality(data: dict):
+    """Assess quality of a reflection."""
+    scores = [
+        ReflQualityScore(
+            dimension=ReflDimension(s["dimension"]),
+            score=s["score"],
+            reasoning=s.get("reasoning", ""),
+            suggestions=s.get("suggestions", []),
+        )
+        for s in data.get("scores", [])
+    ]
+    record = reflection_engine_instance.assess_quality(
+        reflection_id=data["reflection_id"],
+        scores=scores,
+    )
+    if not record:
+        raise HTTPException(404, "Reflection not found")
+    return {
+        "reflection_id": record.reflection_id,
+        "overall_score": record.overall_score,
+        "status": record.status.value,
+    }
+
+
+@router.post("/reflection/detect-error")
+async def detect_reflection_error(data: dict):
+    """Detect an error in a reflection."""
+    error = reflection_engine_instance.detect_error(
+        reflection_id=data["reflection_id"],
+        category=ReflErrorCategory(data["category"]),
+        description=data.get("description", ""),
+        location=data.get("location", ""),
+        severity=data.get("severity", 0.5),
+        suggested_fix=data.get("suggested_fix", ""),
+    )
+    if not error:
+        raise HTTPException(404, "Reflection not found")
+    return {"error_id": error.error_id, "category": error.category.value}
+
+
+@router.post("/reflection/correct")
+async def apply_reflection_correction(data: dict):
+    """Apply correction to a reflection."""
+    record = reflection_engine_instance.apply_correction(
+        reflection_id=data["reflection_id"],
+        corrected_output=data.get("corrected_output", ""),
+        improvement_summary=data.get("improvement_summary", ""),
+    )
+    if not record:
+        raise HTTPException(404, "Reflection not found")
+    return {
+        "reflection_id": record.reflection_id,
+        "status": record.status.value,
+        "error_count": record.error_count,
+        "confidence_after": record.confidence_after,
+    }
+
+
+@router.get("/reflection/history/{agent_id}")
+async def get_reflection_history(agent_id: str, limit: int = 20):
+    """Get reflection history for an agent."""
+    records = reflection_engine_instance.get_history(agent_id, limit)
+    return {
+        "history": [
+            {
+                "reflection_id": r.reflection_id,
+                "overall_score": r.overall_score,
+                "error_count": r.error_count,
+                "status": r.status.value,
+                "created_at": r.created_at,
+            }
+            for r in records
+        ]
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Intent API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import intent_engine_instance
+
+
+@router.get("/intent/stats")
+async def get_intent_stats(agent_id: str | None = None):
+    """Get intent engine statistics."""
+    return intent_engine_instance.get_stats(agent_id)
+
+
+@router.post("/intent/analyze")
+async def analyze_intent(data: dict):
+    """Analyze user intent from a query."""
+    result = intent_engine_instance.analyze_intent(
+        agent_id=data.get("agent_id", ""),
+        query=data.get("query", ""),
+        session_id=data.get("session_id"),
+        context=data.get("context"),
+    )
+    return {
+        "intent_id": result.intent_id,
+        "category": result.category.value,
+        "complexity": result.complexity.value,
+        "urgency": result.urgency.value,
+        "confidence": result.confidence,
+        "summary": result.summary,
+        "suggested_tools": result.suggested_tools,
+        "suggested_skills": result.suggested_skills,
+        "follow_up_predictions": result.follow_up_predictions,
+        "entities": [{"name": e.name, "type": e.entity_type, "value": e.value} for e in result.entities],
+        "constraints": [{"type": c.constraint_type, "value": c.value, "is_hard": c.is_hard} for c in result.constraints],
+    }
+
+
+@router.get("/intent/session/{session_id}")
+async def get_intent_session(session_id: str):
+    """Get all intents for a session."""
+    intents = intent_engine_instance.get_session_intents(session_id)
+    return {
+        "session_id": session_id,
+        "intent_count": len(intents),
+        "intents": [
+            {
+                "intent_id": i.intent_id,
+                "category": i.category.value,
+                "complexity": i.complexity.value,
+                "urgency": i.urgency.value,
+                "created_at": i.created_at,
+            }
+            for i in intents
+        ],
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Fleet API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import fleet_manager_instance, FleetAgentStatus as FleetStatus
+
+
+@router.get("/fleet/stats")
+async def get_fleet_stats():
+    """Get fleet management statistics."""
+    return fleet_manager_instance.get_stats()
+
+
+@router.get("/fleet/health")
+async def get_fleet_health():
+    """Get fleet health report."""
+    report = fleet_manager_instance.get_health_report()
+    return {
+        "overall_health": report.overall_health.value,
+        "agent_count": report.agent_count,
+        "healthy_count": report.healthy_count,
+        "degraded_count": report.degraded_count,
+        "offline_count": report.offline_count,
+        "average_health_score": report.average_health_score,
+        "issues": report.issues,
+        "recommendations": report.recommendations,
+    }
+
+
+@router.get("/fleet/load")
+async def get_fleet_load():
+    """Get fleet load distribution."""
+    report = fleet_manager_instance.get_load_report()
+    return {
+        "total_agents": report.total_agents,
+        "available_agents": report.available_agents,
+        "total_load": report.total_load,
+        "total_capacity": report.total_capacity,
+        "load_percentage": report.load_percentage,
+        "recommended_actions": report.recommended_actions,
+    }
+
+
+@router.post("/fleet/register")
+async def register_fleet_agent(data: dict):
+    """Register an agent in the fleet."""
+    agent = fleet_manager_instance.register_agent(
+        agent_id=data.get("agent_id", f"fa-{uuid.uuid4().hex[:8]}"),
+        agent_name=data.get("agent_name", ""),
+        role=data.get("role", "worker"),
+        capabilities=data.get("capabilities", []),
+        max_concurrent=data.get("max_concurrent", 5),
+        tags=data.get("tags", []),
+    )
+    return {
+        "agent_id": agent.agent_id,
+        "agent_name": agent.agent_name,
+        "status": agent.status.value,
+    }
+
+
+@router.post("/fleet/heartbeat")
+async def fleet_heartbeat(data: dict):
+    """Send a heartbeat for a fleet agent."""
+    ok = fleet_manager_instance.heartbeat(
+        agent_id=data["agent_id"],
+        load=data.get("load", 0),
+    )
+    return {"received": ok}
+
+
+@router.post("/fleet/assign")
+async def assign_fleet_task(data: dict):
+    """Assign a task to the best available agent."""
+    agent = fleet_manager_instance.assign_task(
+        required_capabilities=data.get("required_capabilities"),
+        preferred_tags=data.get("preferred_tags"),
+        exclude_agents=data.get("exclude_agents"),
+    )
+    if not agent:
+        raise HTTPException(503, "No available agent in fleet")
+    return {
+        "agent_id": agent.agent_id,
+        "agent_name": agent.agent_name,
+        "current_load": agent.current_load,
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Event Pipeline API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import event_pipeline_instance, EventSource as PipeEventSource, EventPriority as PipeEventPriority
+
+
+@router.get("/events/pipeline/stats")
+@router.get("/event-pipeline/stats")
+async def get_event_pipeline_stats():
+    """Get event pipeline statistics."""
+    return event_pipeline_instance.get_stats()
+
+
+@router.post("/events/publish")
+async def publish_event(data: dict):
+    """Publish an event to the pipeline."""
+    event = await event_pipeline_instance.publish(
+        topic=data.get("topic", "system.general"),
+        source=PipeEventSource(data.get("source", "api_gateway")),
+        payload=data.get("payload", {}),
+        priority=PipeEventPriority(data.get("priority", "normal")),
+        correlation_id=data.get("correlation_id"),
+        parent_event_id=data.get("parent_event_id"),
+    )
+    return {
+        "event_id": event.event_id,
+        "topic": event.topic,
+        "source": event.source.value,
+        "priority": event.priority.value,
+    }
+
+
+@router.get("/events/dead-letter")
+async def get_dead_letter_queue(limit: int = 50):
+    """Get dead letter queue entries."""
+    entries = event_pipeline_instance.get_dead_letter(limit)
+    return {
+        "dead_letters": [
+            {
+                "entry_id": e.entry_id,
+                "event_id": e.event.event_id,
+                "error": e.error,
+                "failed_at": e.failed_at,
+            }
+            for e in entries
+        ]
+    }
+
+
+@router.post("/events/dead-letter/replay")
+async def replay_dead_letter(data: dict):
+    """Replay a dead letter event."""
+    ok = event_pipeline_instance.replay_dead_letter(data["entry_id"])
+    return {"replayed": ok}
+
+
+# ═══════════════════════════════════════════════════════════
+# Knowledge Network API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import knowledge_network_instance, KnowledgeType as NetKnowledgeType
+
+
+@router.get("/knowledge-network/stats")
+async def get_knowledge_network_stats():
+    """Get knowledge network statistics."""
+    return knowledge_network_instance.get_stats()
+
+
+@router.post("/knowledge-network/publish")
+async def publish_knowledge(data: dict):
+    """Publish a knowledge entry to the network."""
+    entry = knowledge_network_instance.publish(
+        knowledge_type=NetKnowledgeType(data.get("knowledge_type", "fact")),
+        topic=data.get("topic", "general"),
+        content=data.get("content", ""),
+        source_agent_id=data.get("source_agent_id", ""),
+        source_agent_name=data.get("source_agent_name", ""),
+        confidence=data.get("confidence", 0.5),
+        tags=data.get("tags"),
+        evidence=data.get("evidence"),
+    )
+    return {
+        "entry_id": entry.entry_id,
+        "knowledge_type": entry.knowledge_type.value,
+        "topic": entry.topic,
+        "status": entry.status.value,
+        "confidence": entry.confidence,
+    }
+
+
+@router.post("/knowledge-network/verify")
+async def verify_knowledge(data: dict):
+    """Verify a knowledge entry."""
+    entry = knowledge_network_instance.verify(
+        entry_id=data["entry_id"],
+        verifying_agent_id=data.get("verifying_agent_id", ""),
+        verifying_agent_name=data.get("verifying_agent_name", ""),
+        agreement=data.get("agreement", True),
+        confidence=data.get("confidence", 0.5),
+        comment=data.get("comment", ""),
+    )
+    if not entry:
+        raise HTTPException(404, "Knowledge entry not found")
+    return {
+        "entry_id": entry.entry_id,
+        "status": entry.status.value,
+        "verification_level": entry.verification_level.value,
+        "verification_count": len(entry.verifications),
+    }
+
+
+@router.get("/knowledge-network/query")
+async def query_knowledge_network(
+    topic: str | None = None,
+    knowledge_type: str | None = None,
+    min_confidence: float = 0.0,
+    status: str | None = None,
+    source_agent_id: str | None = None,
+    limit: int = 50,
+):
+    """Query knowledge entries with filters."""
+    kt = NetKnowledgeType(knowledge_type) if knowledge_type else None
+    ks = KnowledgeStatus(status) if status else None
+    entries = knowledge_network_instance.query(
+        topic=topic,
+        knowledge_type=kt,
+        min_confidence=min_confidence,
+        status=ks,
+        source_agent_id=source_agent_id,
+        limit=limit,
+    )
+    return {
+        "entries": [
+            {
+                "entry_id": e.entry_id,
+                "knowledge_type": e.knowledge_type.value,
+                "topic": e.topic,
+                "content": e.content[:300],
+                "source_agent_name": e.source_agent_name,
+                "confidence": e.confidence,
+                "status": e.status.value,
+                "verification_level": e.verification_level.value,
+                "created_at": e.created_at,
+            }
+            for e in entries
+        ]
+    }
+
+
+@router.get("/knowledge-network/contributions/{agent_id}")
+async def get_agent_knowledge_contributions(agent_id: str, limit: int = 50):
+    """Get all knowledge contributions from an agent."""
+    entries = knowledge_network_instance.get_agent_contributions(agent_id, limit)
+    return {
+        "agent_id": agent_id,
+        "contributions": [
+            {
+                "entry_id": e.entry_id,
+                "knowledge_type": e.knowledge_type.value,
+                "topic": e.topic,
+                "content": e.content[:200],
+                "confidence": e.confidence,
+                "status": e.status.value,
+                "created_at": e.created_at,
+            }
+            for e in entries
+        ]
+    }
+
+
+@router.post("/knowledge-network/topic")
+async def create_knowledge_network_topic(data: dict):
+    """Create a new knowledge topic."""
+    topic = knowledge_network_instance.create_topic(
+        name=data.get("name", "New Topic"),
+        description=data.get("description", ""),
+        parent_topic_id=data.get("parent_topic_id"),
+    )
+    return {
+        "topic_id": topic.topic_id,
+        "name": topic.name,
+        "description": topic.description,
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Reasoning API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import reasoning_engine_instance, ReasoningStrategy as ReasStrategy
+
+
+
+
+
+@router.post("/reasoning/start")
+async def start_reasoning(data: dict):
+    """Start a new reasoning session."""
+    strategy = ReasStrategy(data.get("strategy", "chain_of_thought"))
+    trace = reasoning_engine_instance.start_reasoning(
+        agent_id=data.get("agent_id", ""),
+        query=data.get("query", ""),
+        strategy=strategy,
+    )
+    return {
+        "trace_id": trace.trace_id,
+        "strategy": trace.strategy.value,
+        "query": trace.query,
+    }
+
+
+@router.post("/reasoning/add-step")
+async def add_reasoning_step(data: dict):
+    """Add a step to a reasoning trace."""
+    step = reasoning_engine_instance.add_step(
+        trace_id=data["trace_id"],
+        content=data.get("content", ""),
+        confidence=data.get("confidence", 0.5),
+        parent_step_id=data.get("parent_step_id"),
+        evidence=data.get("evidence"),
+        assumptions=data.get("assumptions"),
+    )
+    if not step:
+        raise HTTPException(404, "Reasoning trace not found")
+    return {"step_id": step.step_id, "step_number": step.step_number}
+
+
+@router.post("/reasoning/complete-step")
+async def complete_reasoning_step(data: dict):
+    """Complete a reasoning step."""
+    step = reasoning_engine_instance.complete_step(
+        trace_id=data["trace_id"],
+        step_id=data["step_id"],
+        confidence=data.get("confidence"),
+        tools_used=data.get("tools_used"),
+    )
+    if not step:
+        raise HTTPException(404, "Step not found")
+    return {"step_id": step.step_id, "status": step.status.value}
+
+
+@router.post("/reasoning/propose-hypothesis")
+async def propose_hypothesis(data: dict):
+    """Propose a hypothesis during reasoning."""
+    hyp = reasoning_engine_instance.propose_hypothesis(
+        trace_id=data["trace_id"],
+        statement=data.get("statement", ""),
+        confidence=data.get("confidence", 0.5),
+        supporting_steps=data.get("supporting_steps"),
+    )
+    if not hyp:
+        raise HTTPException(404, "Reasoning trace not found")
+    return {"hypothesis_id": hyp.hypothesis_id, "statement": hyp.statement}
+
+
+@router.post("/reasoning/set-conclusion")
+async def set_reasoning_conclusion(data: dict):
+    """Set the conclusion for a reasoning trace."""
+    trace = reasoning_engine_instance.set_conclusion(
+        trace_id=data["trace_id"],
+        conclusion=data.get("conclusion", ""),
+        confidence=data.get("confidence", 0.5),
+        alternatives=data.get("alternatives"),
+    )
+    if not trace:
+        raise HTTPException(404, "Reasoning trace not found")
+    return {"trace_id": trace.trace_id, "conclusion": trace.conclusion, "confidence": trace.overall_confidence}
+
+
+# ═══════════════════════════════════════════════════════════
+# Tool Composer API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import tool_composer_instance, PipelineStage as TStage, ToolExecutionMode as TExecMode
+
+
+@router.get("/tool-composer/stats")
+async def get_tool_composer_stats():
+    """Get tool composer statistics."""
+    return tool_composer_instance.get_stats()
+
+
+@router.post("/tool-composer/create-pipeline")
+async def create_tool_pipeline(data: dict):
+    """Create a new tool composition pipeline."""
+    exec_mode = TExecMode(data.get("execution_mode", "async"))
+    pipeline = tool_composer_instance.create_pipeline(
+        name=data.get("name", "New Pipeline"),
+        description=data.get("description", ""),
+        execution_mode=exec_mode,
+        tags=data.get("tags"),
+    )
+    return {
+        "pipeline_id": pipeline.pipeline_id,
+        "name": pipeline.pipeline_name,
+        "stages": len(pipeline.stages),
+    }
+
+
+@router.post("/tool-composer/add-stage")
+async def add_pipeline_stage(data: dict):
+    """Add a stage to a pipeline."""
+    stage = tool_composer_instance.add_stage(
+        pipeline_id=data["pipeline_id"],
+        stage_type=TStage(data.get("stage_type", "sequential")),
+        stage_name=data.get("stage_name", "New Stage"),
+        condition=data.get("condition", ""),
+        on_success=data.get("on_success"),
+        on_failure=data.get("on_failure"),
+    )
+    if not stage:
+        raise HTTPException(404, "Pipeline not found")
+    return {"stage_id": stage.stage_id, "stage_name": stage.stage_name}
+
+
+@router.post("/tool-composer/add-node")
+async def add_pipeline_node(data: dict):
+    """Add a tool node to a pipeline stage."""
+    node = tool_composer_instance.add_node(
+        pipeline_id=data["pipeline_id"],
+        stage_id=data["stage_id"],
+        tool_name=data.get("tool_name", ""),
+        parameters=data.get("parameters", {}),
+        input_mapping=data.get("input_mapping", {}),
+        output_key=data.get("output_key", ""),
+        depends_on=data.get("depends_on"),
+        max_retries=data.get("max_retries", 2),
+    )
+    if not node:
+        raise HTTPException(404, "Pipeline or stage not found")
+    return {"node_id": node.node_id, "tool_name": node.tool_name}
+
+
+@router.post("/tool-composer/register-tool")
+async def register_tool(data: dict):
+    """Register a tool executor."""
+    tool_name = data.get("tool_name", "")
+    if not tool_name:
+        raise HTTPException(400, "tool_name is required")
+    tool_composer_instance.register_tool(tool_name, lambda **kwargs: {"result": "ok"})
+    return {"registered": True, "tool_name": tool_name}
+
+
+@router.post("/tool-composer/execute")
+async def execute_tool_pipeline(data: dict):
+    """Execute a tool pipeline."""
+    result = await tool_composer_instance.execute(
+        pipeline_id=data["pipeline_id"],
+        inputs=data.get("inputs"),
+    )
+    return {
+        "execution_id": result.execution_id,
+        "status": result.status.value,
+        "stage_count": len(result.stage_results),
+        "execution_time_ms": result.execution_time_ms,
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Context Manager API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import agent_context_manager_instance, ContextType as CtxType, ContextPriority as CtxPriority
+
+
+@router.get("/context-manager/stats")
+async def get_context_manager_stats():
+    """Get context manager statistics."""
+    return agent_context_manager_instance.get_stats()
+
+
+@router.post("/context-manager/add")
+async def add_context_item(data: dict):
+    """Add an item to the context window."""
+    item = agent_context_manager_instance.add(
+        content=data.get("content", ""),
+        context_type=CtxType(data.get("context_type", "user_message")),
+        priority=CtxPriority(data.get("priority", "medium")),
+        pin=data.get("pin", False),
+        metadata=data.get("metadata"),
+    )
+    return {"item_id": item.item_id, "token_count": item.token_count, "priority": item.priority.value}
+
+
+@router.post("/context-manager/summarize")
+async def summarize_context_item(data: dict):
+    """Summarize a context item to save tokens."""
+    item = agent_context_manager_instance.summarize(
+        item_id=data["item_id"],
+        summary=data.get("summary", ""),
+    )
+    if not item:
+        raise HTTPException(404, "Context item not found")
+    return {"item_id": item.item_id, "token_count": item.token_count}
+
+
+@router.post("/context-manager/snapshot")
+async def create_context_snapshot(data: dict):
+    """Create a snapshot of the current context."""
+    snapshot = agent_context_manager_instance.create_snapshot(
+        agent_id=data.get("agent_id", ""),
+        label=data.get("label", ""),
+    )
+    return {"snapshot_id": snapshot.snapshot_id, "total_tokens": snapshot.total_tokens}
+
+
+@router.get("/context-manager/query")
+async def query_context(
+    context_type: str | None = None,
+    priority: str | None = None,
+    limit: int = 50,
+):
+    """Query context items with filters."""
+    ct = CtxType(context_type) if context_type else None
+    cp = CtxPriority(priority) if priority else None
+    items = agent_context_manager_instance.query(context_type=ct, priority=cp, limit=limit)
+    return {
+        "items": [
+            {"item_id": i.item_id, "context_type": i.context_type.value, "priority": i.priority.value, "token_count": i.token_count, "relevance": round(i.relevance_score, 3)}
+            for i in items
+        ]
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Model Proxy API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import model_proxy_instance, ModelCapability as MCap, ProxyStrategy as PStrat, ProviderType as PType, ProxyRequest as PReq
+
+
+@router.get("/model-proxy/stats")
+async def get_model_proxy_stats():
+    """Get model proxy statistics."""
+    return model_proxy_instance.get_stats()
+
+
+@router.post("/model-proxy/register")
+async def register_model(data: dict):
+    """Register a model with the proxy."""
+    capabilities = [MCap(c) for c in data.get("capabilities", ["text_generation"])]
+    profile = model_proxy_instance.register_model(
+        model_id=data.get("model_id", f"model-{uuid.uuid4().hex[:8]}"),
+        provider=PType(data.get("provider", "custom")),
+        model_name=data.get("model_name", ""),
+        capabilities=capabilities,
+        cost_per_1k=data.get("cost_per_1k", 0.0),
+        max_tokens=data.get("max_tokens", 4096),
+        context_window=data.get("context_window", 8192),
+        max_concurrent=data.get("max_concurrent", 10),
+        metadata=data.get("metadata"),
+    )
+    return {"model_id": profile.model_id, "provider": profile.provider.value, "model_name": profile.model_name}
+
+
+@router.post("/model-proxy/route")
+async def route_model_request(data: dict):
+    """Route a request through the model proxy."""
+    raw_caps = data.get("required_capabilities", [])
+    if isinstance(raw_caps, str):
+        raw_caps = [c.strip() for c in raw_caps.split(",") if c.strip()]
+    required_caps = [MCap(c) for c in raw_caps]
+    strategy = PStrat(data.get("strategy", "capability_match"))
+    request = PReq(
+        request_id=f"req-{uuid.uuid4().hex[:12]}",
+        messages=data.get("messages", [{"role": "user", "content": data.get("query", "")}]),
+        required_capabilities=required_caps,
+        max_tokens=data.get("max_tokens", 4096),
+        temperature=data.get("temperature", 0.7),
+        strategy=strategy,
+        max_cost=data.get("max_cost", 0.0),
+    )
+    response = await model_proxy_instance.route_request(request)
+    return {
+        "request_id": response.request_id,
+        "model_id": response.model_id,
+        "provider": response.provider.value,
+        "content": response.content[:500],
+        "latency_ms": response.latency_ms,
+        "cost": response.cost,
+        "is_fallback": response.is_fallback,
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Skill Compiler API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import skill_compiler_instance, SkillLanguage as SLang
+
+
+
+
+
+@router.post("/skill-compiler/compile")
+async def compile_skill(data: dict):
+    """Compile a natural language description into a skill."""
+    result = skill_compiler_instance.compile(
+        description=data.get("description", ""),
+        source_language=SLang(data.get("source_language", "natural_language")),
+        name=data.get("name"),
+        tags=data.get("tags"),
+    )
+    return {
+        "compilation_id": result.compilation_id,
+        "success": result.success,
+        "skill_id": result.skill.skill_id if result.skill else None,
+        "suggested_name": result.suggested_name,
+        "errors": result.errors,
+        "warnings": result.warnings,
+        "params_count": len(result.extracted_params),
+        "steps_count": len(result.extracted_steps),
+        "compilation_time_ms": result.compilation_time_ms,
+    }
+
+
+@router.post("/skill-compiler/verify")
+async def verify_skill(data: dict):
+    """Verify a compiled skill."""
+    skill = skill_compiler_instance.verify(skill_id=data["skill_id"])
+    if not skill:
+        raise HTTPException(404, "Skill not found")
+    return {"skill_id": skill.skill_id, "status": skill.status.value, "name": skill.name}
+
+
+@router.post("/skill-compiler/activate")
+async def activate_skill(data: dict):
+    """Activate a verified skill."""
+    skill = skill_compiler_instance.activate(skill_id=data["skill_id"])
+    if not skill:
+        raise HTTPException(404, "Skill not found or not verified")
+    return {"skill_id": skill.skill_id, "status": skill.status.value}
+
+
+@router.post("/skill-compiler/evolve")
+async def evolve_skill(data: dict):
+    """Evolve a skill to a new version."""
+    new_params = None
+    if data.get("new_params"):
+        from agent.shared import SkillParameter as SP, ParamType as PT
+        new_params = [SP(name=p["name"], param_type=PT(p["param_type"]), description=p.get("description", "")) for p in data["new_params"]]
+    skill = skill_compiler_instance.evolve(
+        skill_id=data["skill_id"],
+        new_description=data.get("new_description", ""),
+        new_steps=data.get("new_steps"),
+        new_params=new_params,
+    )
+    if not skill:
+        raise HTTPException(404, "Skill not found")
+    return {"skill_id": skill.skill_id, "version": skill.version, "status": skill.status.value}
+
+
+# ═══════════════════════════════════════════════════════════
+# Unified Agent Runtime API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import unified_runtime_instance, RuntimeMode as URTMode
+
+
+@router.get("/unified-runtime/metrics")
+async def get_unified_runtime_metrics():
+    """Get unified runtime metrics."""
+    return unified_runtime_instance.get_metrics()
+
+
+@router.get("/unified-runtime/sessions")
+async def get_unified_runtime_sessions():
+    """Get all runtime sessions."""
+    sessions = []
+    for sid, session in unified_runtime_instance._sessions.items():
+        sessions.append({
+            "session_id": session.session_id,
+            "agent_id": session.agent_id,
+            "mode": session.mode.value,
+            "status": session.status,
+            "phases": [p.value for p in session.phases],
+            "phase_timings": session.phase_timings,
+            "errors": session.errors,
+            "warnings": session.warnings,
+        })
+    return {"sessions": sessions, "total": len(sessions)}
+
+
+@router.get("/unified-runtime/activity")
+async def get_unified_runtime_activity():
+    """Get activity feed from event pipeline."""
+    entries = []
+    try:
+        events = unified_runtime_instance.event_pipeline.get_recent_events(limit=50)
+        for evt in events:
+            entries.append({
+                "id": evt.event_id,
+                "type": evt.event_type,
+                "description": str(evt.payload.get("description", evt.event_type)),
+                "timestamp": evt.created_at if hasattr(evt, 'created_at') else str(time.time()),
+                "agent_id": str(evt.payload.get("agent_id", "system")),
+            })
+    except Exception:
+        pass
+    return {"entries": entries, "total": len(entries)}
+
+
+@router.post("/unified-runtime/execute")
+async def execute_unified_runtime(data: dict):
+    """Execute a task through the unified runtime pipeline."""
+    mode = URTMode(data.get("mode", "full"))
+    session = await unified_runtime_instance.execute(
+        agent_id=data.get("agent_id", "buddy-coder"),
+        query=data.get("query", ""),
+        mode=mode,
+        context=data.get("context"),
+    )
+    return {
+        "session_id": session.session_id,
+        "status": session.status,
+        "mode": session.mode.value,
+        "phases_completed": len(session.phase_results),
+        "phase_timings": session.phase_timings,
+        "errors": session.errors,
+        "warnings": session.warnings,
+    }
+
+
+@router.get("/unified-runtime/subsystems")
+async def get_subsystem_status():
+    """Get status of all subsystems."""
+    subsystems = {}
+    try:
+        subsystems["reasoning"] = {"status": "online", "stats": unified_runtime_instance.reasoning.get_stats()}
+    except Exception as e:
+        subsystems["reasoning"] = {"status": "error", "error": str(e)}
+    try:
+        subsystems["tool_composer"] = {"status": "online", "stats": unified_runtime_instance.tool_composer.get_stats()}
+    except Exception as e:
+        subsystems["tool_composer"] = {"status": "error", "error": str(e)}
+    try:
+        subsystems["context_manager"] = {"status": "online", "stats": unified_runtime_instance.context_manager.get_stats()}
+    except Exception as e:
+        subsystems["context_manager"] = {"status": "error", "error": str(e)}
+    try:
+        subsystems["model_proxy"] = {"status": "online", "stats": unified_runtime_instance.model_proxy.get_stats()}
+    except Exception as e:
+        subsystems["model_proxy"] = {"status": "error", "error": str(e)}
+    try:
+        subsystems["skill_compiler"] = {"status": "online", "stats": unified_runtime_instance.skill_compiler.get_stats()}
+    except Exception as e:
+        subsystems["skill_compiler"] = {"status": "error", "error": str(e)}
+    return {"subsystems": subsystems}
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Evolution Engine API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import (
+    evolution_engine_instance, OperationOutcome as OpOutcome,
+    EvolutionStage as EvoStage,
+)
+
+
+
+
+
+@router.get("/evolution/skills")
+async def list_evolution_skills(
+    min_effectiveness: float = 0.0,
+    status: str | None = None,
+    tags: str | None = None,
+):
+    """List evolution-created skills."""
+    s = EvoStage(status) if status else None
+    t = tags.split(",") if tags else None
+    skills = evolution_engine_instance.list_skills(
+        min_effectiveness=min_effectiveness, status=s, tags=t,
+    )
+    return {"skills": [sk.to_dict() for sk in skills], "total": len(skills)}
+
+
+@router.get("/evolution/skills/{skill_id}")
+async def get_evolution_skill(skill_id: str):
+    """Get a specific evolution skill."""
+    skill = evolution_engine_instance.get_skill(skill_id)
+    if not skill:
+        raise HTTPException(404, "Skill not found")
+    return skill.to_dict()
+
+
+@router.post("/evolution/skills/synthesize")
+async def synthesize_skill(data: dict):
+    """Synthesize a new skill from operations."""
+    skill = evolution_engine_instance.synthesize_skill(
+        name=data.get("name", "unnamed"),
+        description=data.get("description", ""),
+        source_operations=data.get("source_operations"),
+        execution_pattern=data.get("execution_pattern"),
+        tools=data.get("tools"),
+        tags=data.get("tags"),
+    )
+    return skill.to_dict()
+
+
+@router.post("/evolution/skills/auto-synthesize")
+async def auto_synthesize_skills(data: dict):
+    """Auto-synthesize skills from discovered patterns."""
+    skills = evolution_engine_instance.auto_synthesize_from_patterns(
+        agent_id=data.get("agent_id", "default"),
+        min_confidence=data.get("min_confidence", 0.5),
+    )
+    return {"skills": [sk.to_dict() for sk in skills], "total": len(skills)}
+
+
+@router.post("/evolution/skills/{skill_id}/refine")
+async def refine_evolution_skill(skill_id: str, data: dict):
+    """Refine an existing evolution skill."""
+    skill = evolution_engine_instance.refine_skill(
+        skill_id=skill_id,
+        new_execution_pattern=data.get("execution_pattern"),
+        new_tools=data.get("tools"),
+        new_description=data.get("description"),
+    )
+    if not skill:
+        raise HTTPException(404, "Skill not found")
+    return skill.to_dict()
+
+
+@router.post("/evolution/skills/{skill_id}/rollback")
+async def rollback_evolution_skill(skill_id: str, target_version: int):
+    """Rollback a skill to a previous version."""
+    skill = evolution_engine_instance.rollback_skill(skill_id, target_version)
+    if not skill:
+        raise HTTPException(404, "Skill not found or version not available")
+    return skill.to_dict()
+
+
+@router.post("/evolution/skills/{skill_id}/deprecate")
+async def deprecate_evolution_skill(skill_id: str):
+    """Mark a skill as deprecated."""
+    ok = evolution_engine_instance.mark_deprecated(skill_id)
+    if not ok:
+        raise HTTPException(404, "Skill not found")
+    return {"success": True}
+
+
+@router.post("/evolution/operations/record")
+async def record_evolution_operation(data: dict):
+    """Record an operation for evolution analysis."""
+    record = evolution_engine_instance.record_operation(
+        agent_id=data.get("agent_id", "default"),
+        task_description=data.get("task_description", ""),
+        outcome=OpOutcome(data.get("outcome", "success")),
+        steps_taken=data.get("steps_taken"),
+        tools_used=data.get("tools_used"),
+        duration_ms=data.get("duration_ms", 0.0),
+        error_message=data.get("error_message"),
+        user_feedback=data.get("user_feedback"),
+        context=data.get("context"),
+    )
+    return record.to_dict()
+
+
+@router.get("/evolution/operations")
+async def get_evolution_operations(
+    agent_id: str | None = None,
+    outcome: str | None = None,
+    limit: int = 50,
+):
+    """Get evolution operation records."""
+    o = OpOutcome(outcome) if outcome else None
+    ops = evolution_engine_instance.get_operations(
+        agent_id=agent_id, outcome=o, limit=limit,
+    )
+    return {"operations": [op.to_dict() for op in ops], "total": len(ops)}
+
+
+@router.get("/evolution/patterns")
+async def get_evolution_patterns(
+    min_confidence: float = 0.0,
+    pattern_type: str | None = None,
+):
+    """Get discovered evolution patterns."""
+    patterns = evolution_engine_instance.get_patterns(
+        min_confidence=min_confidence, pattern_type=pattern_type,
+    )
+    return {"patterns": [
+        {
+            "pattern_id": p.pattern_id,
+            "pattern_type": p.pattern_type,
+            "description": p.description,
+            "frequency": p.frequency,
+            "confidence": p.confidence,
+            "common_tools": p.common_tools,
+            "common_steps": p.common_steps,
+        }
+        for p in patterns
+    ], "total": len(patterns)}
+
+
+@router.get("/evolution/log")
+async def get_evolution_log(limit: int = 100):
+    """Get the evolution event log."""
+    return {"log": evolution_engine_instance.get_evolution_log(limit)}
+
+
+# ═══════════════════════════════════════════════════════════
+# White Memory API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import (
+    white_memory_instance, MemoryCategory as MemCat,
+    MemoryStatus as MemStatus,
+)
+
+
+
+
+
+
+
+
+@router.get("/white-memory/entries/{entry_id}")
+async def get_memory_entry(entry_id: str):
+    """Get a memory entry by ID."""
+    entry = white_memory_instance.retrieve(entry_id)
+    if not entry:
+        raise HTTPException(404, "Entry not found")
+    return entry.to_dict()
+
+
+@router.put("/white-memory/entries/{entry_id}")
+async def update_memory_entry(entry_id: str, data: dict):
+    """Update a memory entry."""
+    entry = white_memory_instance.update(
+        entry_id=entry_id,
+        content=data.get("content"),
+        importance=data.get("importance"),
+        confidence=data.get("confidence"),
+        tags=data.get("tags"),
+        reason=data.get("reason", ""),
+    )
+    if not entry:
+        raise HTTPException(404, "Entry not found")
+    return entry.to_dict()
+
+
+@router.delete("/white-memory/entries/{entry_id}")
+async def delete_memory_entry(entry_id: str, reason: str = ""):
+    """Archive a memory entry."""
+    ok = white_memory_instance.delete(entry_id, reason)
+    if not ok:
+        raise HTTPException(404, "Entry not found")
+    return {"success": True}
+
+
+@router.post("/white-memory/search")
+async def search_memory(data: dict):
+    """Search memory entries."""
+    entries = white_memory_instance.search(
+        agent_id=data.get("agent_id"),
+        query=data.get("query", ""),
+        category=MemCat(data["category"]) if data.get("category") else None,
+        tags=data.get("tags"),
+        min_importance=data.get("min_importance", 0.0),
+        min_confidence=data.get("min_confidence", 0.0),
+        status=MemStatus(data["status"]) if data.get("status") else None,
+        limit=data.get("limit", 50),
+    )
+    return {"entries": [e.to_dict() for e in entries], "total": len(entries)}
+
+
+@router.post("/white-memory/snapshot")
+async def create_memory_snapshot(data: dict):
+    """Create a memory snapshot for rollback."""
+    snapshot = white_memory_instance.create_snapshot(
+        agent_id=data.get("agent_id", "default"),
+        label=data.get("label", ""),
+    )
+    return snapshot.to_dict()
+
+
+@router.post("/white-memory/snapshot/{snapshot_id}/rollback")
+async def rollback_memory(snapshot_id: str):
+    """Rollback memory to a previous snapshot."""
+    restored = white_memory_instance.rollback(snapshot_id)
+    if restored == 0:
+        raise HTTPException(404, "Snapshot not found")
+    return {"restored_entries": restored}
+
+
+@router.post("/white-memory/dream")
+async def dream_organize_memory(data: dict):
+    """Run dream mode to auto-organize memory."""
+    results = white_memory_instance.dream_organize(
+        agent_id=data.get("agent_id", "default"),
+    )
+    return results
+
+
+@router.post("/white-memory/deduplicate")
+async def deduplicate_memory(data: dict):
+    """Run deduplication on memory entries."""
+    count = white_memory_instance.run_deduplication(
+        agent_id=data.get("agent_id"),
+    )
+    return {"merged_count": count}
+
+
+@router.get("/white-memory/timeline/{agent_id}")
+async def get_memory_timeline(agent_id: str, limit: int = 100):
+    """Get memory timeline for an agent."""
+    return {"timeline": white_memory_instance.get_memory_timeline(agent_id, limit)}
+
+
+@router.get("/white-memory/audit")
+async def get_memory_audit_log(limit: int = 100):
+    """Get the memory audit log."""
+    return {"audit_log": white_memory_instance.get_audit_log(limit)}
+
+
+# ═══════════════════════════════════════════════════════════
+# Experience Database API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import (
+    experience_db_instance, ExperienceType as ExpType,
+    ExperienceOutcome as ExpOutcome, ExperienceQuality as ExpQuality,
+)
+
+
+
+
+
+
+
+
+@router.get("/experience/entries/{experience_id}")
+async def get_experience(experience_id: str):
+    """Get an experience by ID."""
+    exp = experience_db_instance.get_experience(experience_id)
+    if not exp:
+        raise HTTPException(404, "Experience not found")
+    return exp.to_dict()
+
+
+@router.post("/experience/search")
+async def search_experiences(data: dict):
+    """Search experiences."""
+    results = experience_db_instance.search(
+        agent_id=data.get("agent_id"),
+        experience_type=ExpType(data["experience_type"]) if data.get("experience_type") else None,
+        outcome=ExpOutcome(data["outcome"]) if data.get("outcome") else None,
+        min_reusability=data.get("min_reusability", 0.0),
+        tags=data.get("tags"),
+        query=data.get("query", ""),
+        limit=data.get("limit", 50),
+    )
+    return {"experiences": [e.to_dict() for e in results], "total": len(results)}
+
+
+@router.get("/experience/successful")
+async def get_successful_experiences(agent_id: str | None = None, limit: int = 20):
+    """Get successful experiences for learning."""
+    results = experience_db_instance.get_successful_experiences(agent_id, limit)
+    return {"experiences": [e.to_dict() for e in results], "total": len(results)}
+
+
+@router.get("/experience/failures")
+async def get_failure_experiences(agent_id: str | None = None, limit: int = 20):
+    """Get failure experiences to learn from."""
+    results = experience_db_instance.get_failure_lessons(agent_id, limit)
+    return {"experiences": [e.to_dict() for e in results], "total": len(results)}
+
+
+@router.post("/experience/share")
+async def share_experience(data: dict):
+    """Share an experience with another agent."""
+    shared = experience_db_instance.share_experience(
+        experience_id=data.get("experience_id", ""),
+        target_agent_id=data.get("target_agent_id", ""),
+    )
+    if not shared:
+        raise HTTPException(404, "Experience not found")
+    return shared.to_dict()
+
+
+@router.get("/experience/clusters")
+async def get_experience_clusters(min_success_rate: float = 0.0, limit: int = 50):
+    """Get experience clusters."""
+    clusters = experience_db_instance.get_clusters(
+        min_success_rate=min_success_rate, limit=limit,
+    )
+    return {"clusters": [
+        {
+            "cluster_id": c.cluster_id,
+            "topic": c.topic,
+            "description": c.description,
+            "common_tools": c.common_tools,
+            "common_errors": c.common_errors,
+            "best_practices": c.best_practices,
+            "success_rate": c.success_rate,
+            "member_count": c.member_count,
+        }
+        for c in clusters
+    ], "total": len(clusters)}
+
+
+# ═══════════════════════════════════════════════════════════
+# Agent Communication Protocol API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import (
+    agent_protocol_instance, MessageType as MsgType,
+    MessagePriority as MsgPriority, ProtocolVersion as ProtoVer,
+)
+
+
+@router.post("/protocol/session/initiate")
+async def initiate_protocol_session(data: dict):
+    """Initiate a communication session."""
+    session = agent_protocol_instance.initiate_session(
+        initiator_id=data.get("initiator_id", ""),
+        responder_id=data.get("responder_id", ""),
+        protocol_version=ProtoVer(data.get("protocol_version", "1.0")),
+        metadata=data.get("metadata"),
+    )
+    return {
+        "session_id": session.session_id,
+        "status": session.status,
+        "protocol_version": session.protocol_version.value,
+    }
+
+
+@router.post("/protocol/session/{session_id}/establish")
+async def establish_protocol_session(session_id: str):
+    """Establish a session after handshake."""
+    ok = agent_protocol_instance.establish_session(session_id)
+    if not ok:
+        raise HTTPException(404, "Session not found")
+    return {"success": True}
+
+
+@router.post("/protocol/session/{session_id}/close")
+async def close_protocol_session(session_id: str):
+    """Close a protocol session."""
+    ok = agent_protocol_instance.close_session(session_id)
+    if not ok:
+        raise HTTPException(404, "Session not found")
+    return {"success": True}
+
+
+@router.post("/protocol/message/send")
+async def send_protocol_message(data: dict):
+    """Send a message via the protocol."""
+    msg = agent_protocol_instance.send_message(
+        sender_id=data.get("sender_id", ""),
+        receiver_id=data.get("receiver_id", ""),
+        message_type=MsgType(data.get("message_type", "task_request")),
+        content=data.get("content", {}),
+        priority=MsgPriority(data.get("priority", "normal")),
+        correlation_id=data.get("correlation_id"),
+        conversation_id=data.get("conversation_id"),
+        requires_response=data.get("requires_response", False),
+        timeout_ms=data.get("timeout_ms", 30000),
+        metadata=data.get("metadata"),
+    )
+    return msg.to_dict()
+
+
+@router.get("/protocol/message/receive/{receiver_id}")
+async def receive_protocol_messages(
+    receiver_id: str,
+    message_type: str | None = None,
+    priority: str | None = None,
+    limit: int = 50,
+):
+    """Receive messages for a receiver."""
+    mt = MsgType(message_type) if message_type else None
+    mp = MsgPriority(priority) if priority else None
+    messages = agent_protocol_instance.receive_messages(
+        receiver_id=receiver_id, message_type=mt, priority=mp, limit=limit,
+    )
+    return {"messages": [m.to_dict() for m in messages], "total": len(messages)}
+
+
+@router.post("/protocol/message/{message_id}/ack")
+async def acknowledge_message(message_id: str):
+    """Acknowledge receipt of a message."""
+    ok = agent_protocol_instance.acknowledge_message(message_id)
+    if not ok:
+        raise HTTPException(404, "Message not found")
+    return {"success": True}
+
+
+@router.post("/protocol/broadcast")
+async def broadcast_message(data: dict):
+    """Broadcast a message to all agents."""
+    msg = agent_protocol_instance.broadcast(
+        sender_id=data.get("sender_id", ""),
+        message_type=MsgType(data.get("message_type", "task_request")),
+        content=data.get("content", {}),
+        priority=MsgPriority(data.get("priority", "normal")),
+        exclude=data.get("exclude"),
+    )
+    return msg.to_dict()
+
+
+@router.post("/protocol/conversation/create")
+async def create_conversation(data: dict):
+    """Create a conversation thread."""
+    conv = agent_protocol_instance.create_conversation(
+        participants=data.get("participants", []),
+        topic=data.get("topic", ""),
+        metadata=data.get("metadata"),
+    )
+    return conv.to_dict()
+
+
+@router.get("/protocol/conversation/{conversation_id}")
+async def get_conversation(conversation_id: str):
+    """Get a conversation by ID."""
+    conv = agent_protocol_instance.get_conversation(conversation_id)
+    if not conv:
+        raise HTTPException(404, "Conversation not found")
+    return conv.to_dict()
+
+
+@router.get("/protocol/conversations")
+async def list_conversations(participant_id: str | None = None, status: str | None = None):
+    """List conversations."""
+    conversations = agent_protocol_instance.list_conversations(
+        participant_id=participant_id, status=status,
+    )
+    return {"conversations": [c.to_dict() for c in conversations], "total": len(conversations)}
+
+
+@router.post("/protocol/conversation/{conversation_id}/archive")
+async def archive_conversation(conversation_id: str):
+    """Archive a conversation."""
+    ok = agent_protocol_instance.archive_conversation(conversation_id)
+    if not ok:
+        raise HTTPException(404, "Conversation not found")
+    return {"success": True}
+
+
+# ═══════════════════════════════════════════════════════════
+# Experiment Tracker API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import (
+    experiment_tracker_instance, ExperimentType as ExpTypeEnum,
+    MetricType as MetType, ExperimentStatus as ExpStatus,
+)
+
+
+@router.get("/experiments/stats")
+async def get_experiment_tracker_stats():
+    """Get experiment tracker statistics."""
+    return experiment_tracker_instance.get_stats()
+
+
+@router.post("/experiments/create")
+async def create_experiment(data: dict):
+    """Create a new experiment."""
+    metrics = [MetType(m) for m in data.get("metrics", ["success_rate"])]
+    experiment = experiment_tracker_instance.create_experiment(
+        name=data.get("name", ""),
+        description=data.get("description", ""),
+        experiment_type=ExpTypeEnum(data.get("experiment_type", "config_ab")),
+        variants=data.get("variants", []),
+        metrics=metrics,
+        minimum_trials=data.get("minimum_trials", 30),
+        confidence_level=data.get("confidence_level", 0.95),
+    )
+    return experiment.to_dict()
+
+
+@router.get("/experiments")
+async def list_experiments(
+    status: str | None = None,
+    experiment_type: str | None = None,
+):
+    """List experiments."""
+    s = ExpStatus(status) if status else None
+    et = ExpTypeEnum(experiment_type) if experiment_type else None
+    experiments = experiment_tracker_instance.list_experiments(
+        status=s, experiment_type=et,
+    )
+    return {"experiments": [e.to_dict() for e in experiments], "total": len(experiments)}
+
+
+@router.get("/experiments/{experiment_id}")
+async def get_experiment(experiment_id: str):
+    """Get an experiment by ID."""
+    exp = experiment_tracker_instance.get_experiment(experiment_id)
+    if not exp:
+        raise HTTPException(404, "Experiment not found")
+    return exp.to_dict()
+
+
+@router.post("/experiments/{experiment_id}/start")
+async def start_experiment(experiment_id: str):
+    """Start an experiment."""
+    ok = experiment_tracker_instance.start_experiment(experiment_id)
+    if not ok:
+        raise HTTPException(404, "Experiment not found")
+    return {"success": True}
+
+
+@router.post("/experiments/{experiment_id}/pause")
+async def pause_experiment(experiment_id: str):
+    """Pause an experiment."""
+    ok = experiment_tracker_instance.pause_experiment(experiment_id)
+    if not ok:
+        raise HTTPException(404, "Experiment not found")
+    return {"success": True}
+
+
+@router.post("/experiments/{experiment_id}/complete")
+async def complete_experiment(experiment_id: str):
+    """Complete an experiment and run analysis."""
+    ok = experiment_tracker_instance.complete_experiment(experiment_id)
+    if not ok:
+        raise HTTPException(404, "Experiment not found")
+    return {"success": True}
+
+
+@router.post("/experiments/{experiment_id}/trials")
+async def record_trial(experiment_id: str, data: dict):
+    """Record a trial result."""
+    trial = experiment_tracker_instance.record_trial(
+        experiment_id=experiment_id,
+        variant_id=data.get("variant_id", ""),
+        metrics=data.get("metrics", {}),
+        context=data.get("context"),
+        success=data.get("success", True),
+        error_message=data.get("error_message"),
+    )
+    if not trial:
+        raise HTTPException(404, "Experiment or variant not found")
+    return trial.to_dict()
+
+
+@router.get("/experiments/{experiment_id}/analysis")
+async def get_experiment_analysis(experiment_id: str):
+    """Get analysis results for an experiment."""
+    analysis = experiment_tracker_instance.get_analysis(experiment_id)
+    if not analysis:
+        raise HTTPException(404, "Analysis not found")
+    return analysis
+
+
+@router.post("/experiments/prompt-ab")
+async def create_prompt_ab_test(data: dict):
+    """Create a prompt A/B test."""
+    experiment = experiment_tracker_instance.create_prompt_ab_test(
+        name=data.get("name", ""),
+        description=data.get("description", ""),
+        control_prompt=data.get("control_prompt", ""),
+        treatment_prompt=data.get("treatment_prompt", ""),
+        task_description=data.get("task_description", ""),
+    )
+    return experiment.to_dict()
+
+
+@router.post("/experiments/config-ab")
+async def create_config_ab_test(data: dict):
+    """Create a configuration A/B test."""
+    experiment = experiment_tracker_instance.create_config_ab_test(
+        name=data.get("name", ""),
+        description=data.get("description", ""),
+        control_config=data.get("control_config", {}),
+        treatment_config=data.get("treatment_config", {}),
+    )
+    return experiment.to_dict()
 
 
