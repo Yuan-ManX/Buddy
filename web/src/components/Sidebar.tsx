@@ -82,6 +82,16 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'agentorchestrator', label: 'Orchestrator', icon: '🎭' },
   { id: 'dreammode', label: 'Dream', icon: '🌙' },
   { id: 'whitememory', label: 'W-Memory', icon: '🧠' },
+  { id: 'reflection', label: 'Reflection', icon: '🪞' },
+  { id: 'intent', label: 'Intent', icon: '🎯' },
+  { id: 'fleet', label: 'Fleet', icon: '🚀' },
+  { id: 'knowledgenetwork', label: 'K-Network', icon: '🔗' },
+  { id: 'reasoning', label: 'Reasoning', icon: '🧠' },
+  { id: 'modelproxy', label: 'M-Proxy', icon: '🔀' },
+  { id: 'toolcomposer', label: 'T-Compose', icon: '🔧' },
+  { id: 'contextmanager', label: 'Context', icon: '📋' },
+  { id: 'unifiedconsole', label: 'Console', icon: '🖥️' },
+  { id: 'experiments', label: 'Experiments', icon: '🧪' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
