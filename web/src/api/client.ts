@@ -1890,4 +1890,23 @@ export const api = {
       return request<{ patterns: import('../types').LearningPattern[]; total: number }>(`/learning/patterns${qs ? '?' + qs : ''}`);
     },
   },
+
+  // ── Experiment Tracker ──
+  experiments: {
+    stats: () => request<any>('/experiments/stats'),
+    list: () => request<{ experiments: any[] }>('/experiments'),
+    get: (id: string) => request<any>(`/experiments/${id}`),
+    create: (data: { name: string; description?: string; experiment_type?: string; control_config?: Record<string, unknown>; treatment_config?: Record<string, unknown>; metrics?: any[] }) =>
+      request<any>('/experiments/create', { method: 'POST', body: JSON.stringify(data) }),
+    start: (id: string) => request<any>(`/experiments/${id}/start`, { method: 'POST' }),
+    pause: (id: string) => request<any>(`/experiments/${id}/pause`, { method: 'POST' }),
+    complete: (id: string) => request<any>(`/experiments/${id}/complete`, { method: 'POST' }),
+    recordTrial: (experimentId: string, data: { variant_id: string; metrics?: Record<string, unknown>; context?: Record<string, unknown>; success?: boolean; error_message?: string }) =>
+      request<any>(`/experiments/${experimentId}/trials`, { method: 'POST', body: JSON.stringify(data) }),
+    analysis: (id: string) => request<any>(`/experiments/${id}/analysis`),
+    createPromptAB: (data: { name: string; description?: string; control_prompt: string; treatment_prompt: string; task_description?: string }) =>
+      request<any>('/experiments/prompt-ab', { method: 'POST', body: JSON.stringify(data) }),
+    createConfigAB: (data: { name: string; description?: string; control_config: Record<string, unknown>; treatment_config: Record<string, unknown> }) =>
+      request<any>('/experiments/config-ab', { method: 'POST', body: JSON.stringify(data) }),
+  },
 };
