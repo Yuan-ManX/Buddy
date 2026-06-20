@@ -36,7 +36,6 @@ import { StudioPanel } from './components/StudioPanel';
 import { WorkflowPanel } from './components/WorkflowPanel';
 import { IssueBoardPanel } from './components/IssueBoardPanel';
 import { CompoundingPanel } from './components/CompoundingPanel';
-import { WhiteboxMemoryPanel } from './components/WhiteboxMemoryPanel';
 import { PipelinePanel } from './components/PipelinePanel';
 import { CapabilityPanel } from './components/CapabilityPanel';
 import { KnowledgeGraphPanel } from './components/KnowledgeGraphPanel';
@@ -67,6 +66,10 @@ import { ProductComposerPanel } from './components/ProductComposerPanel';
 import { AgentOrchestratorPanel } from './components/AgentOrchestratorPanel';
 import { DreamModePanel } from './components/DreamModePanel';
 import { WhiteMemoryPanel } from './components/WhiteMemoryPanel';
+import { ReflectionPanel } from './components/ReflectionPanel';
+import { IntentPanel } from './components/IntentPanel';
+import { FleetPanel } from './components/FleetPanel';
+import { KnowledgeNetworkPanel } from './components/KnowledgeNetworkPanel';
 import { ProactiveDiscoveryPanel } from './components/ProactiveDiscoveryPanel';
 import { MetaCognitionPanel } from './components/MetaCognitionPanel';
 import { EvolutionPanel } from './components/EvolutionPanel';
@@ -87,6 +90,12 @@ import { IntelligencePanel } from './components/IntelligencePanel';
 import { RuntimePanel } from './components/RuntimePanel';
 import { SkillCompilerPanel } from './components/SkillCompilerPanel';
 import { ConversationSearchPanel } from './components/ConversationSearchPanel';
+import { ReasoningPanel } from './components/ReasoningPanel';
+import { ModelProxyPanel } from './components/ModelProxyPanel';
+import { ToolComposerPanel } from './components/ToolComposerPanel';
+import { ContextManagerPanel } from './components/ContextManagerPanel';
+import { UnifiedConsole } from './components/UnifiedConsole';
+import { ExperimentPanel } from './components/ExperimentPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { CommandPalette } from './components/CommandPalette';
@@ -493,7 +502,6 @@ export default function App() {
         {activeTab === 'board' && <IssueBoardPanel />}
         {activeTab === 'kanban' && <KanbanBoard />}
         {activeTab === 'compounding' && <CompoundingPanel />}
-        {activeTab === 'whitememory' && <WhiteboxMemoryPanel />}
         {activeTab === 'pipeline' && <PipelinePanel />}
         {activeTab === 'capability' && <CapabilityPanel />}
         {activeTab === 'kgraph' && <KnowledgeGraphPanel />}
@@ -523,6 +531,10 @@ export default function App() {
               {activeTab === 'agentorchestrator' && <AgentOrchestratorPanel />}
               {activeTab === 'dreammode' && <DreamModePanel />}
               {activeTab === 'whitememory' && <WhiteMemoryPanel />}
+              {activeTab === 'reflection' && <ReflectionPanel />}
+              {activeTab === 'intent' && <IntentPanel />}
+              {activeTab === 'fleet' && <FleetPanel />}
+              {activeTab === 'knowledgenetwork' && <KnowledgeNetworkPanel />}
         {activeTab === 'proactive' && selectedAgent && <ProactiveDiscoveryPanel agent={selectedAgent} />}
         {activeTab === 'metacognition' && selectedAgent && <MetaCognitionPanel agent={selectedAgent} />}
         {activeTab === 'evolution' && selectedAgent && <EvolutionPanel agent={selectedAgent} />}
@@ -541,6 +553,12 @@ export default function App() {
         {activeTab === 'runtimepanel' && <RuntimePanel />}
         {activeTab === 'skillcompiler' && <SkillCompilerPanel />}
         {activeTab === 'conversationsearch' && <ConversationSearchPanel />}
+        {activeTab === 'reasoning' && <ReasoningPanel />}
+        {activeTab === 'modelproxy' && <ModelProxyPanel />}
+        {activeTab === 'toolcomposer' && <ToolComposerPanel />}
+        {activeTab === 'contextmanager' && <ContextManagerPanel />}
+        {activeTab === 'unifiedconsole' && <UnifiedConsole />}
+        {activeTab === 'experiments' && <ExperimentPanel />}
 
         {/* Agent-specific panels */}
         {selectedAgent && (
@@ -623,7 +641,7 @@ export default function App() {
     )}
 
         {/* Empty state — no agent and no global panel selected */}
-        {!selectedAgent && !['overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend', 'agentcore', 'synthesis', 'intelligence', 'runtimepanel', 'skillcompiler', 'conversationsearch', 'governance', 'smartrouter', 'agentmesh', 'learningloop', 'experience', 'collabspace', 'contextengine', 'automation', 'skillfabric', 'usermodel', 'evolvingskills', 'subagentmesh', 'protocol', 'sandbox', 'toolexec', 'modelorch', 'deployment', 'productcomposer', 'agentorchestrator', 'dreammode'].includes(activeTab) && (
+        {!selectedAgent && !['overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend', 'agentcore', 'synthesis', 'intelligence', 'runtimepanel', 'skillcompiler', 'conversationsearch', 'governance', 'smartrouter', 'agentmesh', 'learningloop', 'experience', 'collabspace', 'contextengine', 'automation', 'skillfabric', 'usermodel', 'evolvingskills', 'subagentmesh', 'protocol', 'sandbox', 'toolexec', 'modelorch', 'deployment', 'productcomposer', 'agentorchestrator', 'dreammode', 'reflection', 'intent', 'fleet', 'knowledgenetwork', 'reasoning', 'modelproxy', 'toolcomposer', 'contextmanager', 'unifiedconsole', 'experiments'].includes(activeTab) && (
           <div className="main-empty">
             <div className="main-empty-icon">B</div>
             <h2>Welcome to Buddy</h2>
