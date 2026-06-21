@@ -331,6 +331,19 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(arguments_),
       }),
+    stats: () => request<any>('/mcp/stats'),
+    listTools: (category?: string) => {
+      const qs = category ? `?category=${category}` : '';
+      return request<any>(`/mcp/tools${qs}`);
+    },
+    addServer: (data: { name: string; server_type: string; command?: string }) =>
+      request<any>('/mcp/servers', { method: 'POST', body: JSON.stringify(data) }),
+    addTool: (data: { name: string; description: string; category: string }) =>
+      request<any>('/mcp/tools', { method: 'POST', body: JSON.stringify(data) }),
+    executeTool: (name: string, args: Record<string, any>) =>
+      request<any>(`/mcp/tools/${name}/execute`, { method: 'POST', body: JSON.stringify(args) }),
+    connectServer: (name: string) =>
+      request<any>(`/mcp/servers/${name}/connect`, { method: 'POST' }),
   },
 
   collaborate: {
@@ -673,7 +686,7 @@ export const api = {
   // ── Gateway ──
   gateway: {
     stats: () =>
-      request<import('../types').GatewayStats>('/gateway/stats'),
+      request<any>('/gateway/platform-stats'),
     sessions: () =>
       request<Array<import('../types').GatewaySession>>('/gateway/sessions'),
     connectPlatform: (platform: string, config?: string) => {
@@ -684,6 +697,12 @@ export const api = {
       const params = new URLSearchParams({ platform, user_id: userId, content });
       return request<{ success: boolean }>(`/gateway/send?${params}`, { method: 'POST' });
     },
+    providers: () => request<any>('/gateway/providers'),
+    addProvider: (data: { name: string; provider_type: string; api_base?: string; api_key?: string; default_model?: string }) =>
+      request<any>('/gateway/providers', { method: 'POST', body: JSON.stringify(data) }),
+    removeProvider: (id: string) => request<any>(`/gateway/providers/${id}`, { method: 'DELETE' }),
+    testRoute: (data: { model: string; messages: Record<string, any>[] }) =>
+      request<any>('/gateway/route', { method: 'POST', body: JSON.stringify(data) }),
   },
 
   // ── Daemon ──
@@ -2149,5 +2168,28 @@ export const api = {
       request<any>('/agent-flow/manage-context', { method: 'POST', body: JSON.stringify(data) }),
     audit: (data: { flow_id?: string; include_tool_calls?: boolean; include_corrections?: boolean }) =>
       request<any>('/agent-flow/audit', { method: 'POST', body: JSON.stringify(data) }),
+  },
+
+  // ── Profile ──
+  profile: {
+    list: () => request<any>('/profiles'),
+    get: (id: string) => request<any>(`/profiles/${id}`),
+    create: (data: { name: string; display_name?: string; description?: string; communication_style?: string }) =>
+      request<any>('/profiles', { method: 'POST', body: JSON.stringify(data) }),
+    delete: (id: string) => request<any>(`/profiles/${id}`, { method: 'DELETE' }),
+    generatePrompt: (id: string) => request<any>(`/profiles/${id}/generate-prompt`, { method: 'POST' }),
+    createTemplate: (template: string) => request<any>(`/profiles/template/${template}`, { method: 'POST' }),
+  },
+
+  // ── Pipeline ──
+  pipeline: {
+    list: () => request<any>('/pipelines'),
+    get: (id: string) => request<any>(`/pipelines/${id}`),
+    create: (data: { name: string; pipeline_type?: string; description?: string }) =>
+      request<any>('/pipelines', { method: 'POST', body: JSON.stringify(data) }),
+    delete: (id: string) => request<any>(`/pipelines/${id}`, { method: 'DELETE' }),
+    execute: (id: string) => request<any>(`/pipelines/${id}/execute`, { method: 'POST' }),
+    cancel: (id: string) => request<any>(`/pipelines/${id}/cancel`, { method: 'POST' }),
+    progress: (id: string) => request<any>(`/pipelines/${id}/progress`),
   },
 };
