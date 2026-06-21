@@ -367,6 +367,17 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  chatBrain: (data: { agent_id: string; content: string; conversation_id?: string; enable_tools?: boolean; enable_reasoning?: boolean; mode?: string }) =>
+    request<import('../types').ChatResponse & { mode: string }>('/chat/brain', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  chatBrainStream: (data: { agent_id: string; content: string; conversation_id?: string; enable_tools?: boolean; enable_reasoning?: boolean; mode?: string }) =>
+    fetch(`${BASE_URL}/chat/brain/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
   chatBranches: (messageId: string) =>
     request<{ branches: Array<import('../types').MessageBranch> }>(`/chat/branches?message_id=${messageId}`),
   chatQuickReplies: (agentId: string) =>
@@ -1908,5 +1919,183 @@ export const api = {
       request<any>('/experiments/prompt-ab', { method: 'POST', body: JSON.stringify(data) }),
     createConfigAB: (data: { name: string; description?: string; control_config: Record<string, unknown>; treatment_config: Record<string, unknown> }) =>
       request<any>('/experiments/config-ab', { method: 'POST', body: JSON.stringify(data) }),
+  },
+
+  brain: {
+    stats: () => request<any>('/brain/stats'),
+    perceptions: () => request<any>('/brain/perceptions'),
+    insights: () => request<any>('/brain/insights'),
+    process: (data: { message: string; agent_id: string; agent_name?: string; mode?: string }) =>
+      request<any>('/brain/process', { method: 'POST', body: JSON.stringify(data) }),
+    processStream: (data: { message: string; agent_id: string; agent_name?: string; mode?: string }) =>
+      fetch(`${BASE_URL}/brain/process/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
+  },
+
+  platform: {
+    stats: () => request<any>('/platform/stats'),
+    health: () => request<any>('/platform/health'),
+    instances: () => request<any>('/platform/instances'),
+    instanceDetails: (agentId: string) => request<any>(`/platform/instances/${agentId}`),
+    sandboxes: (agentId?: string) => {
+      const qs = agentId ? `?agent_id=${agentId}` : '';
+      return request<any>(`/platform/sandboxes${qs}`);
+    },
+    alerts: (severity?: string, includeResolved?: boolean) => {
+      const qs = new URLSearchParams();
+      if (severity) qs.set('severity', severity);
+      if (includeResolved) qs.set('include_resolved', 'true');
+      return request<any>(`/platform/alerts?${qs.toString()}`);
+    },
+    acknowledgeAlert: (alertId: string) =>
+      request<any>(`/platform/alerts/${alertId}/acknowledge`, { method: 'POST' }),
+    resolveAlert: (alertId: string) =>
+      request<any>(`/platform/alerts/${alertId}/resolve`, { method: 'POST' }),
+    syncContext: (data: { source_agent_id: string; target_agent_ids: string[]; context_type: string; content: Record<string, unknown> }) =>
+      request<any>('/platform/context/sync', { method: 'POST', body: JSON.stringify(data) }),
+    syncEvents: (agentId?: string, contextType?: string) => {
+      const qs = new URLSearchParams();
+      if (agentId) qs.set('agent_id', agentId);
+      if (contextType) qs.set('context_type', contextType);
+      return request<any>(`/platform/context/events?${qs.toString()}`);
+    },
+  },
+
+  coordinator: {
+    stats: () => request<any>('/coordinator/stats'),
+    status: () => request<any>('/coordinator/status'),
+    initialize: () => request<any>('/coordinator/initialize', { method: 'POST' }),
+    start: () => request<any>('/coordinator/start', { method: 'POST' }),
+    pause: () => request<any>('/coordinator/pause', { method: 'POST' }),
+    resume: () => request<any>('/coordinator/resume', { method: 'POST' }),
+    stop: () => request<any>('/coordinator/stop', { method: 'POST' }),
+    executions: (limit?: number) => {
+      const qs = limit ? `?limit=${limit}` : '';
+      return request<any>(`/coordinator/executions${qs}`);
+    },
+    agents: () => request<any>('/coordinator/agents'),
+    execute: (data: { message: string; agent_id?: string; agent_name?: string; mode?: string; enable_reasoning?: boolean }) =>
+      request<any>('/coordinator/execute', { method: 'POST', body: JSON.stringify(data) }),
+    executeStream: (data: { message: string; agent_id?: string; agent_name?: string; mode?: string }) =>
+      fetch(`${BASE_URL}/coordinator/execute/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
+    reset: () => request<any>('/coordinator/reset', { method: 'POST' }),
+  },
+
+  // ── Deep Reasoning ──
+  reasoning: {
+    adversarial: (agentId: string, data: { prompt: string; context?: string; num_counter_args?: number }) =>
+      request<any>(`/agents/${agentId}/reasoning/adversarial`, { method: 'POST', body: JSON.stringify(data) }),
+    causal: (agentId: string, data: { prompt: string; context?: string; max_chain_depth?: number }) =>
+      request<any>(`/agents/${agentId}/reasoning/causal`, { method: 'POST', body: JSON.stringify(data) }),
+    analogical: (agentId: string, data: { prompt: string; context?: string; domains?: string[]; num_analogies?: number }) =>
+      request<any>(`/agents/${agentId}/reasoning/analogical`, { method: 'POST', body: JSON.stringify(data) }),
+    synthesize: (agentId: string, data: { prompt: string; context?: string; strategies?: string[] }) =>
+      request<any>(`/agents/${agentId}/reasoning/synthesize`, { method: 'POST', body: JSON.stringify(data) }),
+    recommend: (agentId: string, data: { prompt: string; context?: string }) =>
+      request<any>(`/agents/${agentId}/reasoning/recommend`, { method: 'POST', body: JSON.stringify(data) }),
+    calibrate: (agentId: string, data: { result: any; past_accuracy_history?: number[] }) =>
+      request<any>(`/agents/${agentId}/reasoning/calibrate`, { method: 'POST', body: JSON.stringify(data) }),
+  },
+
+  // ── Self-Improvement ──
+  improve: {
+    compoundSkills: (agentId: string, data: { skill_ids: string[]; name: string; description?: string }) =>
+      request<any>(`/agents/${agentId}/improve/compound-skills`, { method: 'POST', body: JSON.stringify(data) }),
+    crossSkillSynthesize: (agentId: string, data: { category_a: string; category_b: string }) =>
+      request<any>(`/agents/${agentId}/improve/cross-skill-synthesize`, { method: 'POST', body: JSON.stringify(data) }),
+    benchmark: (agentId: string) =>
+      request<any>(`/agents/${agentId}/improve/benchmark`, { method: 'POST' }),
+    recommendSkill: (agentId: string, data: { task_description: string; top_k?: number }) =>
+      request<any>(`/agents/${agentId}/improve/recommend-skill`, { method: 'POST', body: JSON.stringify(data) }),
+    tuneThresholds: (agentId: string) =>
+      request<any>(`/agents/${agentId}/improve/tune-thresholds`, { method: 'POST' }),
+    trends: (agentId: string) =>
+      request<any>(`/agents/${agentId}/improve/trends`, { method: 'POST' }),
+  },
+
+  // ── Session Management ──
+  session: {
+    delegate: (sessionId: string, data: { task_description: string; target_role?: string; priority?: string }) =>
+      request<any>(`/sessions/${sessionId}/delegate`, { method: 'POST', body: JSON.stringify(data) }),
+    vote: (sessionId: string, data: { action: string; topic?: string; options?: string[]; vote_id?: string; option?: string }) =>
+      request<any>(`/sessions/${sessionId}/vote`, { method: 'POST', body: JSON.stringify(data) }),
+    templates: () =>
+      request<any>('/sessions/templates'),
+    fromTemplate: (data: { template_name: string; orchestrator_id?: string }) =>
+      request<any>('/sessions/from-template', { method: 'POST', body: JSON.stringify(data) }),
+    summary: (sessionId: string) =>
+      request<any>(`/sessions/${sessionId}/summary`),
+    handoff: (sessionId: string, data: { from_agent_id: string; to_agent_id: string; context?: string }) =>
+      request<any>(`/sessions/${sessionId}/handoff`, { method: 'POST', body: JSON.stringify(data) }),
+    health: (sessionId: string) =>
+      request<any>(`/sessions/${sessionId}/health`),
+  },
+
+  // ── Memory ──
+  memory: {
+    semanticSearch: (agentId: string, data: { query: string; similarity_threshold?: number; limit?: number }) =>
+      request<any>(`/agents/${agentId}/memory/semantic-search`, { method: 'POST', body: JSON.stringify(data) }),
+    detectConflicts: (agentId: string, data: { auto_flag?: boolean }) =>
+      request<any>(`/agents/${agentId}/memory/detect-conflicts`, { method: 'POST', body: JSON.stringify(data) }),
+    consolidate: (agentId: string, data: { similarity_threshold?: number; min_cluster_size?: number }) =>
+      request<any>(`/agents/${agentId}/memory/consolidate`, { method: 'POST', body: JSON.stringify(data) }),
+    decay: (agentId: string, data: { half_life_days?: number; min_importance?: number }) =>
+      request<any>(`/agents/${agentId}/memory/decay`, { method: 'POST', body: JSON.stringify(data) }),
+    graph: (agentId: string) =>
+      request<any>(`/agents/${agentId}/memory/graph`),
+    contextualRecall: (agentId: string, data: { context: string; limit?: number }) =>
+      request<any>(`/agents/${agentId}/memory/contextual-recall`, { method: 'POST', body: JSON.stringify(data) }),
+  },
+
+  // ── Experience ──
+  experience: {
+    trends: (agentId: string, data: { days?: number }) => {
+      const qs = new URLSearchParams();
+      if (data.days) qs.set('days', String(data.days));
+      return request<any>(`/agents/${agentId}/experiences/trends?${qs.toString()}`);
+    },
+    predict: (agentId: string, data: { description: string; experience_type: string; tools_used?: string[]; top_k?: number }) =>
+      request<any>(`/agents/${agentId}/experiences/predict`, { method: 'POST', body: JSON.stringify(data) }),
+    recommend: (agentId: string, data: { description: string; experience_type?: string; limit?: number }) =>
+      request<any>(`/agents/${agentId}/experiences/recommend`, { method: 'POST', body: JSON.stringify(data) }),
+    crossDomain: (agentId: string, data: { source_type: string; target_type: string; min_reusability?: number; limit?: number }) => {
+      const qs = new URLSearchParams();
+      qs.set('source_type', data.source_type);
+      qs.set('target_type', data.target_type);
+      if (data.min_reusability !== undefined) qs.set('min_reusability', String(data.min_reusability));
+      if (data.limit) qs.set('limit', String(data.limit));
+      return request<any>(`/agents/${agentId}/experiences/cross-domain?${qs.toString()}`);
+    },
+    clusterSummary: (clusterId: string) =>
+      request<any>(`/experiences/clusters/${clusterId}/summary`),
+  },
+
+  // ── Platform ──
+  platformOps: {
+    fleetOrchestrate: (data: { fleet_name: string; agent_ids: string[]; description?: string }) =>
+      request<any>('/platform/fleet/orchestrate', { method: 'POST', body: JSON.stringify(data) }),
+    fleetSyncKnowledge: (data: { fleet_id: string; conflict_strategy?: string }) =>
+      request<any>('/platform/fleet/sync-knowledge', { method: 'POST', body: JSON.stringify(data) }),
+    healthDashboard: () =>
+      request<any>('/platform/health-dashboard'),
+    autoScale: (data: { fleet_id: string; metric?: string; threshold?: number }) =>
+      request<any>('/platform/auto-scale', { method: 'POST', body: JSON.stringify(data) }),
+    quotas: () =>
+      request<any>('/platform/quotas'),
+    eventBroadcast: (data: { message: string; category: string; priority?: string }) =>
+      request<any>('/platform/events/broadcast', { method: 'POST', body: JSON.stringify(data) }),
+  },
+
+  // ── Agent Composer ──
+  agentComposer: {
+    execute: (data: { agent_id: string; message: string; mode?: string; strategy?: string; enable_tools?: boolean; enable_reasoning?: boolean; conversation_history?: any[] }) =>
+      request<any>('/agents/compose/execute', { method: 'POST', body: JSON.stringify(data) }),
   },
 };
