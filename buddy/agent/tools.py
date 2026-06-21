@@ -138,6 +138,10 @@ class ToolRegistry:
             tools = [t for t in tools if t.category == category]
         return tools
 
+    def get_tool_names(self) -> list[str]:
+        """Get list of all registered tool names."""
+        return [t.name for t in self._tools.values()]
+
     def get_openai_schemas(self, names: list[str] | None = None) -> list[dict]:
         """Get OpenAI-compatible function calling schemas."""
         tools = self._tools.values()
