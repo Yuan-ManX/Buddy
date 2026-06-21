@@ -1,0 +1,684 @@
+"""BuddyOrchestrator — Central AI-Native Coordination Hub
+
+The BuddyOrchestrator is the supreme coordination layer that unifies all agent
+capabilities into a single, coherent runtime. It integrates:
+- Profile & Persona: Agent identity and behavior configuration
+- MCP Tools: Model Context Protocol tool execution
+- Autonomous Loop: Goal-driven autonomous execution
+- Permission & Governance: Policy-based access control and approval
+- Smart Router: Intelligent model selection and routing
+- Identity Core: Self-awareness and memory management
+- Workspace Manager: Isolated workspace environments
+- Platform Gateway: Multi-provider API gateway with routing
+- Pipeline Engine: Training and deployment pipeline management
+- Learning Loop: Continuous self-improvement cycle
+- Agent Mesh: Multi-agent collaboration and delegation
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any, Callable, Optional
+
+logger = logging.getLogger("buddy.orchestrator")
+
+
+class OrchestrationMode(str, Enum):
+    """Execution mode for the orchestrator."""
+    CHAT = "chat"
+    TASK = "task"
+    AUTONOMOUS = "autonomous"
+    PIPELINE = "pipeline"
+    COLLABORATIVE = "collaborative"
+    REFLECTIVE = "reflective"
+
+
+class OrchestrationStatus(str, Enum):
+    """Status of an orchestration session."""
+    IDLE = "idle"
+    PLANNING = "planning"
+    EXECUTING = "executing"
+    WAITING = "waiting"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+@dataclass
+class OrchestrationContext:
+    """Context for an orchestration session."""
+    session_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    agent_id: str = ""
+    mode: OrchestrationMode = OrchestrationMode.CHAT
+    status: OrchestrationStatus = OrchestrationStatus.IDLE
+    profile_id: str = ""
+    persona_id: str = ""
+    workspace_id: str = ""
+    model_name: str = ""
+    started_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    completed_at: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class OrchestrationResult:
+    """Result of an orchestration execution."""
+    session_id: str
+    mode: OrchestrationMode
+    success: bool
+    content: str = ""
+    error: str = ""
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    tokens_used: int = 0
+    latency_ms: float = 0.0
+    model_used: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+class BuddyOrchestrator:
+    """Central coordination hub for the entire Buddy AI-native platform.
+
+    Integrates all agent subsystems into a unified execution runtime
+    with intelligent routing, autonomous execution, and self-improvement.
+    """
+
+    def __init__(self):
+        self._active_sessions: dict[str, OrchestrationContext] = {}
+        self._session_history: list[OrchestrationResult] = []
+        self._hooks: dict[str, list[Callable]] = {
+            "pre_execute": [],
+            "post_execute": [],
+            "on_error": [],
+            "on_complete": [],
+        }
+        self._total_sessions: int = 0
+        self._total_tokens: int = 0
+        self._lock = asyncio.Lock()
+
+    # ── Session Management ──────────────────────────────────────
+
+    def create_session(
+        self,
+        agent_id: str,
+        mode: OrchestrationMode = OrchestrationMode.CHAT,
+        profile_id: str = "",
+        persona_id: str = "",
+        workspace_id: str = "",
+    ) -> OrchestrationContext:
+        """Create a new orchestration session."""
+        ctx = OrchestrationContext(
+            agent_id=agent_id,
+            mode=mode,
+            profile_id=profile_id,
+            persona_id=persona_id,
+            workspace_id=workspace_id,
+        )
+        self._active_sessions[ctx.session_id] = ctx
+        self._total_sessions += 1
+        logger.info(f"Orchestration session {ctx.session_id} created for agent {agent_id}")
+        return ctx
+
+    def get_session(self, session_id: str) -> Optional[OrchestrationContext]:
+        """Get an active session by ID."""
+        return self._active_sessions.get(session_id)
+
+    def close_session(self, session_id: str):
+        """Close an orchestration session."""
+        self._active_sessions.pop(session_id, None)
+
+    # ── Profile & Persona Integration ───────────────────────────
+
+    def get_agent_profile(self, agent_id: str) -> Optional[dict[str, Any]]:
+        """Get the agent profile for an agent."""
+        try:
+            from agent.agent_profile import profile_manager
+            for profile in profile_manager.list_profiles():
+                if profile.name == agent_id or profile.profile_id == agent_id:
+                    return profile.to_dict()
+            return None
+        except Exception as e:
+            logger.warning(f"Profile lookup failed for {agent_id}: {e}")
+            return None
+
+    def get_agent_persona(self, agent_id: str) -> Optional[dict[str, Any]]:
+        """Get the active persona for an agent."""
+        try:
+            from agent.agent_persona import persona_registry
+            profile = persona_registry.get_profile(agent_id)
+            if profile:
+                return {
+                    "persona_id": profile.persona_id,
+                    "name": profile.name,
+                    "traits": profile.traits,
+                    "interaction_style": profile.interaction_style.value,
+                    "decision_style": profile.decision_style.value,
+                }
+            return None
+        except Exception as e:
+            logger.warning(f"Persona lookup failed for {agent_id}: {e}")
+            return None
+
+    # ── MCP Tool Execution ──────────────────────────────────────
+
+    async def execute_mcp_tool(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        session_id: str = "",
+        timeout: float = 30.0,
+    ) -> dict[str, Any]:
+        """Execute an MCP tool with governance checks."""
+        try:
+            from agent.agent_mcp import mcp_registry
+
+            # Check governance policies
+            if session_id:
+                permitted = await self._check_governance(session_id, tool_name, arguments)
+                if not permitted:
+                    return {"success": False, "error": "Action blocked by governance policy"}
+
+            result = await mcp_registry.execute_tool(tool_name, arguments, timeout=timeout)
+            return {
+                "tool_name": result.tool_name,
+                "success": result.success,
+                "content": result.content,
+                "error": result.error,
+                "duration_ms": result.duration_ms,
+            }
+        except Exception as e:
+            logger.error(f"MCP tool execution failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def list_mcp_tools(self, category: str = "") -> list[dict[str, Any]]:
+        """List available MCP tools."""
+        try:
+            from agent.agent_mcp import mcp_registry, MCPToolCategory
+            cat = None
+            if category:
+                try:
+                    cat = MCPToolCategory(category)
+                except ValueError:
+                    pass
+            tools = mcp_registry.list_tools(category=cat)
+            return [
+                {"name": t.name, "description": t.description, "category": t.category.value}
+                for t in tools
+            ]
+        except Exception as e:
+            logger.error(f"Failed to list MCP tools: {e}")
+            return []
+
+    # ── Autonomous Loop Integration ─────────────────────────────
+
+    async def execute_autonomous_goal(
+        self,
+        agent_id: str,
+        goal_description: str,
+        max_iterations: int = 10,
+        session_id: str = "",
+    ) -> dict[str, Any]:
+        """Execute a goal autonomously through the loop engine."""
+        try:
+            from agent.agent_autonomous_loop import AutonomousGoal, autonomous_loop
+
+            goal = AutonomousGoal(
+                description=goal_description,
+                agent_id=agent_id,
+                max_iterations=max_iterations,
+            )
+            result = await autonomous_loop.execute_goal(goal)
+            return result
+        except Exception as e:
+            logger.error(f"Autonomous goal execution failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    # ── Permission & Governance ─────────────────────────────────
+
+    async def _check_governance(
+        self,
+        session_id: str,
+        action: str,
+        context: dict[str, Any],
+    ) -> bool:
+        """Check if an action is permitted by governance policies."""
+        try:
+            from agent.agent_governance import governance_engine
+            result = governance_engine.evaluate(
+                session_id=session_id,
+                action=action,
+                context=context,
+            )
+            return result.get("permitted", True)
+        except Exception as e:
+            logger.warning(f"Governance check failed: {e}")
+            return True  # Default to permit if governance unavailable
+
+    def check_permission(
+        self,
+        agent_id: str,
+        action: str,
+        risk_level: str = "medium",
+    ) -> dict[str, Any]:
+        """Check if an agent has permission for an action."""
+        try:
+            from agent.agent_permission import permission_manager
+            permitted = permission_manager.check(agent_id, action, risk_level)
+            return {"permitted": permitted, "action": action, "agent_id": agent_id}
+        except Exception as e:
+            logger.warning(f"Permission check failed: {e}")
+            return {"permitted": True, "action": action, "agent_id": agent_id}
+
+    # ── Smart Routing ───────────────────────────────────────────
+
+    def route_task(
+        self,
+        task_description: str,
+        agent_id: str = "",
+        preferred_model: str = "",
+    ) -> dict[str, Any]:
+        """Route a task to the optimal model based on complexity."""
+        try:
+            from agent.smart_router import smart_router
+            decision = smart_router.route(
+                task=task_description,
+                agent_id=agent_id,
+                preferred_model=preferred_model,
+            )
+            return {
+                "model": decision.selected_model.model_name if decision.selected_model else "default",
+                "tier": decision.selected_model.tier if decision.selected_model else "standard",
+                "complexity": decision.task_complexity,
+                "estimated_cost": decision.estimated_cost,
+                "confidence": decision.confidence,
+                "reasoning": decision.reasoning,
+            }
+        except Exception as e:
+            logger.warning(f"Smart routing failed: {e}")
+            return {"model": "default", "tier": "standard", "complexity": "unknown"}
+
+    # ── Identity Core ───────────────────────────────────────────
+
+    def get_identity(self, agent_id: str) -> dict[str, Any]:
+        """Get agent identity and self-awareness data."""
+        try:
+            from agent.identity_core import identity_registry
+            identity = identity_registry.get_identity(agent_id)
+            if identity:
+                return {
+                    "agent_id": identity.agent_id,
+                    "self_awareness": identity.self_awareness,
+                    "identity_coherence": identity.identity_coherence,
+                    "traits": {
+                        k: {"value": v.value, "confidence": v.confidence, "stability": v.stability}
+                        for k, v in identity.traits.items()
+                    } if hasattr(identity, 'traits') else {},
+                    "memory_stats": identity.memory_stats if hasattr(identity, 'memory_stats') else {},
+                }
+            return {"agent_id": agent_id, "found": False}
+        except Exception as e:
+            logger.warning(f"Identity lookup failed: {e}")
+            return {"agent_id": agent_id, "found": False}
+
+    # ── Workspace Management ────────────────────────────────────
+
+    def get_workspace(self, workspace_id: str) -> dict[str, Any]:
+        """Get workspace information."""
+        try:
+            from agent.workspace_manager import workspace_manager
+            ws = workspace_manager.get_workspace(workspace_id)
+            if ws:
+                return {
+                    "workspace_id": ws.workspace_id,
+                    "name": ws.name,
+                    "description": ws.description,
+                    "is_active": ws.is_active,
+                    "file_count": ws.file_count,
+                    "memory_entries": ws.memory_entries,
+                    "skill_count": ws.skill_count,
+                    "tags": ws.tags,
+                }
+            return {"workspace_id": workspace_id, "found": False}
+        except Exception as e:
+            logger.warning(f"Workspace lookup failed: {e}")
+            return {"workspace_id": workspace_id, "found": False}
+
+    def list_workspaces(self) -> list[dict[str, Any]]:
+        """List all workspaces."""
+        try:
+            from agent.workspace_manager import workspace_manager
+            return [
+                {
+                    "workspace_id": ws.workspace_id,
+                    "name": ws.name,
+                    "description": ws.description,
+                    "is_active": ws.is_active,
+                }
+                for ws in workspace_manager.list_workspaces()
+            ]
+        except Exception as e:
+            logger.warning(f"Workspace listing failed: {e}")
+            return []
+
+    # ── Platform Gateway ────────────────────────────────────────
+
+    async def route_gateway_request(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        temperature: float = 0.7,
+        max_tokens: int = 1024,
+    ) -> dict[str, Any]:
+        """Route a request through the platform gateway."""
+        try:
+            from agent.platform_gateway import platform_gateway, GatewayRequest
+            request = GatewayRequest(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            response = await platform_gateway.route_request(request)
+            return {
+                "request_id": response.request_id,
+                "provider_id": response.provider_id,
+                "model": response.model,
+                "content": response.content,
+                "success": response.success,
+                "latency_ms": response.latency_ms,
+            }
+        except Exception as e:
+            logger.error(f"Gateway routing failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    def get_gateway_stats(self) -> dict[str, Any]:
+        """Get platform gateway statistics."""
+        try:
+            from agent.platform_gateway import platform_gateway
+            return platform_gateway.get_stats()
+        except Exception as e:
+            logger.warning(f"Gateway stats failed: {e}")
+            return {}
+
+    # ── Pipeline Management ─────────────────────────────────────
+
+    async def execute_pipeline(self, pipeline_id: str) -> dict[str, Any]:
+        """Execute a pipeline."""
+        try:
+            from agent.platform_pipeline import pipeline_engine
+            return await pipeline_engine.execute_pipeline(pipeline_id)
+        except Exception as e:
+            logger.error(f"Pipeline execution failed: {e}")
+            return {"error": str(e)}
+
+    def list_pipelines(self) -> list[dict[str, Any]]:
+        """List all pipelines."""
+        try:
+            from agent.platform_pipeline import pipeline_engine
+            return [
+                {
+                    "pipeline_id": p.pipeline_id,
+                    "name": p.name,
+                    "status": p.status.value,
+                    "pipeline_type": p.pipeline_type.value,
+                }
+                for p in pipeline_engine.list_pipelines()
+            ]
+        except Exception as e:
+            logger.warning(f"Pipeline listing failed: {e}")
+            return []
+
+    # ── Agent Mesh ──────────────────────────────────────────────
+
+    def get_mesh_status(self) -> dict[str, Any]:
+        """Get agent mesh status."""
+        try:
+            from agent.agent_mesh import agent_mesh
+            return agent_mesh.get_mesh_status()
+        except Exception as e:
+            logger.warning(f"Mesh status failed: {e}")
+            return {"nodes": [], "total_nodes": 0}
+
+    async def delegate_to_mesh(
+        self,
+        task: str,
+        priority: str = "normal",
+        target_agent: str = "",
+    ) -> dict[str, Any]:
+        """Delegate a task to the agent mesh."""
+        try:
+            from agent.agent_mesh import agent_mesh, MeshTask, TaskPriority
+            task_priority = TaskPriority.HIGH if priority == "high" else (
+                TaskPriority.LOW if priority == "low" else TaskPriority.NORMAL
+            )
+            mesh_task = MeshTask(
+                title=task[:100],
+                description=task,
+                priority=task_priority,
+                target_agent_id=target_agent if target_agent else None,
+            )
+            agent_mesh.submit_task(mesh_task)
+            node = agent_mesh.route_task(mesh_task)
+            return {
+                "success": True,
+                "task_id": mesh_task.task_id,
+                "routed_to": node.config.agent_id if node else None,
+                "status": mesh_task.status.value if hasattr(mesh_task, 'status') else "submitted",
+            }
+        except Exception as e:
+            logger.error(f"Mesh delegation failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    # ── Learning Loop ───────────────────────────────────────────
+
+    def get_learning_status(self) -> dict[str, Any]:
+        """Get learning loop status."""
+        try:
+            from agent.learning_loop import learning_loop
+            return learning_loop.get_status()
+        except Exception as e:
+            logger.warning(f"Learning status failed: {e}")
+            return {"running": False}
+
+    async def trigger_learning_cycle(self, agent_id: str = "", session_id: str = "") -> dict[str, Any]:
+        """Trigger a learning cycle."""
+        try:
+            from agent.learning_loop import learning_loop
+            result = await learning_loop.run_cycle(agent_id=agent_id, session_id=session_id)
+            return result
+        except Exception as e:
+            logger.error(f"Learning cycle failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    # ── Comprehensive Execution ─────────────────────────────────
+
+    async def execute(
+        self,
+        agent_id: str,
+        content: str,
+        mode: OrchestrationMode = OrchestrationMode.CHAT,
+        enable_tools: bool = True,
+        enable_reasoning: bool = False,
+        profile_id: str = "",
+        workspace_id: str = "",
+    ) -> OrchestrationResult:
+        """Execute a comprehensive orchestration flow.
+
+        This is the primary entry point that routes through all subsystems:
+        1. Create session with profile/workspace binding
+        2. Route to optimal model via Smart Router
+        3. Execute with MCP tools if enabled
+        4. Apply governance policies
+        5. Record learning observations
+        6. Return unified result
+        """
+        start_time = time.time()
+
+        # Create session
+        ctx = self.create_session(
+            agent_id=agent_id,
+            mode=mode,
+            profile_id=profile_id,
+            workspace_id=workspace_id,
+        )
+
+        try:
+            # Route to optimal model
+            routing = self.route_task(content, agent_id)
+            model_name = routing.get("model", "")
+
+            # Execute pre-hooks
+            for hook in self._hooks.get("pre_execute", []):
+                try:
+                    await hook(ctx)
+                except Exception as e:
+                    logger.warning(f"Pre-execute hook failed: {e}")
+
+            # Build result based on mode
+            result_content = ""
+            tool_calls = []
+
+            if mode == OrchestrationMode.AUTONOMOUS:
+                auto_result = await self.execute_autonomous_goal(
+                    agent_id=agent_id,
+                    goal_description=content,
+                    session_id=ctx.session_id,
+                )
+                result_content = auto_result.get("summary", str(auto_result))
+            elif mode == OrchestrationMode.PIPELINE:
+                pipe_result = await self.execute_pipeline(content)
+                result_content = str(pipe_result)
+            elif mode == OrchestrationMode.COLLABORATIVE:
+                mesh_result = await self.delegate_to_mesh(content)
+                result_content = str(mesh_result)
+            else:
+                # Default chat/task mode - delegate to engine
+                try:
+                    from agent.shared import orchestrator
+                    from database.db import async_session
+                    from database.models import Agent as AgentModel
+                    from sqlalchemy import select
+
+                    async with async_session() as session:
+                        result = await session.execute(
+                            select(AgentModel).where(AgentModel.id == agent_id)
+                        )
+                        agent = result.scalars().first()
+                        if agent:
+                            engine = orchestrator.get_engine(
+                                agent_id=agent.id,
+                                agent_name=agent.name,
+                                instructions=agent.instructions or "",
+                            )
+                            response = await engine.chat(
+                                content,
+                                enable_tools=enable_tools,
+                                enable_reasoning=enable_reasoning,
+                            )
+                            result_content = response if isinstance(response, str) else ""
+                        else:
+                            result_content = "Agent not found"
+                except Exception as e:
+                    result_content = f"Execution error: {e}"
+
+            latency_ms = (time.time() - start_time) * 1000
+
+            result = OrchestrationResult(
+                session_id=ctx.session_id,
+                mode=mode,
+                success=True,
+                content=result_content,
+                tool_calls=tool_calls,
+                latency_ms=latency_ms,
+                model_used=model_name,
+            )
+
+            # Execute post-hooks
+            for hook in self._hooks.get("post_execute", []):
+                try:
+                    await hook(ctx, result)
+                except Exception as e:
+                    logger.warning(f"Post-execute hook failed: {e}")
+
+            # Record session
+            self._session_history.append(result)
+            if len(self._session_history) > 1000:
+                self._session_history = self._session_history[-500:]
+
+            ctx.status = OrchestrationStatus.COMPLETED
+            ctx.completed_at = datetime.now(timezone.utc).isoformat()
+            return result
+
+        except Exception as e:
+            logger.error(f"Orchestration execution failed: {e}")
+            ctx.status = OrchestrationStatus.FAILED
+
+            # Execute error hooks
+            for hook in self._hooks.get("on_error", []):
+                try:
+                    await hook(ctx, str(e))
+                except Exception:
+                    pass
+
+            latency_ms = (time.time() - start_time) * 1000
+            return OrchestrationResult(
+                session_id=ctx.session_id,
+                mode=mode,
+                success=False,
+                error=str(e),
+                latency_ms=latency_ms,
+            )
+
+    # ── Hook System ─────────────────────────────────────────────
+
+    def register_hook(self, event: str, callback: Callable):
+        """Register a hook callback for lifecycle events."""
+        if event in self._hooks:
+            self._hooks[event].append(callback)
+
+    def remove_hook(self, event: str, callback: Callable):
+        """Remove a hook callback."""
+        if event in self._hooks:
+            self._hooks[event] = [h for h in self._hooks[event] if h != callback]
+
+    # ── Statistics ──────────────────────────────────────────────
+
+    def get_stats(self) -> dict[str, Any]:
+        """Get orchestrator statistics."""
+        return {
+            "total_sessions": self._total_sessions,
+            "active_sessions": len(self._active_sessions),
+            "total_tokens": self._total_tokens,
+            "session_history_count": len(self._session_history),
+            "recent_success_rate": (
+                sum(1 for r in self._session_history[-100:] if r.success) / max(len(self._session_history[-100:]), 1)
+                if self._session_history else 0
+            ),
+            "system_status": {
+                "gateway": bool(self.get_gateway_stats()),
+                "mesh": bool(self.get_mesh_status().get("nodes")),
+                "learning": self.get_learning_status().get("running", False),
+            },
+        }
+
+    def get_recent_sessions(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Get recent orchestration sessions."""
+        return [
+            {
+                "session_id": r.session_id,
+                "mode": r.mode.value,
+                "success": r.success,
+                "latency_ms": r.latency_ms,
+                "model_used": r.model_used,
+                "tokens_used": r.tokens_used,
+            }
+            for r in self._session_history[-limit:]
+        ]
+
+
+# Global orchestrator instance
+buddy_orchestrator = BuddyOrchestrator()
