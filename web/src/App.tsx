@@ -101,6 +101,8 @@ import { PlatformCorePanel } from './components/PlatformCorePanel';
 import { RuntimeCoordinatorPanel } from './components/RuntimeCoordinatorPanel';
 import { UnifiedAgentPanel } from './components/UnifiedAgentPanel';
 import { AgentFlowPanel } from './components/AgentFlowPanel';
+import { ProfilePanel } from './components/ProfilePanel';
+import { MCPToolsPanel } from './components/MCPToolsPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { CommandPalette } from './components/CommandPalette';
@@ -568,6 +570,8 @@ export default function App() {
         {activeTab === 'platformcore' && <PlatformCorePanel />}
         {activeTab === 'unifiedagent' && <UnifiedAgentPanel />}
         {activeTab === 'agentflow' && <AgentFlowPanel />}
+        {activeTab === 'profile' && <ProfilePanel />}
+        {activeTab === 'mcptools' && <MCPToolsPanel />}
 
         {/* Agent-specific panels */}
         {selectedAgent && (
@@ -650,7 +654,7 @@ export default function App() {
     )}
 
         {/* Empty state — no agent and no global panel selected */}
-        {!selectedAgent && !['overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend', 'agentcore', 'synthesis', 'intelligence', 'runtimepanel', 'skillcompiler', 'conversationsearch', 'governance', 'smartrouter', 'agentmesh', 'learningloop', 'experience', 'collabspace', 'contextengine', 'automation', 'skillfabric', 'usermodel', 'evolvingskills', 'subagentmesh', 'protocol', 'sandbox', 'toolexec', 'modelorch', 'deployment', 'productcomposer', 'agentorchestrator', 'dreammode', 'reflection', 'intent', 'fleet', 'knowledgenetwork', 'reasoning', 'modelproxy', 'toolcomposer', 'contextmanager', 'unifiedconsole', 'experiments', 'unifiedbrain', 'platformcore', 'unifiedagent', 'agentflow'].includes(activeTab) && (
+        {!selectedAgent && !['overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend', 'agentcore', 'synthesis', 'intelligence', 'runtimepanel', 'skillcompiler', 'conversationsearch', 'governance', 'smartrouter', 'agentmesh', 'learningloop', 'experience', 'collabspace', 'contextengine', 'automation', 'skillfabric', 'usermodel', 'evolvingskills', 'subagentmesh', 'protocol', 'sandbox', 'toolexec', 'modelorch', 'deployment', 'productcomposer', 'agentorchestrator', 'dreammode', 'reflection', 'intent', 'fleet', 'knowledgenetwork', 'reasoning', 'modelproxy', 'toolcomposer', 'contextmanager', 'unifiedconsole', 'experiments', 'unifiedbrain', 'platformcore', 'unifiedagent', 'agentflow', 'profile', 'mcptools'].includes(activeTab) && (
           <div className="main-empty">
             <div className="main-empty-icon">B</div>
             <h2>Welcome to Buddy</h2>
