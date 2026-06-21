@@ -11,7 +11,7 @@ import uuid
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query, WebSocket
+from fastapi import APIRouter, Body, HTTPException, Query, WebSocket
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -2088,109 +2088,6 @@ async def get_agent_trust(agent_id: str):
         "trusted_agents": trusted,
         "count": len(trusted),
     }
-
-
-# ═══════════════════════════════════════════════════════════
-# MCP Servers
-# ═══════════════════════════════════════════════════════════
-
-@router.get("/mcp/servers")
-async def list_mcp_servers():
-    return mcp_registry.get_server_states()
-
-
-@router.get("/mcp/servers/{server_id}")
-async def get_mcp_server(server_id: str):
-    state = mcp_registry._servers.get(server_id)
-    if not state:
-        raise HTTPException(404, "MCP server not found")
-    return {
-        "id": state.config.id,
-        "name": state.config.name,
-        "transport": state.config.transport.value,
-        "endpoint": state.config.endpoint,
-        "command": state.config.command,
-        "env": state.config.env,
-        "status": state.status.value,
-        "last_error": state.last_error,
-        "tool_count": mcp_registry.get_tool_count(server_id),
-        "resource_count": mcp_registry.get_resource_count(server_id),
-    }
-
-
-@router.get("/mcp/tools")
-async def list_mcp_tools(server_id: str | None = None):
-    tools = mcp_registry.get_tools(server_id)
-    return [t.to_dict() for t in tools]
-
-
-@router.get("/mcp/resources")
-async def list_mcp_resources(server_id: str | None = None):
-    resources = mcp_registry.get_resources(server_id)
-    return [
-        {"uri": r.uri, "name": r.name, "description": r.description,
-         "mime_type": r.mime_type, "server_id": r.server_id}
-        for r in resources
-    ]
-
-
-@router.post("/mcp/servers", status_code=201)
-async def register_mcp_server(data: MCPServerRegisterRequest):
-    try:
-        transport = MCPTransport(data.transport)
-    except ValueError:
-        raise HTTPException(400, f"Invalid transport: {data.transport}")
-
-    config = MCPServerConfig(
-        id=f"mcp-{uuid.uuid4().hex[:8]}",
-        name=data.name,
-        transport=transport,
-        endpoint=data.endpoint,
-        command=data.command,
-        env=data.env,
-    )
-    state = mcp_registry.register_server(config)
-    return {
-        "id": state.config.id,
-        "name": state.config.name,
-        "transport": state.config.transport.value,
-        "status": state.status.value,
-    }
-
-
-@router.post("/mcp/servers/{server_id}/connect")
-async def connect_mcp_server(server_id: str):
-    success = await mcp_registry.connect_server(server_id)
-    if not success:
-        state = mcp_registry._servers.get(server_id)
-        error = state.last_error if state else "Server not found"
-        raise HTTPException(400, f"Connection failed: {error}")
-    return {"success": True, "server_id": server_id}
-
-
-@router.post("/mcp/servers/{server_id}/disconnect")
-async def disconnect_mcp_server(server_id: str):
-    success = mcp_registry.disconnect_server(server_id)
-    if not success:
-        raise HTTPException(404, "Server not found")
-    return {"success": True}
-
-
-@router.delete("/mcp/servers/{server_id}", status_code=204)
-async def unregister_mcp_server(server_id: str):
-    success = mcp_registry.unregister_server(server_id)
-    if not success:
-        raise HTTPException(404, "Server not found")
-
-
-class MCPToolCallRequest(BaseModel):
-    arguments: dict = Field(default_factory=dict)
-
-
-@router.post("/mcp/tools/{tool_name}/call")
-async def call_mcp_tool(tool_name: str, data: MCPToolCallRequest):
-    result = await mcp_registry.call_tool(tool_name, data.arguments)
-    return result
 
 
 # ═══════════════════════════════════════════════════════════
@@ -5363,66 +5260,6 @@ class PipelineExecute(BaseModel):
     initial_state: dict = Field(default_factory=dict)
 
 
-@router.get("/pipelines")
-async def list_pipelines():
-    """List all defined pipelines."""
-    return {"pipelines": pipeline_engine.list_pipelines()}
-
-
-@router.post("/pipelines", status_code=201)
-async def create_pipeline(data: PipelineCreate):
-    """Define a new pipeline."""
-    from agent.pipeline import PipelineDefinition, StepConfig
-    steps = []
-    for s in data.steps:
-        steps.append(StepConfig(
-            kind=StepKind(s.get("kind", "chat")),
-            name=s.get("name", f"step_{len(steps)}"),
-            config=s.get("config", {}),
-            depends_on=s.get("depends_on", []),
-            error_policy=ErrorPolicy(s.get("error_policy", "abort")),
-            max_retries=s.get("max_retries", 2),
-            timeout_seconds=s.get("timeout_seconds", 120.0),
-            condition=s.get("condition", ""),
-            fallback_step=s.get("fallback_step", ""),
-        ))
-    definition = PipelineDefinition(
-        id=f"pipeline-{uuid.uuid4().hex[:12]}",
-        name=data.name,
-        description=data.description,
-        steps=steps,
-    )
-    pipeline_id = pipeline_engine.define_pipeline(definition)
-    return {"pipeline_id": pipeline_id, "name": data.name, "step_count": len(steps)}
-
-
-@router.get("/pipelines/{pipeline_id}")
-async def get_pipeline(pipeline_id: str):
-    """Get pipeline definition."""
-    pipeline = pipeline_engine.get_pipeline(pipeline_id)
-    if not pipeline:
-        raise HTTPException(404, "Pipeline not found")
-    return {
-        "id": pipeline.id,
-        "name": pipeline.name,
-        "description": pipeline.description,
-        "steps": [
-            {"name": s.name, "kind": s.kind.value, "config": s.config,
-             "depends_on": s.depends_on, "error_policy": s.error_policy.value}
-            for s in pipeline.steps
-        ],
-        "created_at": pipeline.created_at,
-    }
-
-
-@router.delete("/pipelines/{pipeline_id}")
-async def delete_pipeline(pipeline_id: str):
-    """Delete a pipeline definition."""
-    if not pipeline_engine.delete_pipeline(pipeline_id):
-        raise HTTPException(404, "Pipeline not found")
-    return {"deleted": True}
-
-
 @router.post("/pipelines/run")
 async def run_pipeline(data: PipelineExecute):
     """Execute a pipeline."""
@@ -7239,6 +7076,16 @@ async def get_system_stats():
     }
 
 
+@router.get("/orchestrator/stats")
+async def get_orchestrator_stats():
+    """Get orchestrator runtime statistics."""
+    try:
+        from agent.buddy_orchestrator import buddy_orchestrator
+        return buddy_orchestrator.get_stats()
+    except ImportError:
+        return {"total_sessions": 0, "active_sessions": 0, "system_status": "initializing"}
+
+
 # ═══════════════════════════════════════════════════════════
 # Platform Hub Stats
 # ═══════════════════════════════════════════════════════════
@@ -7427,17 +7274,6 @@ async def get_capability_stats():
 async def get_knowledge_stats():
     """Get knowledge graph statistics."""
     return knowledge_graph.get_stats() if hasattr(knowledge_graph, 'get_stats') else {"status": "active"}
-
-
-# ═══════════════════════════════════════════════════════════
-# MCP Stats
-# ═══════════════════════════════════════════════════════════
-
-@router.get("/mcp/stats")
-async def get_mcp_stats():
-    """Get MCP registry statistics."""
-    servers = mcp_registry.get_server_states() if hasattr(mcp_registry, 'get_server_states') else []
-    return {"servers": len(servers), "server_states": servers, "status": "active"}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -8557,7 +8393,8 @@ async def terminate_runtime_instance(instance_id: str):
 # Agent Core API
 # ═══════════════════════════════════════════════════════════
 
-from agent.shared import AgentCore, AgentCoreConfig, AgentState, ExecutionContext, AgentCapability, agent_synthesis
+from agent.shared import AgentCore, AgentCoreConfig, AgentState, AgentCapability, agent_synthesis
+from agent.agent_core import ExecutionContext
 
 # Global agent core instances
 _agent_cores: dict[str, AgentCore] = {}
@@ -11972,16 +11809,6 @@ async def get_autopilot_stats():
 async def get_approval_stats():
     """Get approval engine statistics."""
     return {"rules": approval_engine.get_rules(), "total_rules": len(approval_engine.get_rules())}
-
-
-# ═══════════════════════════════════════════════════════════
-# Reasoning stats
-# ═══════════════════════════════════════════════════════════
-
-@router.get("/reasoning/stats")
-async def get_reasoning_stats():
-    """Get reasoning engine statistics."""
-    return {"total_cycles": 0, "total_insights": 0, "active_sessions": 0}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -16202,5 +16029,471 @@ async def flow_history(limit: int = Query(default=10, ge=1, le=50)):
         "executions": agent_flow.get_recent_executions(limit),
         "total": agent_flow._total_executions,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Profile API — Agent Profile & Persona Management
+# ═══════════════════════════════════════════════════════════════════
+
+from agent.agent_profile import profile_manager, CommunicationStyle, ExpertiseLevel
+
+
+class ProfileCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    display_name: str = ""
+    description: str = ""
+    communication_style: str = "friendly"
+
+
+@router.get("/profiles")
+async def list_profiles():
+    """List all agent profiles."""
+    profiles = profile_manager.list_profiles()
+    return {"profiles": [p.to_dict() for p in profiles]}
+
+
+@router.get("/profiles/{profile_id}")
+async def get_profile(profile_id: str):
+    """Get a profile by ID."""
+    profile = profile_manager.get_profile(profile_id)
+    if not profile:
+        raise HTTPException(404, "Profile not found")
+    return profile.to_dict()
+
+
+@router.post("/profiles")
+async def create_profile(data: ProfileCreateRequest):
+    """Create a new agent profile."""
+    style = CommunicationStyle.FRIENDLY
+    try:
+        style = CommunicationStyle(data.communication_style)
+    except ValueError:
+        pass
+
+    profile = profile_manager.create_profile(
+        name=data.name,
+        display_name=data.display_name or data.name,
+        description=data.description,
+        communication_style=style,
+    )
+    return profile.to_dict()
+
+
+@router.delete("/profiles/{profile_id}")
+async def delete_profile(profile_id: str):
+    """Delete a profile."""
+    if profile_manager.delete_profile(profile_id):
+        return {"status": "deleted"}
+    raise HTTPException(404, "Profile not found")
+
+
+@router.post("/profiles/{profile_id}/generate-prompt")
+async def generate_prompt(profile_id: str):
+    """Generate a system prompt from a profile."""
+    prompt = profile_manager.generate_system_prompt(profile_id)
+    if not prompt:
+        raise HTTPException(404, "Profile not found")
+    return {"profile_id": profile_id, "prompt": prompt}
+
+
+@router.post("/profiles/template/{template_name}")
+async def create_profile_template(template_name: str):
+    """Create a profile from a template."""
+    templates = {
+        "create_strategist_template": profile_manager.create_strategist_template,
+        "create_engineer_template": profile_manager.create_engineer_template,
+        "create_companion_template": profile_manager.create_companion_template,
+        "create_researcher_template": profile_manager.create_researcher_template,
+    }
+    if template_name not in templates:
+        raise HTTPException(404, f"Template not found: {template_name}")
+
+    profile = templates[template_name]()
+    profile_manager._profiles[profile.profile_id] = profile
+    return profile.to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Pipeline API — Training & Deployment Pipeline Management
+# ═══════════════════════════════════════════════════════════════════
+
+from agent.platform_pipeline import pipeline_engine, PipelineType
+
+
+class PipelineCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    pipeline_type: str = "custom"
+    description: str = ""
+
+
+@router.get("/pipelines")
+async def list_pipelines():
+    """List all pipelines."""
+    pipelines = pipeline_engine.list_pipelines()
+    return {
+        "pipelines": [
+            {
+                "pipeline_id": p.pipeline_id,
+                "name": p.name,
+                "description": p.description,
+                "pipeline_type": p.pipeline_type.value,
+                "status": p.status.value,
+                "stages": [
+                    {"stage_id": s.stage_id, "name": s.name, "status": s.status.value}
+                    for s in p.stages
+                ],
+                "current_stage_index": p.current_stage_index,
+                "version": p.version,
+                "tags": p.tags,
+            }
+            for p in pipelines
+        ]
+    }
+
+
+@router.get("/pipelines/{pipeline_id}")
+async def get_pipeline(pipeline_id: str):
+    """Get a pipeline by ID."""
+    pipeline = pipeline_engine.get_pipeline(pipeline_id)
+    if not pipeline:
+        raise HTTPException(404, "Pipeline not found")
+    return {
+        "pipeline_id": pipeline.pipeline_id,
+        "name": pipeline.name,
+        "description": pipeline.description,
+        "pipeline_type": pipeline.pipeline_type.value,
+        "status": pipeline.status.value,
+        "stages": [
+            {"stage_id": s.stage_id, "name": s.name, "status": s.status.value}
+            for s in pipeline.stages
+        ],
+        "current_stage_index": pipeline.current_stage_index,
+        "version": pipeline.version,
+        "tags": pipeline.tags,
+    }
+
+
+@router.post("/pipelines")
+async def create_pipeline(data: PipelineCreateRequest):
+    """Create a new pipeline."""
+    ptype = PipelineType.CUSTOM
+    try:
+        ptype = PipelineType(data.pipeline_type)
+    except ValueError:
+        pass
+
+    pipeline = pipeline_engine.create_pipeline(
+        name=data.name,
+        pipeline_type=ptype,
+        description=data.description,
+    )
+    return {"pipeline_id": pipeline.pipeline_id, "name": pipeline.name, "status": pipeline.status.value}
+
+
+@router.delete("/pipelines/{pipeline_id}")
+async def delete_pipeline(pipeline_id: str):
+    """Delete a pipeline."""
+    if pipeline_engine.delete_pipeline(pipeline_id):
+        return {"status": "deleted"}
+    raise HTTPException(404, "Pipeline not found")
+
+
+@router.post("/pipelines/{pipeline_id}/execute")
+async def execute_pipeline(pipeline_id: str):
+    """Execute a pipeline."""
+    result = await pipeline_engine.execute_pipeline(pipeline_id)
+    if "error" in result:
+        raise HTTPException(400, result["error"])
+    return result
+
+
+@router.post("/pipelines/{pipeline_id}/cancel")
+async def cancel_pipeline(pipeline_id: str):
+    """Cancel a pipeline."""
+    if pipeline_engine.cancel_pipeline(pipeline_id):
+        return {"status": "cancelled"}
+    raise HTTPException(404, "Pipeline not found or not cancellable")
+
+
+@router.get("/pipelines/{pipeline_id}/progress")
+async def get_pipeline_progress(pipeline_id: str):
+    """Get pipeline execution progress."""
+    progress = pipeline_engine.get_pipeline_progress(pipeline_id)
+    if "error" in progress:
+        raise HTTPException(404, progress["error"])
+    return progress
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Gateway API — Provider Catalog & Intelligent Routing
+# ═══════════════════════════════════════════════════════════════════
+
+from agent.platform_gateway import platform_gateway, ProviderType, ProviderStatus, ProviderConfig
+
+
+class AddProviderRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    provider_type: str = "openai"
+    api_base: str = ""
+    api_key: str = ""
+    default_model: str = ""
+
+
+class GatewayRouteRequest(BaseModel):
+    model: str = ""
+    messages: list[dict] = Field(default_factory=list)
+    temperature: float = 0.7
+    max_tokens: int = 1024
+
+
+@router.get("/gateway/platform-stats")
+async def get_platform_gateway_stats():
+    """Get platform gateway statistics."""
+    return platform_gateway.get_stats()
+
+
+@router.get("/gateway/providers")
+async def list_providers():
+    """List all registered providers."""
+    providers = platform_gateway.catalog.list_providers()
+    return {
+        "providers": [
+            {
+                "provider_id": p.provider_id,
+                "name": p.name,
+                "provider_type": p.provider_type.value,
+                "status": p.status.value,
+                "default_model": p.default_model,
+                "available_models": p.available_models,
+                "weight": p.weight,
+                "rate_limit_rpm": p.rate_limit_rpm,
+            }
+            for p in providers
+        ]
+    }
+
+
+@router.post("/gateway/providers")
+async def add_provider(data: AddProviderRequest):
+    """Add a new provider."""
+    ptype = ProviderType.CUSTOM
+    try:
+        ptype = ProviderType(data.provider_type)
+    except ValueError:
+        pass
+
+    config = ProviderConfig(
+        name=data.name,
+        provider_type=ptype,
+        api_base=data.api_base,
+        api_key=data.api_key,
+        default_model=data.default_model,
+        status=ProviderStatus.ONLINE,
+    )
+    platform_gateway.catalog.register(config)
+    return {"provider_id": config.provider_id, "name": config.name, "status": config.status.value}
+
+
+@router.delete("/gateway/providers/{provider_id}")
+async def remove_provider(provider_id: str):
+    """Remove a provider."""
+    platform_gateway.catalog.unregister(provider_id)
+    return {"status": "removed"}
+
+
+@router.post("/gateway/route")
+async def test_route(data: GatewayRouteRequest):
+    """Test route a request through the gateway."""
+    from agent.platform_gateway import GatewayRequest
+    request = GatewayRequest(
+        model=data.model,
+        messages=data.messages,
+        temperature=data.temperature,
+        max_tokens=data.max_tokens,
+    )
+    response = await platform_gateway.route_request(request)
+    return {
+        "request_id": response.request_id,
+        "provider_id": response.provider_id,
+        "model": response.model,
+        "content": response.content,
+        "success": response.success,
+        "latency_ms": response.latency_ms,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# MCP Tools API — Extended MCP Management
+# ═══════════════════════════════════════════════════════════════════
+
+from agent.agent_mcp import mcp_registry, mcp_executor, MCPToolDefinition, MCPToolCategory, MCPServerConfig, MCPServerType
+
+
+class AddMCPServerRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    server_type: str = "embedded"
+    command: str = ""
+
+
+class AddMCPToolRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    description: str = Field(..., min_length=1)
+    category: str = "custom"
+
+
+@router.get("/mcp/stats")
+async def mcp_stats():
+    """Get MCP registry statistics."""
+    return mcp_registry.get_stats()
+
+
+@router.get("/mcp/tools")
+async def list_mcp_tools(category: str = Query(default="")):
+    """List MCP tools with optional category filter."""
+    cat = None
+    if category:
+        try:
+            cat = MCPToolCategory(category)
+        except ValueError:
+            pass
+    tools = mcp_registry.list_tools(category=cat)
+    return {
+        "tools": [
+            {
+                "name": t.name,
+                "description": t.description,
+                "category": t.category.value,
+                "server_name": t.server_name,
+                "requires_approval": t.requires_approval,
+                "tags": t.tags,
+            }
+            for t in tools
+        ]
+    }
+
+
+@router.post("/mcp/servers")
+async def add_mcp_server(data: AddMCPServerRequest):
+    """Add an MCP server."""
+    stype = MCPServerType.EMBEDDED
+    try:
+        stype = MCPServerType(data.server_type)
+    except ValueError:
+        pass
+
+    config = MCPServerConfig(
+        name=data.name,
+        server_type=stype,
+        command=data.command,
+    )
+    mcp_registry.register_server(config)
+    return {"name": config.name, "type": config.server_type.value}
+
+
+@router.post("/mcp/tools")
+async def add_mcp_tool(data: AddMCPToolRequest):
+    """Add an MCP tool."""
+    cat = MCPToolCategory.CUSTOM
+    try:
+        cat = MCPToolCategory(data.category)
+    except ValueError:
+        pass
+
+    definition = MCPToolDefinition(
+        name=data.name,
+        description=data.description,
+        category=cat,
+    )
+    mcp_registry.register_tool(definition)
+    return {"name": data.name, "category": cat.value}
+
+
+@router.post("/mcp/tools/{tool_name}/execute")
+async def execute_mcp_tool(tool_name: str, arguments: dict[str, Any] = Body(default={})):
+    """Execute an MCP tool."""
+    result = await mcp_registry.execute_tool(tool_name, arguments)
+    return {
+        "tool_name": result.tool_name,
+        "success": result.success,
+        "content": result.content,
+        "error": result.error,
+        "duration_ms": result.duration_ms,
+    }
+
+
+@router.get("/mcp/servers")
+async def list_mcp_servers():
+    """List all MCP servers."""
+    servers = mcp_registry.list_servers()
+    return {
+        "servers": [
+            {
+                "name": s.name,
+                "server_type": s.server_type.value,
+                "command": s.command,
+                "url": s.url,
+                "auto_connect": s.auto_connect,
+                "connected": s.name in mcp_registry._connected_servers,
+            }
+            for s in servers
+        ]
+    }
+
+
+@router.get("/mcp/servers/{server_name}")
+async def get_mcp_server(server_name: str):
+    """Get a single MCP server by name."""
+    server = mcp_registry.get_server(server_name)
+    if not server:
+        raise HTTPException(404, "MCP server not found")
+    return {
+        "name": server.name,
+        "server_type": server.server_type.value,
+        "command": server.command,
+        "url": server.url,
+        "auto_connect": server.auto_connect,
+        "connected": server_name in mcp_registry._connected_servers,
+    }
+
+
+@router.get("/mcp/resources")
+async def list_mcp_resources(server_name: str = Query(default="")):
+    """List MCP resources, optionally filtered by server."""
+    resources = mcp_registry.list_resources(server_name=server_name if server_name else None)
+    return {
+        "resources": [
+            {
+                "uri": r.uri,
+                "name": r.name,
+                "description": r.description,
+                "mime_type": r.mime_type,
+                "server_name": r.server_name,
+            }
+            for r in resources
+        ]
+    }
+
+
+@router.post("/mcp/servers/{server_name}/connect")
+async def connect_mcp_server(server_name: str):
+    """Connect to an MCP server."""
+    success = await mcp_registry.connect_server(server_name)
+    return {"server_name": server_name, "connected": success}
+
+
+@router.post("/mcp/servers/{server_name}/disconnect")
+async def disconnect_mcp_server(server_name: str):
+    """Disconnect from an MCP server."""
+    await mcp_registry.disconnect_server(server_name)
+    return {"server_name": server_name, "disconnected": True}
+
+
+@router.delete("/mcp/servers/{server_name}")
+async def remove_mcp_server(server_name: str):
+    """Remove an MCP server."""
+    if server_name not in mcp_registry._servers:
+        raise HTTPException(404, "MCP server not found")
+    mcp_registry.unregister_server(server_name)
+    return {"server_name": server_name, "removed": True}
 
 
