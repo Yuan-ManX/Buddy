@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { Agent, Message as MsgType, MessageBranch, QuickReply } from '../types';
 import { MessageBubble } from './MessageBubble';
-import { useWebSocket } from '../hooks/useWebSocket';
+import { ToolCallCard } from './ToolCallCard';
+import { StreamingMessage } from './StreamingMessage';
 import { api } from '../api/client';
 import { getRoleColor, getRoleColorSecondary } from '../utils/colors';
 
@@ -35,21 +36,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [useStreaming, setUseStreaming] = useState(true);
   const [toolCalls, setToolCalls] = useState<ToolCallState[]>([]);
   const [reasoningChain, setReasoningChain] = useState<string[]>([]);
+  const [showReasoning, setShowReasoning] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const streamingRef = useRef<HTMLDivElement>(null);
 
   // Message branching state
   const [messageBranches, setMessageBranches] = useState<MessageBranch[]>([]);
   const [showBranches, setShowBranches] = useState(false);
-  const [branchMessageId, setBranchMessageId] = useState<string | null>(null);
 
   // Quick reply state
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
 
-  const { connect, send, disconnect, streaming: wsStreaming } = useWebSocket(agent.id);
+  const agentGradient = `linear-gradient(135deg, ${getRoleColor(agent.role)}, ${getRoleColorSecondary(agent.role)})`;
 
   // Auto-resize textarea
   useEffect(() => {
@@ -76,6 +76,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setStreamingContent('');
     setToolCalls([]);
     setReasoningChain([]);
+    setShowReasoning(false);
 
     const userMsg: MsgType = {
       id: `u-${Date.now()}`,
@@ -101,7 +102,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         enable_reasoning: true,
       });
 
-      // Override fetch with abort signal
       const reader = response.body?.getReader();
       if (!reader) throw new Error('No response body');
 
@@ -152,6 +152,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 break;
               case 'reasoning':
                 setReasoningChain((prev) => [...prev, parsed.content]);
+                setShowReasoning(true);
                 break;
               case 'conversation':
                 if (parsed.conversation_id) {
@@ -168,13 +169,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         }
       }
 
-      // Handle conversation creation
       if (newConvId && !currentConvId) {
         setCurrentConvId(newConvId);
         onConversationCreated(newConvId);
       }
 
-      // Finalize assistant message
       if (fullContent) {
         const assistantMsg: MsgType = {
           id: `a-${Date.now()}`,
@@ -188,6 +187,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       setStreamingContent('');
       setToolCalls([]);
       setReasoningChain([]);
+      setShowReasoning(false);
     } catch (err: any) {
       if (err.name === 'AbortError') return;
       const errMsg: MsgType = {
@@ -201,6 +201,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       setStreamingContent('');
       setToolCalls([]);
       setReasoningChain([]);
+      setShowReasoning(false);
     } finally {
       setLoading(false);
       abortRef.current = null;
@@ -271,64 +272,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
-  // WebSocket streaming
-  const handleSendWS = () => {
-    if (!input.trim() || wsStreaming) return;
-    const content = input.trim();
-    setInput('');
-    setStreamingContent('');
-
-    const userMsg: MsgType = {
-      id: `u-${Date.now()}`,
-      agent_id: agent.id,
-      role: 'user',
-      content,
-      created_at: new Date().toISOString(),
-    };
-    onMessagesUpdate((prev) => [...prev, userMsg]);
-
-    let fullContent = '';
-
-    connect(
-      (token) => {
-        fullContent += token;
-        setStreamingContent(fullContent);
-      },
-      (full) => {
-        if (!currentConvId) {
-          const newConvId = `conv-${Date.now().toString(36)}`;
-          setCurrentConvId(newConvId);
-          onConversationCreated(newConvId);
-        }
-        const assistantMsg: MsgType = {
-          id: `a-${Date.now()}`,
-          agent_id: agent.id,
-          role: 'assistant',
-          content: full,
-          created_at: new Date().toISOString(),
-        };
-        onMessagesUpdate((prev) => [...prev, assistantMsg]);
-        setStreamingContent('');
-        disconnect();
-      },
-      (err) => {
-        const errMsg: MsgType = {
-          id: `e-${Date.now()}`,
-          agent_id: agent.id,
-          role: 'assistant',
-          content: `Error: ${err}`,
-          created_at: new Date().toISOString(),
-        };
-        onMessagesUpdate((prev) => [...prev, errMsg]);
-        setStreamingContent('');
-        disconnect();
-      }
-    );
-
-    send(content);
-    setTimeout(() => inputRef.current?.focus(), 50);
-  };
-
   const handleSend = () => {
     if (useStreaming) {
       handleSendSSE();
@@ -341,9 +284,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     if (abortRef.current) {
       abortRef.current.abort();
     }
-    if (wsStreaming) {
-      disconnect();
-    }
     setLoading(false);
   };
 
@@ -352,7 +292,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       e.preventDefault();
       handleSend();
     }
-    // Shift+Enter for new line
   };
 
   const handleRetry = async (msgContent: string) => {
@@ -364,11 +303,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     try {
       const result = await api.chatBranches(messageId);
       setMessageBranches(result.branches);
-      setBranchMessageId(messageId);
       setShowBranches(true);
-    } catch {
-      // branches are optional
-    }
+    } catch {}
   };
 
   const handleSwitchBranch = (branchId: string) => {
@@ -386,9 +322,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       const result = await api.chatQuickReplies(agent.id);
       setQuickReplies(result.replies);
       setShowQuickReplies(true);
-    } catch {
-      // quick replies are optional
-    }
+    } catch {}
   };
 
   const suggestionPrompts: Record<string, string[]> = {
@@ -399,7 +333,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   };
 
   const suggestions = suggestionPrompts[agent.role] || suggestionPrompts.companion || [];
-  const isGenerating = loading || wsStreaming;
+  const isGenerating = loading;
 
   return (
     <div className="chat-area">
@@ -408,9 +342,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <div className="chat-header-info">
           <div
             className="chat-header-avatar"
-            style={{
-              background: `linear-gradient(135deg, ${getRoleColor(agent.role)}, ${getRoleColorSecondary(agent.role)})`,
-            }}
+            style={{ background: agentGradient }}
           >
             {agent.name.charAt(0).toUpperCase()}
           </div>
@@ -445,9 +377,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           <div className="chat-welcome">
             <div
               className="chat-welcome-icon"
-              style={{
-                background: `linear-gradient(135deg, ${getRoleColor(agent.role)}, ${getRoleColorSecondary(agent.role)})`,
-              }}
+              style={{ background: agentGradient }}
             >
               {agent.name.charAt(0).toUpperCase()}
             </div>
@@ -481,25 +411,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           />
         ))}
 
-        {/* Tool calls display */}
+        {/* Tool calls display — using enhanced ToolCallCard */}
         {toolCalls.length > 0 && (
           <div className="tool-calls-container">
+            <div className="tool-calls-header">
+              <span className="tool-calls-count">{toolCalls.length} tool call{toolCalls.length > 1 ? 's' : ''}</span>
+            </div>
             {toolCalls.map((tc) => (
-              <div key={tc.id} className={`tool-call-card ${tc.status}`}>
-                <div className="tool-call-header">
-                  <span className={`tool-call-status-dot ${tc.status}`} />
-                  <span className="tool-call-name">{tc.name}</span>
-                  <span className="tool-call-status-text">{tc.status}</span>
-                </div>
-                {tc.arguments && (
-                  <pre className="tool-call-args">{tc.arguments}</pre>
-                )}
-                {tc.result && (
-                  <div className="tool-call-result">
-                    <pre>{typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result, null, 2)}</pre>
-                  </div>
-                )}
-              </div>
+              <ToolCallCard key={tc.id} toolCall={tc} />
             ))}
           </div>
         )}
@@ -507,35 +426,32 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         {/* Reasoning chain */}
         {reasoningChain.length > 0 && (
           <div className="reasoning-chain">
-            <div className="reasoning-chain-header">
+            <div className="reasoning-chain-header" onClick={() => setShowReasoning(!showReasoning)}>
               <span className="reasoning-icon">💭</span>
               <span>Reasoning</span>
+              <span className="reasoning-step-count">{reasoningChain.length} steps</span>
+              <span className={`reasoning-chevron ${showReasoning ? 'expanded' : ''}`}>▾</span>
             </div>
-            {reasoningChain.map((step, i) => (
-              <div key={i} className="reasoning-step">{step}</div>
-            ))}
+            {showReasoning && (
+              <div className="reasoning-chain-body">
+                {reasoningChain.map((step, i) => (
+                  <div key={i} className="reasoning-step">
+                    <span className="reasoning-step-num">{i + 1}</span>
+                    <span className="reasoning-step-text">{step}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Streaming content */}
+        {/* Streaming content — using enhanced StreamingMessage */}
         {streamingContent && (
-          <div className="msg-row msg-assistant">
-            <div
-              className="msg-avatar"
-              style={{
-                background: `linear-gradient(135deg, ${getRoleColor(agent.role)}, ${getRoleColorSecondary(agent.role)})`,
-              }}
-            >
-              {agent.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="msg-bubble bubble-assistant">
-              <div className="msg-sender">{agent.name}</div>
-              <div className="msg-content streaming" ref={streamingRef}>
-                {streamingContent}
-                <span className="cursor-blink">|</span>
-              </div>
-            </div>
-          </div>
+          <StreamingMessage
+            content={streamingContent}
+            agentName={agent.name}
+            agentColor={agentGradient}
+          />
         )}
 
         {/* Typing indicator */}
@@ -543,9 +459,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           <div className="msg-row msg-assistant">
             <div
               className="msg-avatar"
-              style={{
-                background: `linear-gradient(135deg, ${getRoleColor(agent.role)}, ${getRoleColorSecondary(agent.role)})`,
-              }}
+              style={{ background: agentGradient }}
             >
               {agent.name.charAt(0).toUpperCase()}
             </div>
