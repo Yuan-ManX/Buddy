@@ -840,6 +840,160 @@ async def chat_with_plan(data: PlanChatRequest):
     }
 
 
+# ═══════════════════════════════════════════════════════════
+# Brain-Powered Chat — Unified Brain perceive-think-act-reflect
+# ═══════════════════════════════════════════════════════════
+
+class BrainChatRequest(BaseModel):
+    agent_id: str
+    content: str = Field(..., min_length=1)
+    conversation_id: str | None = None
+    enable_tools: bool = Field(default=True)
+    enable_reasoning: bool = Field(default=False)
+    mode: str = Field(default="auto")
+
+
+@router.post("/chat/brain")
+async def chat_with_brain(data: BrainChatRequest):
+    """Chat powered by the Unified Brain — intelligent routing through
+    perceive-think-act-reflect cycle with automatic mode selection,
+    complexity estimation, and quality reflection."""
+    async with async_session() as session:
+        result = await session.execute(select(AgentModel).where(AgentModel.id == data.agent_id))
+        agent = result.scalars().first()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+
+        conv_id = data.conversation_id
+        if not conv_id:
+            conv_id = f"conv-{uuid.uuid4().hex[:8]}"
+            conv = ConvModel(id=conv_id, title=f"Brain Chat with {agent.name}", agent_ids=[agent.id])
+            session.add(conv)
+            await session.commit()
+
+    history_result = None
+    if conv_id:
+        async with async_session() as s2:
+            msgs = await s2.execute(
+                select(MsgModel)
+                .where(MsgModel.conversation_id == conv_id)
+                .order_by(MsgModel.created_at)
+                .limit(30)
+            )
+            history_result = [
+                {"role": m.role, "content": m.content}
+                for m in msgs.scalars().all()
+            ]
+
+    response = await orchestrator.chat_with_brain(
+        agent_id=agent.id,
+        agent_name=agent.name,
+        instructions=agent.instructions or f"You are {agent.name}, a {agent.role} agent.",
+        message=data.content,
+        history=history_result,
+        enable_tools=data.enable_tools,
+        enable_reasoning=data.enable_reasoning,
+        mode=data.mode,
+    )
+
+    content = response if isinstance(response, str) else ""
+
+    async with async_session() as s3:
+        user_msg = MsgModel(
+            id=f"msg-{uuid.uuid4().hex[:8]}",
+            agent_id=agent.id, conversation_id=conv_id,
+            role="user", content=data.content,
+        )
+        assistant_msg = MsgModel(
+            id=f"msg-{uuid.uuid4().hex[:8]}",
+            agent_id=agent.id, conversation_id=conv_id,
+            role="assistant", content=content,
+        )
+        s3.add_all([user_msg, assistant_msg])
+        conv = await s3.execute(select(ConvModel).where(ConvModel.id == conv_id))
+        c = conv.scalars().first()
+        if c:
+            c.updated_at = datetime.now(timezone.utc)
+        await s3.commit()
+
+    return {
+        "agent_id": agent.id,
+        "content": content,
+        "conversation_id": conv_id,
+        "mode": data.mode,
+    }
+
+
+@router.post("/chat/brain/stream")
+async def chat_with_brain_stream(data: BrainChatRequest):
+    """Stream brain-powered chat response as Server-Sent Events."""
+    async with async_session() as session:
+        result = await session.execute(select(AgentModel).where(AgentModel.id == data.agent_id))
+        agent = result.scalars().first()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+
+        conv_id = data.conversation_id
+        if not conv_id:
+            conv_id = f"conv-{uuid.uuid4().hex[:8]}"
+            conv = ConvModel(id=conv_id, title=f"Brain Chat with {agent.name}", agent_ids=[agent.id])
+            session.add(conv)
+            await session.commit()
+
+    history_result = None
+    if conv_id:
+        async with async_session() as s2:
+            msgs = await s2.execute(
+                select(MsgModel)
+                .where(MsgModel.conversation_id == conv_id)
+                .order_by(MsgModel.created_at)
+                .limit(30)
+            )
+            history_result = [
+                {"role": m.role, "content": m.content}
+                for m in msgs.scalars().all()
+            ]
+
+    async def event_stream():
+        full_response = ""
+        try:
+            async for token in orchestrator.chat_with_brain(
+                agent_id=agent.id,
+                agent_name=agent.name,
+                instructions=agent.instructions or f"You are {agent.name}, a {agent.role} agent.",
+                message=data.content,
+                history=history_result,
+                stream=True,
+                enable_tools=data.enable_tools,
+                enable_reasoning=data.enable_reasoning,
+                mode=data.mode,
+            ):
+                full_response += token
+                yield f"data: {json.dumps({'token': token})}\n\n"
+
+            # Save messages
+            async with async_session() as s3:
+                user_msg = MsgModel(
+                    id=f"msg-{uuid.uuid4().hex[:8]}",
+                    agent_id=agent.id, conversation_id=conv_id,
+                    role="user", content=data.content,
+                )
+                assistant_msg = MsgModel(
+                    id=f"msg-{uuid.uuid4().hex[:8]}",
+                    agent_id=agent.id, conversation_id=conv_id,
+                    role="assistant", content=full_response,
+                )
+                s3.add_all([user_msg, assistant_msg])
+                await s3.commit()
+
+            yield f"data: {json.dumps({'done': True, 'conversation_id': conv_id})}\n\n"
+        except Exception as e:
+            logger.error(f"Brain chat stream error: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 # SSE streaming endpoint with proper event types
 @router.post("/agents/{agent_id}/chat/stream")
 async def agent_chat_stream(agent_id: str, data: ChatRequest):
@@ -14165,5 +14319,1888 @@ async def create_config_ab_test(data: dict):
         treatment_config=data.get("treatment_config", {}),
     )
     return experiment.to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Deep Reasoning API
+# ═══════════════════════════════════════════════════════════════════
+
+from agent.shared import deep_reasoning, VoteStrategy
+
+
+@router.get("/reasoning/stats")
+async def get_deep_reasoning_stats():
+    """Get deep reasoning engine statistics."""
+    return deep_reasoning.get_stats()
+
+
+@router.post("/reasoning/tree-of-thought")
+async def tree_of_thought_reasoning(data: dict):
+    """Execute tree-of-thought reasoning."""
+    result = await deep_reasoning.tree_of_thought(
+        prompt=data.get("prompt", ""),
+        context=data.get("context", ""),
+        max_branches=data.get("max_branches", 5),
+        max_depth=data.get("max_depth", 4),
+    )
+    return result.to_dict()
+
+
+@router.post("/reasoning/self-consistency")
+async def self_consistency_reasoning(data: dict):
+    """Execute self-consistency reasoning with voting."""
+    strategy = VoteStrategy(data.get("vote_strategy", "majority"))
+    result = await deep_reasoning.self_consistency(
+        prompt=data.get("prompt", ""),
+        context=data.get("context", ""),
+        num_samples=data.get("num_samples", 3),
+        vote_strategy=strategy,
+    )
+    return result.to_dict()
+
+
+@router.post("/reasoning/iterative-refinement")
+async def iterative_refinement_reasoning(data: dict):
+    """Execute iterative refinement reasoning."""
+    result = await deep_reasoning.iterative_refinement(
+        prompt=data.get("prompt", ""),
+        context=data.get("context", ""),
+        max_iterations=data.get("max_iterations", 3),
+        quality_threshold=data.get("quality_threshold", 0.8),
+    )
+    return result.to_dict()
+
+
+@router.post("/reasoning/multi-perspective")
+async def multi_perspective_reasoning(data: dict):
+    """Execute multi-perspective reasoning."""
+    result = await deep_reasoning.multi_perspective(
+        prompt=data.get("prompt", ""),
+        perspectives=data.get("perspectives"),
+    )
+    return result.to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Self-Improvement API
+# ═══════════════════════════════════════════════════════════════════
+
+from agent.shared import self_improvement, NudgeType, NudgePriority, SkillLifecycle
+
+
+@router.get("/improve/stats")
+async def get_improvement_stats():
+    """Get self-improvement engine statistics."""
+    return self_improvement.get_stats()
+
+
+@router.get("/improve/skills")
+async def list_improvement_skills(lifecycle: str | None = None, category: str | None = None):
+    """List synthesized skills with optional filtering."""
+    lc = SkillLifecycle(lifecycle) if lifecycle else None
+    skills = self_improvement.get_skills(lifecycle=lc, category=category)
+    return {"skills": [s.to_dict() for s in skills], "total": len(skills)}
+
+
+@router.get("/improve/skills/{skill_id}")
+async def get_improvement_skill(skill_id: str):
+    """Get a specific synthesized skill."""
+    skill = self_improvement.get_skill(skill_id)
+    if not skill:
+        raise HTTPException(404, "Skill not found")
+    return skill.to_dict()
+
+
+@router.post("/improve/skills/synthesize")
+async def synthesize_skill(data: dict):
+    """Synthesize a new skill from operation patterns."""
+    skill = self_improvement.synthesize_skill(
+        name=data.get("name", ""),
+        description=data.get("description", ""),
+        steps=data.get("steps", []),
+        tools_required=data.get("tools_required"),
+        category=data.get("category", "general"),
+        tags=data.get("tags"),
+    )
+    return skill.to_dict()
+
+
+@router.post("/improve/skills/auto-synthesize")
+async def auto_synthesize_skills():
+    """Auto-synthesize skills from all detected patterns."""
+    skills = self_improvement.auto_synthesize_from_patterns()
+    return {"skills": [s.to_dict() for s in skills], "total": len(skills)}
+
+
+@router.post("/improve/skills/{skill_id}/activate")
+async def activate_improvement_skill(skill_id: str):
+    """Activate a draft skill."""
+    ok = self_improvement.activate_skill(skill_id)
+    if not ok:
+        raise HTTPException(404, "Skill not found")
+    return {"success": True}
+
+
+@router.post("/improve/skills/{skill_id}/refine")
+async def refine_improvement_skill(skill_id: str, data: dict):
+    """Refine an existing skill."""
+    skill = self_improvement.refine_skill(skill_id, data)
+    if not skill:
+        raise HTTPException(404, "Skill not found")
+    return skill.to_dict()
+
+
+@router.post("/improve/skills/{skill_id}/deprecate")
+async def deprecate_improvement_skill(skill_id: str):
+    """Deprecate a skill."""
+    ok = self_improvement.deprecate_skill(skill_id)
+    if not ok:
+        raise HTTPException(404, "Skill not found")
+    return {"success": True}
+
+
+@router.post("/improve/skills/{skill_id}/archive")
+async def archive_improvement_skill(skill_id: str):
+    """Archive a deprecated skill."""
+    ok = self_improvement.archive_skill(skill_id)
+    if not ok:
+        raise HTTPException(404, "Skill not found")
+    return {"success": True}
+
+
+@router.post("/improve/skills/{skill_id}/rollback")
+async def rollback_improvement_skill(skill_id: str):
+    """Rollback a skill to previous version."""
+    skill = self_improvement.rollback_skill(skill_id)
+    if not skill:
+        raise HTTPException(404, "Skill not found or already at version 1")
+    return skill.to_dict()
+
+
+@router.get("/improve/nudges")
+async def list_improvement_nudges(agent_id: str | None = None, applied: bool | None = None):
+    """List improvement nudges with optional filtering."""
+    nudges = self_improvement.get_nudges(agent_id=agent_id, applied=applied)
+    return {"nudges": [n.to_dict() for n in nudges], "total": len(nudges)}
+
+
+@router.post("/improve/nudges/generate")
+async def generate_improvement_nudge(data: dict):
+    """Generate a self-improvement nudge."""
+    nudge = self_improvement.generate_nudge(
+        agent_id=data.get("agent_id", ""),
+        nudge_type=NudgeType(data.get("nudge_type", "knowledge_persist")),
+        title=data.get("title", ""),
+        description=data.get("description", ""),
+        suggested_action=data.get("suggested_action", ""),
+        evidence=data.get("evidence"),
+        priority=NudgePriority(data.get("priority", "medium")),
+    )
+    return nudge.to_dict()
+
+
+@router.post("/improve/nudges/{nudge_id}/apply")
+async def apply_improvement_nudge(nudge_id: str):
+    """Apply an improvement nudge."""
+    ok = self_improvement.apply_nudge(nudge_id)
+    if not ok:
+        raise HTTPException(404, "Nudge not found")
+    return {"success": True}
+
+
+@router.post("/improve/nudges/{nudge_id}/revert")
+async def revert_improvement_nudge(nudge_id: str):
+    """Revert an applied nudge."""
+    ok = self_improvement.revert_nudge(nudge_id)
+    if not ok:
+        raise HTTPException(404, "Nudge not found")
+    return {"success": True}
+
+
+@router.post("/improve/patterns")
+async def detect_improvement_patterns(data: dict):
+    """Record an operation pattern for detection."""
+    self_improvement.record_operation_pattern(
+        pattern_name=data.get("pattern_name", ""),
+        operation=data.get("operation", {}),
+    )
+    return {"recorded": True}
+
+
+@router.get("/improve/patterns")
+async def list_improvement_patterns():
+    """List detected operation patterns."""
+    patterns = self_improvement.detect_patterns()
+    return {"patterns": patterns, "total": len(patterns)}
+
+
+@router.post("/improve/cycle")
+async def run_improvement_cycle(data: dict):
+    """Run a full improvement cycle for an agent."""
+    result = await self_improvement.run_improvement_cycle(
+        agent_id=data.get("agent_id", ""),
+    )
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Agent Session API
+# ═══════════════════════════════════════════════════════════════════
+
+from agent.shared import agent_session_manager, SessionRole, SessionState, MessageRole
+
+
+@router.get("/sessions/stats")
+async def get_session_stats():
+    """Get session manager statistics."""
+    return agent_session_manager.get_stats()
+
+
+@router.get("/sessions/templates")
+async def list_session_templates():
+    """List all available session templates for reusable collaboration patterns."""
+    templates = agent_session_manager.list_templates()
+    return {"templates": [t.to_dict() for t in templates], "total": len(templates)}
+
+
+@router.post("/sessions/from-template")
+async def create_session_from_template(data: dict):
+    """Create a new session pre-configured from a template."""
+    session = agent_session_manager.create_session_from_template(
+        template_id=data.get("template_id", ""),
+        name=data.get("name", ""),
+        orchestrator_id=data.get("orchestrator_id", ""),
+        description=data.get("description", ""),
+    )
+    if not session:
+        raise HTTPException(404, "Template not found")
+    return session.to_dict()
+
+
+@router.post("/sessions")
+async def create_session(data: dict):
+    """Create a new collaborative session."""
+    session = agent_session_manager.create_session(
+        name=data.get("name", ""),
+        description=data.get("description", ""),
+        orchestrator_id=data.get("orchestrator_id", ""),
+        tags=data.get("tags"),
+    )
+    return session.to_dict()
+
+
+@router.get("/sessions")
+async def list_sessions(state: str | None = None, agent_id: str | None = None):
+    """List sessions with optional filtering."""
+    st = SessionState(state) if state else None
+    sessions = agent_session_manager.list_sessions(state=st, agent_id=agent_id)
+    return {"sessions": [s.to_dict() for s in sessions], "total": len(sessions)}
+
+
+@router.get("/sessions/{session_id}")
+async def get_session(session_id: str):
+    """Get a session by ID."""
+    session = agent_session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    return session.to_dict()
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str):
+    """Delete a session."""
+    ok = agent_session_manager.delete_session(session_id)
+    if not ok:
+        raise HTTPException(404, "Session not found")
+    return {"success": True}
+
+
+@router.post("/sessions/{session_id}/participants")
+async def add_session_participant(session_id: str, data: dict):
+    """Add a participant to a session."""
+    participant = agent_session_manager.add_participant(
+        session_id=session_id,
+        agent_id=data.get("agent_id", ""),
+        name=data.get("name", ""),
+        role=SessionRole(data.get("role", "worker")),
+        capabilities=data.get("capabilities"),
+    )
+    if not participant:
+        raise HTTPException(404, "Session not found")
+    return participant.to_dict()
+
+
+@router.delete("/sessions/{session_id}/participants/{agent_id}")
+async def remove_session_participant(session_id: str, agent_id: str):
+    """Remove a participant from a session."""
+    ok = agent_session_manager.remove_participant(session_id, agent_id)
+    if not ok:
+        raise HTTPException(404, "Session or participant not found")
+    return {"success": True}
+
+
+@router.post("/sessions/{session_id}/leader/{agent_id}")
+async def set_session_leader(session_id: str, agent_id: str):
+    """Set a participant as session leader."""
+    ok = agent_session_manager.set_leader(session_id, agent_id)
+    if not ok:
+        raise HTTPException(404, "Session or participant not found")
+    return {"success": True}
+
+
+@router.post("/sessions/{session_id}/pause")
+async def pause_session(session_id: str):
+    """Pause a session."""
+    ok = agent_session_manager.pause_session(session_id)
+    if not ok:
+        raise HTTPException(404, "Session not found")
+    return {"success": True}
+
+
+@router.post("/sessions/{session_id}/resume")
+async def resume_session(session_id: str):
+    """Resume a paused session."""
+    ok = agent_session_manager.resume_session(session_id)
+    if not ok:
+        raise HTTPException(404, "Session not found")
+    return {"success": True}
+
+
+@router.post("/sessions/{session_id}/complete")
+async def complete_session(session_id: str):
+    """Complete a session."""
+    ok = agent_session_manager.complete_session(session_id)
+    if not ok:
+        raise HTTPException(404, "Session not found")
+    return {"success": True}
+
+
+@router.post("/sessions/{session_id}/fork")
+async def fork_session(session_id: str, data: dict):
+    """Fork a session for parallel exploration."""
+    forked = agent_session_manager.fork_session(
+        session_id=session_id,
+        new_name=data.get("new_name", "Forked Session"),
+    )
+    if not forked:
+        raise HTTPException(404, "Session not found")
+    return forked.to_dict()
+
+
+@router.post("/sessions/{session_id}/messages")
+async def send_session_message(session_id: str, data: dict):
+    """Send a message in a session."""
+    message = agent_session_manager.send_message(
+        session_id=session_id,
+        sender_id=data.get("sender_id", ""),
+        content=data.get("content", ""),
+        role=MessageRole(data.get("role", "agent")),
+        parent_message_id=data.get("parent_message_id"),
+        metadata=data.get("metadata"),
+    )
+    if not message:
+        raise HTTPException(404, "Session not found or not active")
+    return message.to_dict()
+
+
+@router.get("/sessions/{session_id}/messages")
+async def get_session_messages(session_id: str, limit: int = 100, before: str | None = None):
+    """Get messages from a session."""
+    messages = agent_session_manager.get_messages(
+        session_id=session_id, limit=limit, before=before,
+    )
+    return {"messages": [m.to_dict() for m in messages], "total": len(messages)}
+
+
+@router.post("/sessions/{session_id}/artifacts")
+async def create_session_artifact(session_id: str, data: dict):
+    """Create a shared artifact in a session."""
+    artifact = agent_session_manager.create_artifact(
+        session_id=session_id,
+        name=data.get("name", ""),
+        content=data.get("content", ""),
+        artifact_type=data.get("artifact_type", "file"),
+        created_by=data.get("created_by", ""),
+        tags=data.get("tags"),
+    )
+    if not artifact:
+        raise HTTPException(404, "Session not found")
+    return artifact.to_dict()
+
+
+@router.get("/sessions/{session_id}/artifacts")
+async def get_session_artifacts(session_id: str, artifact_type: str | None = None):
+    """Get artifacts from a session."""
+    artifacts = agent_session_manager.get_artifacts(
+        session_id=session_id, artifact_type=artifact_type,
+    )
+    return {"artifacts": [a.to_dict() for a in artifacts], "total": len(artifacts)}
+
+
+@router.put("/sessions/{session_id}/artifacts/{artifact_id}")
+async def update_session_artifact(session_id: str, artifact_id: str, data: dict):
+    """Update an existing artifact."""
+    artifact = agent_session_manager.update_artifact(
+        session_id=session_id,
+        artifact_id=artifact_id,
+        content=data.get("content", ""),
+    )
+    if not artifact:
+        raise HTTPException(404, "Session or artifact not found")
+    return artifact.to_dict()
+
+
+@router.post("/sessions/{session_id}/context")
+async def set_session_context(session_id: str, data: dict):
+    """Set a shared context value."""
+    ok = agent_session_manager.set_context(
+        session_id=session_id,
+        key=data.get("key", ""),
+        value=data.get("value"),
+    )
+    if not ok:
+        raise HTTPException(404, "Session not found")
+    return {"success": True}
+
+
+@router.get("/sessions/{session_id}/context")
+async def get_session_context(session_id: str, key: str | None = None):
+    """Get shared context values."""
+    context = agent_session_manager.get_context(session_id=session_id, key=key)
+    if context is None:
+        raise HTTPException(404, "Session not found")
+    return {"context": context}
+
+
+# ═══════════════════════════════════════════════════════════
+# Unified Brain API — Holistic Agent Coordination
+# ═══════════════════════════════════════════════════════════
+
+from agent.agent_unified_brain import unified_brain, BrainContext, BrainMode
+
+
+@router.get("/brain/stats")
+async def brain_stats():
+    """Get unified brain statistics."""
+    return unified_brain.get_stats()
+
+
+@router.get("/brain/perceptions")
+async def brain_perceptions(limit: int = Query(default=20)):
+    """Get recent perception history."""
+    perceptions = unified_brain.get_perception_history(limit=limit)
+    return {"perceptions": perceptions}
+
+
+@router.get("/brain/insights")
+async def brain_insights(limit: int = Query(default=10)):
+    """Get recent brain insights from reflections."""
+    insights = unified_brain.get_recent_insights(limit=limit)
+    return {"insights": insights}
+
+
+@router.post("/brain/process")
+async def brain_process(data: dict):
+    """Process a message through the unified brain cycle."""
+    context = BrainContext(
+        user_message=data.get("message", ""),
+        agent_id=data.get("agent_id", "unknown"),
+        agent_name=data.get("agent_name", "Buddy"),
+        system_prompt=data.get("system_prompt", "You are a helpful AI assistant."),
+        session_id=data.get("session_id", ""),
+        metadata=data.get("metadata", {}),
+    )
+    mode = None
+    if data.get("mode"):
+        try:
+            mode = BrainMode(data["mode"])
+        except ValueError:
+            pass
+
+    result = await unified_brain.process(context, mode=mode)
+    return {
+        "cycle_id": result.cycle_id,
+        "mode": result.mode.value,
+        "success": result.success,
+        "error": result.error,
+        "content": result.action.content if result.action else "",
+        "perception": {
+            "intent": result.perception.intent if result.perception else "",
+            "complexity": result.perception.complexity if result.perception else 0.0,
+            "suggested_mode": result.perception.suggested_mode.value if result.perception else "",
+        } if result.perception else None,
+        "cognition": {
+            "reasoning_strategy": result.cognition.reasoning_strategy if result.cognition else "",
+            "estimated_complexity": result.cognition.estimated_complexity if result.cognition else "",
+            "confidence": result.cognition.confidence if result.cognition else 0.0,
+        } if result.cognition else None,
+        "reflection": {
+            "quality_score": result.reflection.quality_score if result.reflection else 0.0,
+            "strengths": result.reflection.strengths if result.reflection else [],
+            "improvement_suggestions": result.reflection.improvement_suggestions if result.reflection else [],
+        } if result.reflection else None,
+        "total_duration_ms": result.total_duration_ms,
+        "total_tokens": result.total_tokens,
+    }
+
+
+@router.post("/brain/process/stream")
+async def brain_process_stream(data: dict):
+    """Process a message through the unified brain with streaming output."""
+    context = BrainContext(
+        user_message=data.get("message", ""),
+        agent_id=data.get("agent_id", "unknown"),
+        agent_name=data.get("agent_name", "Buddy"),
+        system_prompt=data.get("system_prompt", "You are a helpful AI assistant."),
+    )
+
+    async def stream_generator():
+        async for chunk in unified_brain.process_stream(context):
+            yield f"data: {json.dumps({'content': chunk})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+
+# ═══════════════════════════════════════════════════════════
+# Platform Core API — Runtime Ecosystem Management
+# ═══════════════════════════════════════════════════════════
+
+from agent.agent_platform_core import platform_core, RuntimeState, SandboxType, AlertSeverity
+from agent.agent_runtime_coordinator import runtime_coordinator, ExecutionMode as CoordExecutionMode
+
+
+@router.get("/platform/stats")
+async def platform_stats():
+    """Get platform core statistics."""
+    return platform_core.get_stats()
+
+
+@router.get("/platform/health")
+async def platform_health():
+    """Generate a comprehensive health report."""
+    report = await platform_core.generate_health_report()
+    return report.to_dict()
+
+
+@router.get("/platform/instances")
+async def platform_instances(state: str | None = None):
+    """List all runtime instances, optionally filtered by state."""
+    state_filter = None
+    if state:
+        try:
+            state_filter = RuntimeState(state)
+        except ValueError:
+            pass
+    instances = platform_core.list_instances(state_filter=state_filter)
+    return {"instances": [i.to_dict() for i in instances]}
+
+
+@router.get("/platform/instances/{agent_id}")
+async def platform_instance_details(agent_id: str):
+    """Get detailed information about a specific instance."""
+    details = platform_core.get_instance_details(agent_id)
+    if not details:
+        raise HTTPException(404, f"Instance not found: {agent_id}")
+    return details
+
+
+@router.get("/platform/sandboxes")
+async def platform_sandboxes(agent_id: str | None = None):
+    """List sandbox environments, optionally filtered by agent."""
+    sandboxes = platform_core.list_sandboxes(agent_id=agent_id)
+    return {"sandboxes": [s.to_dict() for s in sandboxes]}
+
+
+@router.post("/platform/sandboxes")
+async def platform_create_sandbox(data: dict):
+    """Create a new sandbox environment."""
+    sandbox_type = SandboxType.PYTHON
+    if data.get("sandbox_type"):
+        try:
+            sandbox_type = SandboxType(data["sandbox_type"])
+        except ValueError:
+            pass
+    sandbox = platform_core.create_sandbox(
+        agent_id=data.get("agent_id", ""),
+        sandbox_type=sandbox_type,
+        workspace_path=data.get("workspace_path", ""),
+        env_vars=data.get("env_vars"),
+    )
+    return sandbox.to_dict()
+
+
+@router.delete("/platform/sandboxes/{sandbox_id}")
+async def platform_destroy_sandbox(sandbox_id: str):
+    """Destroy a sandbox environment."""
+    if not platform_core.destroy_sandbox(sandbox_id):
+        raise HTTPException(404, f"Sandbox not found: {sandbox_id}")
+    return {"success": True}
+
+
+@router.get("/platform/alerts")
+async def platform_alerts(
+    severity: str | None = None,
+    include_resolved: bool = Query(default=False),
+):
+    """List platform alerts."""
+    severity_filter = None
+    if severity:
+        try:
+            severity_filter = AlertSeverity(severity)
+        except ValueError:
+            pass
+    alerts = platform_core.list_alerts(
+        severity=severity_filter,
+        include_resolved=include_resolved,
+    )
+    return {"alerts": [a.to_dict() for a in alerts]}
+
+
+@router.post("/platform/alerts/{alert_id}/acknowledge")
+async def platform_acknowledge_alert(alert_id: str):
+    """Acknowledge a platform alert."""
+    if not platform_core.acknowledge_alert(alert_id):
+        raise HTTPException(404, f"Alert not found: {alert_id}")
+    return {"success": True}
+
+
+@router.post("/platform/alerts/{alert_id}/resolve")
+async def platform_resolve_alert(alert_id: str):
+    """Resolve a platform alert."""
+    if not platform_core.resolve_alert(alert_id):
+        raise HTTPException(404, f"Alert not found: {alert_id}")
+    return {"success": True}
+
+
+@router.post("/platform/context/sync")
+async def platform_sync_context(data: dict):
+    """Synchronize context between agents."""
+    event = platform_core.sync_context(
+        source_agent_id=data.get("source_agent_id", ""),
+        target_agent_ids=data.get("target_agent_ids", []),
+        context_type=data.get("context_type", "memory"),
+        content=data.get("content", {}),
+        priority=data.get("priority", 5),
+    )
+    return {"event_id": event.event_id, "success": True}
+
+
+@router.get("/platform/context/events")
+async def platform_sync_events(
+    agent_id: str | None = None,
+    context_type: str | None = None,
+    limit: int = Query(default=50),
+):
+    """Get context sync events."""
+    events = platform_core.get_sync_events(
+        agent_id=agent_id,
+        context_type=context_type,
+        limit=limit,
+    )
+    return {
+        "events": [
+            {
+                "event_id": e.event_id,
+                "source_agent_id": e.source_agent_id,
+                "target_agent_ids": e.target_agent_ids,
+                "context_type": e.context_type,
+                "priority": e.priority,
+                "timestamp": e.timestamp,
+            }
+            for e in events
+        ]
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Runtime Coordinator API — Unified Agent Lifecycle
+# ═══════════════════════════════════════════════════════════
+
+
+@router.get("/coordinator/stats")
+async def coordinator_stats():
+    """Get runtime coordinator statistics."""
+    return runtime_coordinator.get_stats()
+
+
+@router.get("/coordinator/status")
+async def coordinator_status():
+    """Get coordinator state and module statuses."""
+    return {
+        "state": runtime_coordinator._state.value,
+        "coordinator_id": runtime_coordinator._config.coordinator_id,
+        "modules": runtime_coordinator.get_all_module_statuses(),
+    }
+
+
+@router.post("/coordinator/initialize")
+async def coordinator_initialize():
+    """Initialize the runtime coordinator."""
+    success = await runtime_coordinator.initialize()
+    return {"initialized": success, "state": runtime_coordinator._state.value}
+
+
+@router.post("/coordinator/start")
+async def coordinator_start():
+    """Start the runtime coordinator."""
+    success = await runtime_coordinator.start()
+    return {"started": success, "state": runtime_coordinator._state.value}
+
+
+@router.post("/coordinator/pause")
+async def coordinator_pause():
+    """Pause the runtime coordinator."""
+    success = await runtime_coordinator.pause()
+    return {"paused": success, "state": runtime_coordinator._state.value}
+
+
+@router.post("/coordinator/resume")
+async def coordinator_resume():
+    """Resume the runtime coordinator."""
+    success = await runtime_coordinator.resume()
+    return {"resumed": success, "state": runtime_coordinator._state.value}
+
+
+@router.post("/coordinator/stop")
+async def coordinator_stop():
+    """Stop the runtime coordinator."""
+    success = await runtime_coordinator.stop()
+    return {"stopped": success, "state": runtime_coordinator._state.value}
+
+
+@router.get("/coordinator/executions")
+async def coordinator_executions(limit: int = Query(default=20)):
+    """Get recent execution history."""
+    return {"executions": runtime_coordinator.get_execution_history(limit=limit)}
+
+
+@router.get("/coordinator/agents")
+async def coordinator_agents():
+    """Get registered agents in the coordinator."""
+    return {"agents": runtime_coordinator._agent_registry}
+
+
+@router.post("/coordinator/execute")
+async def coordinator_execute(data: dict):
+    """Execute a request through the runtime coordinator."""
+    mode_str = data.get("mode", "direct")
+    try:
+        mode = CoordExecutionMode(mode_str)
+    except ValueError:
+        mode = CoordExecutionMode.DIRECT
+
+    result = await runtime_coordinator.execute(
+        user_message=data.get("message", ""),
+        agent_id=data.get("agent_id", ""),
+        agent_name=data.get("agent_name", "Buddy"),
+        system_prompt=data.get("system_prompt", ""),
+        mode=mode,
+        enable_reasoning=data.get("enable_reasoning", False),
+        session_id=data.get("session_id", ""),
+        metadata=data.get("metadata", {}),
+    )
+
+    return {
+        "result_id": result.result_id,
+        "content": result.content,
+        "success": result.success,
+        "error": result.error,
+        "mode": result.mode_used.value,
+        "modules_used": [m.value for m in result.modules_used],
+        "tokens_used": result.tokens_used,
+        "duration_ms": round(result.total_duration_ms, 1),
+        "brain_cycle": result.brain_cycle,
+        "timestamp": result.timestamp,
+    }
+
+
+@router.post("/coordinator/execute/stream")
+async def coordinator_execute_stream(data: dict):
+    """Execute with streaming response through the runtime coordinator."""
+    async def stream():
+        async for token in runtime_coordinator.execute_stream(
+            user_message=data.get("message", ""),
+            agent_id=data.get("agent_id", ""),
+            agent_name=data.get("agent_name", "Buddy"),
+            system_prompt=data.get("system_prompt", ""),
+        ):
+            yield f"data: {json.dumps({'token': token})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+@router.post("/coordinator/reset")
+async def coordinator_reset():
+    """Reset the runtime coordinator."""
+    runtime_coordinator.reset()
+    return {"reset": True}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Deep Reasoning — Agent-Scoped Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+from agent.agent_deep_reasoning import deep_reasoning as deep_reasoning_engine
+
+
+@router.post("/agents/{agent_id}/reasoning/adversarial")
+async def adversarial_reasoning(agent_id: str, data: dict):
+    """Run adversarial reasoning to stress-test conclusions.
+
+    Generates counter-arguments against the primary conclusion to test
+    its robustness, then produces a stress-tested final answer.
+    """
+    result = await deep_reasoning_engine.adversarial_reasoning(
+        prompt=data.get("prompt", ""),
+        context=data.get("context", ""),
+        num_counter_args=data.get("num_counter_args", 3),
+    )
+    return result.to_dict()
+
+
+@router.post("/agents/{agent_id}/reasoning/causal")
+async def causal_reasoning(agent_id: str, data: dict):
+    """Run causal reasoning to map cause-and-effect chains.
+
+    Identifies root causes, traces chains of effects, and provides
+    a structured causal analysis of the problem.
+    """
+    result = await deep_reasoning_engine.causal_reasoning(
+        prompt=data.get("prompt", ""),
+        context=data.get("context", ""),
+        max_chain_depth=data.get("max_chain_depth", 3),
+    )
+    return result.to_dict()
+
+
+@router.post("/agents/{agent_id}/reasoning/analogical")
+async def analogical_reasoning(agent_id: str, data: dict):
+    """Run analogical reasoning to find insights from other domains.
+
+    Maps the problem to analogous situations in different domains,
+    extracts insights, and applies them back to the original problem.
+    """
+    result = await deep_reasoning_engine.analogical_reasoning(
+        prompt=data.get("prompt", ""),
+        context=data.get("context", ""),
+        domains=data.get("domains"),
+        num_analogies=data.get("num_analogies", 3),
+    )
+    return result.to_dict()
+
+
+@router.post("/agents/{agent_id}/reasoning/synthesize")
+async def synthesize_reasoning_chains(agent_id: str, data: dict):
+    """Synthesize multiple reasoning chains into a unified result.
+
+    Runs multiple reasoning strategies in parallel and synthesizes
+    their outputs into a comprehensive final answer.
+    """
+    result = await deep_reasoning_engine.synthesize_reasoning_chains(
+        prompt=data.get("prompt", ""),
+        context=data.get("context", ""),
+        strategies=data.get("strategies"),
+    )
+    return result.to_dict()
+
+
+@router.post("/agents/{agent_id}/reasoning/recommend")
+async def recommend_reasoning_strategy(agent_id: str, data: dict):
+    """Get the recommended reasoning strategy for a given query.
+
+    Analyzes the query characteristics and returns a ranked list of
+    recommended strategies with scores and explanations.
+    """
+    recommendation = await deep_reasoning_engine.recommend_strategy(
+        prompt=data.get("prompt", ""),
+        context=data.get("context", ""),
+    )
+    return recommendation
+
+
+@router.post("/agents/{agent_id}/reasoning/calibrate")
+async def calibrate_reasoning_confidence(agent_id: str, data: dict):
+    """Calibrate confidence scores based on past accuracy history.
+
+    Adjusts confidence to be more accurate by comparing predicted
+    confidence against actual outcomes in the accuracy history.
+    """
+    from agent.agent_deep_reasoning import DeepReasoningResult
+
+    result = DeepReasoningResult(
+        answer=data.get("answer", ""),
+        confidence=data.get("confidence", 0.5),
+        branches_explored=data.get("branches_explored", 1),
+    )
+    calibrated = await deep_reasoning_engine.calibrate_confidence(
+        result=result,
+        past_accuracy_history=data.get("past_accuracy_history"),
+    )
+    return calibrated.to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Self-Improvement — Agent-Scoped Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+
+@router.post("/agents/{agent_id}/improve/compound-skills")
+async def compound_skills(agent_id: str, data: dict):
+    """Compound multiple skills into a composite skill with dependency tracking.
+
+    Combines existing skills into a new composite skill, tracking
+    which skills depend on which for execution ordering.
+    """
+    skill = self_improvement.compound_skills(
+        skill_ids=data.get("skill_ids", []),
+        name=data.get("name", ""),
+        description=data.get("description", ""),
+        dependencies=data.get("dependencies"),
+    )
+    if not skill:
+        raise HTTPException(400, "Failed to compound skills. Ensure at least 2 valid skill IDs.")
+    return skill.to_dict()
+
+
+@router.post("/agents/{agent_id}/improve/cross-skill-synthesize")
+async def cross_skill_synthesize(agent_id: str, data: dict):
+    """Cross-category skill synthesis to bridge gaps between skill categories.
+
+    Analyzes skills in two categories and synthesizes bridging skills
+    that combine capabilities from both.
+    """
+    skills = self_improvement.cross_skill_synthesize(
+        category_a=data.get("category_a", ""),
+        category_b=data.get("category_b", ""),
+    )
+    return {"skills": [s.to_dict() for s in skills], "total": len(skills)}
+
+
+@router.post("/agents/{agent_id}/improve/benchmark")
+async def benchmark_skills(agent_id: str, data: dict):
+    """Benchmark all active skills and track improvement velocity.
+
+    Computes composite scores for each skill and compares against
+    previous benchmarks to calculate improvement rates.
+    """
+    benchmarks = self_improvement.benchmark_skills()
+    return {"benchmarks": [b.to_dict() for b in benchmarks], "total": len(benchmarks)}
+
+
+@router.post("/agents/{agent_id}/improve/recommend-skill")
+async def recommend_skill_for_task(agent_id: str, data: dict):
+    """Recommend the best skill for a given task based on success rates and context.
+
+    Scores active skills by matching the task description against skill
+    metadata and returns ranked recommendations.
+    """
+    skills = self_improvement.recommend_skill(
+        task_description=data.get("task_description", ""),
+        required_tools=data.get("required_tools"),
+        preferred_category=data.get("preferred_category"),
+        min_success_rate=data.get("min_success_rate", 0.0),
+        top_k=data.get("top_k", 3),
+    )
+    return {"skills": [s.to_dict() for s in skills], "total": len(skills)}
+
+
+@router.post("/agents/{agent_id}/improve/tune-thresholds")
+async def tune_synthesis_thresholds(agent_id: str, data: dict):
+    """Tune synthesis thresholds based on performance data.
+
+    Automatically adjusts MIN_PATTERN_SUPPORT and SYNTHESIS_QUALITY_THRESHOLD
+    based on the current skill library's quality distribution.
+    """
+    result = self_improvement.tune_synthesis_thresholds()
+    return result
+
+
+@router.post("/agents/{agent_id}/improve/trends")
+async def analyze_improvement_trends(agent_id: str, data: dict):
+    """Analyze improvement trends over time and generate actionable insights.
+
+    Uses collected trend snapshots to compute growth rates, detect
+    plateaus, and generate recommendations for continued improvement.
+    """
+    trends = self_improvement.analyze_improvement_trends()
+    return trends
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Session Management — Extended Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+
+@router.post("/sessions/{session_id}/delegate")
+async def delegate_task(session_id: str, data: dict):
+    """Delegate a task to a session participant with role-based routing.
+
+    Creates a delegated task and routes it to the appropriate participant
+    based on the target role or specific agent ID.
+    """
+    task = agent_session_manager.delegate_task(
+        session_id=session_id,
+        delegator_id=data.get("delegator_id", ""),
+        description=data.get("description", ""),
+        target_role=SessionRole(data.get("target_role", "worker")),
+        target_agent_id=data.get("target_agent_id"),
+        priority=data.get("priority", 0),
+        metadata=data.get("metadata"),
+    )
+    if not task:
+        raise HTTPException(404, "Session not found or no matching participant available")
+    return task.to_dict()
+
+
+@router.post("/sessions/{session_id}/vote")
+async def manage_session_vote(session_id: str, data: dict):
+    """Manage collaborative voting in a session.
+
+    Accepts either a vote-initiating request (with topic and options)
+    or a vote-casting request (with vote_id and choice).
+    """
+    action = data.get("action", "start")
+    if action == "start":
+        vote = agent_session_manager.start_vote(
+            session_id=session_id,
+            topic=data.get("topic", ""),
+            options=data.get("options", []),
+            initiator_id=data.get("initiator_id", ""),
+            description=data.get("description", ""),
+        )
+        if not vote:
+            raise HTTPException(404, "Session not found")
+        return vote.to_dict()
+    elif action == "cast":
+        result = agent_session_manager.cast_vote(
+            session_id=session_id,
+            vote_id=data.get("vote_id", ""),
+            voter_id=data.get("voter_id", ""),
+            choice=data.get("choice", ""),
+        )
+        if not result:
+            raise HTTPException(404, "Session or vote not found")
+        return result
+    elif action == "result":
+        result = agent_session_manager.get_vote_result(
+            session_id=session_id,
+            vote_id=data.get("vote_id", ""),
+        )
+        if not result:
+            raise HTTPException(404, "Session or vote not found")
+        return result
+    elif action == "close":
+        result = agent_session_manager.close_vote(
+            session_id=session_id,
+            vote_id=data.get("vote_id", ""),
+        )
+        if not result:
+            raise HTTPException(404, "Session or vote not found")
+        return result
+    else:
+        raise HTTPException(400, f"Unknown vote action: {action}")
+
+
+@router.get("/sessions/{session_id}/summary")
+async def get_session_summary(session_id: str):
+    """Get a comprehensive summary of session activity and outcomes.
+
+    Includes metadata, participants, message statistics, artifacts,
+    task statuses, voting outcomes, and handoff history.
+    """
+    summary = agent_session_manager.summarize_session(session_id)
+    if not summary:
+        raise HTTPException(404, "Session not found")
+    return summary
+
+
+@router.post("/sessions/{session_id}/handoff")
+async def handoff_session(session_id: str, data: dict):
+    """Hand off a session from one agent to another with full context preservation.
+
+    Transfers leadership, preserves shared context, artifacts, and
+    message history, and records the handoff in the session log.
+    """
+    result = agent_session_manager.handoff_session(
+        session_id=session_id,
+        from_agent_id=data.get("from_agent_id", ""),
+        to_agent_id=data.get("to_agent_id", ""),
+        context_notes=data.get("context_notes", ""),
+        preserve_role=data.get("preserve_role", True),
+    )
+    if not result:
+        raise HTTPException(404, "Session not found")
+    return result
+
+
+@router.get("/sessions/{session_id}/health")
+async def check_session_health(session_id: str):
+    """Check the health of a session including participant activity and timeouts.
+
+    Returns health status with participant heartbeat information,
+    stale participant detection, and overall session health score.
+    """
+    health = agent_session_manager.check_session_health(session_id)
+    if not health:
+        raise HTTPException(404, "Session not found")
+    return health
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Memory White-Box API — Transparent, Traceable Memory Operations
+# ═══════════════════════════════════════════════════════════════════
+
+from agent.white_memory import white_memory, MemoryCategory, MemoryStatus
+
+
+@router.post("/agents/{agent_id}/memory/semantic-search")
+async def semantic_search_memories(agent_id: str, data: dict):
+    """Perform semantic search over agent memories.
+
+    Uses TF-IDF weighted similarity to find memories most relevant
+    to the search query, with optional category and threshold filtering.
+    """
+    results = white_memory.semantic_search(
+        query=data.get("query", ""),
+        agent_id=agent_id,
+        category=MemoryCategory(data["category"]) if data.get("category") else None,
+        similarity_threshold=data.get("similarity_threshold", 0.3),
+        limit=data.get("limit", 20),
+    )
+    return {
+        "results": [
+            {"entry": entry.to_dict(), "score": round(score, 4)}
+            for entry, score in results
+        ],
+        "total": len(results),
+    }
+
+
+@router.post("/agents/{agent_id}/memory/detect-conflicts")
+async def detect_memory_conflicts(agent_id: str, data: dict):
+    """Detect contradictory memories and flag them for resolution.
+
+    Scans active memory entries for pairs with high content similarity
+    but contradictory statements. Conflicting entries are flagged as CORRUPTED.
+    """
+    conflicts = white_memory.detect_conflicts(
+        agent_id=agent_id,
+        category=MemoryCategory(data["category"]) if data.get("category") else None,
+        similarity_threshold=data.get("similarity_threshold", 0.6),
+        auto_flag=data.get("auto_flag", True),
+    )
+    return {"conflicts": conflicts, "total": len(conflicts)}
+
+
+@router.post("/agents/{agent_id}/memory/consolidate")
+async def consolidate_memories(agent_id: str, data: dict):
+    """Consolidate related memories into higher-level summaries.
+
+    Groups similar active memories by category and content overlap,
+    creating compact summary entries from related clusters.
+    """
+    summaries = white_memory.consolidate_memories(
+        agent_id=agent_id,
+        category=MemoryCategory(data["category"]) if data.get("category") else None,
+        similarity_threshold=data.get("similarity_threshold", 0.5),
+        min_cluster_size=data.get("min_cluster_size", 2),
+    )
+    return {
+        "consolidated": [s.to_dict() for s in summaries],
+        "total": len(summaries),
+    }
+
+
+@router.post("/agents/{agent_id}/memory/decay")
+async def apply_importance_decay(agent_id: str, data: dict):
+    """Apply time-based exponential decay to importance scores of unaccessed memories.
+
+    Reduces importance of memories that haven't been accessed recently,
+    using configurable decay rate or half-life parameters.
+    """
+    result = white_memory.apply_importance_decay(
+        agent_id=agent_id,
+        decay_rate=data.get("decay_rate", 0.01),
+        half_life_days=data.get("half_life_days", 30.0),
+        min_importance=data.get("min_importance", 0.05),
+    )
+    return result
+
+
+@router.get("/agents/{agent_id}/memory/graph")
+async def export_memory_graph(
+    agent_id: str,
+    category: str | None = None,
+    status: str | None = None,
+):
+    """Export the memory graph structure for visualization.
+
+    Produces a node-edge graph representation compatible with
+    graph visualization tools like D3.js, Cytoscape.js, and Gephi.
+    """
+    cat = MemoryCategory(category) if category else None
+    st = MemoryStatus(status) if status else None
+    graph = white_memory.export_graph(
+        agent_id=agent_id,
+        category=cat,
+        status=st,
+    )
+    return graph
+
+
+@router.post("/agents/{agent_id}/memory/contextual-recall")
+async def contextual_recall_memories(agent_id: str, data: dict):
+    """Recall memories relevant to a given context using multi-factor relevance scoring.
+
+    Combines semantic similarity, recency, importance, and access frequency
+    into a single relevance score for each memory.
+    """
+    results = white_memory.contextual_recall(
+        context=data.get("context", ""),
+        agent_id=agent_id,
+        top_k=data.get("top_k", 10),
+        semantic_weight=data.get("semantic_weight", 0.4),
+        recency_weight=data.get("recency_weight", 0.2),
+        importance_weight=data.get("importance_weight", 0.25),
+        access_weight=data.get("access_weight", 0.15),
+    )
+    return {
+        "results": [
+            {"entry": entry.to_dict(), "relevance": round(score, 4)}
+            for entry, score in results
+        ],
+        "total": len(results),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Experience Database API — Structured Experience Tracking
+# ═══════════════════════════════════════════════════════════════════
+
+from agent.experience_db import (
+    experience_db,
+    ExperienceType,
+    ExperienceOutcome,
+    ExperienceQuality,
+)
+
+
+@router.get("/agents/{agent_id}/experiences/trends")
+async def analyze_experience_trends(
+    agent_id: str,
+    days: int = Query(default=30, ge=1, le=365),
+):
+    """Analyze experience trends over time for an agent.
+
+    Computes success rate trends, identifies common failure patterns,
+    and surfaces improvement areas from the experience database.
+    """
+    trends = experience_db.analyze_trends(
+        days=days,
+        agent_id=agent_id,
+    )
+    return trends
+
+
+@router.post("/agents/{agent_id}/experiences/predict")
+async def predict_experience_outcome(agent_id: str, data: dict):
+    """Predict the likely outcome of a new task based on past experiences.
+
+    Finds similar past experiences and uses their outcomes to predict
+    the likely result of the upcoming task.
+    """
+    exp_type = None
+    if data.get("experience_type"):
+        try:
+            exp_type = ExperienceType(data["experience_type"])
+        except ValueError:
+            pass
+    prediction = experience_db.predict_outcome(
+        description=data.get("description", ""),
+        experience_type=exp_type,
+        tools_used=data.get("tools_used"),
+        top_k=data.get("top_k", 5),
+    )
+    return prediction
+
+
+@router.post("/agents/{agent_id}/experiences/recommend")
+async def recommend_experiences(agent_id: str, data: dict):
+    """Recommend relevant past experiences for a new task.
+
+    Ranks past experiences by similarity to the given task description,
+    considering both textual similarity and tag overlap.
+    """
+    exp_type = None
+    if data.get("experience_type"):
+        try:
+            exp_type = ExperienceType(data["experience_type"])
+        except ValueError:
+            pass
+    recommendations = experience_db.recommend_experiences(
+        description=data.get("description", ""),
+        experience_type=exp_type,
+        limit=data.get("limit", 5),
+    )
+    return {"recommendations": recommendations, "total": len(recommendations)}
+
+
+@router.put("/agents/{agent_id}/experiences/{exp_id}")
+async def update_experience_with_versioning(agent_id: str, exp_id: str, data: dict):
+    """Update an experience record with version tracking.
+
+    Saves a snapshot of the current state before applying updates,
+    enabling version history tracking for each experience.
+    """
+    updated = experience_db.update_experience(
+        experience_id=exp_id,
+        **data,
+    )
+    if not updated:
+        raise HTTPException(404, "Experience not found")
+    return updated.to_dict()
+
+
+@router.get("/agents/{agent_id}/experiences/cross-domain")
+async def cross_domain_experience_transfer(
+    agent_id: str,
+    source_type: str = Query(..., description="Source experience type"),
+    target_type: str = Query(..., description="Target experience type"),
+    min_reusability: float = Query(default=0.3, ge=0.0, le=1.0),
+    limit: int = Query(default=10, ge=1, le=100),
+):
+    """Identify experiences from one domain applicable to another.
+
+    Finds high-quality experiences from a source domain that share
+    tools, patterns, or lessons with the target domain.
+    """
+    try:
+        src_type = ExperienceType(source_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid source experience type: {source_type}")
+    try:
+        tgt_type = ExperienceType(target_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid target experience type: {target_type}")
+
+    transfers = experience_db.cross_domain_transfer(
+        source_type=src_type,
+        target_type=tgt_type,
+        min_reusability=min_reusability,
+        limit=limit,
+    )
+    return {"transfers": transfers, "total": len(transfers)}
+
+
+@router.get("/experiences/clusters/{cluster_id}/summary")
+async def summarize_experience_cluster(cluster_id: str):
+    """Generate a concise summary of an experience cluster.
+
+    Produces a human-readable summary with key takeaways, aggregated
+    statistics, and actionable recommendations.
+    """
+    summary = experience_db.summarize_cluster(cluster_id)
+    if not summary:
+        raise HTTPException(404, "Cluster not found")
+    return summary
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Platform Core — Fleet & Infrastructure Endpoints
+# ═══════════════════════════════════════════════════════════════════
+
+from agent.agent_platform_core import (
+    platform_core,
+    FleetConfig,
+    FleetState,
+    ConflictResolutionStrategy,
+    ResourceType,
+    QuotaLimitType,
+    ResourceQuota,
+)
+
+
+@router.post("/platform/fleet/orchestrate")
+async def orchestrate_agent_fleet(data: dict):
+    """Orchestrate an agent fleet — create and deploy.
+
+    Creates a new fleet with the specified agents and configuration,
+    then deploys it using the chosen deployment strategy.
+    """
+    fleet_name = data.get("fleet_name", f"fleet-{uuid.uuid4().hex[:6]}")
+    agent_ids = data.get("agent_ids", [])
+    strategy = data.get("strategy")
+
+    # Create fleet config
+    config = FleetConfig(
+        fleet_name=fleet_name,
+        deployment_strategy=data.get("deployment_strategy", "rolling"),
+        max_agents=data.get("max_agents", 10),
+        auto_heal=data.get("auto_heal", True),
+    )
+
+    fleet = platform_core.create_fleet(
+        fleet_name=fleet_name,
+        agent_ids=agent_ids,
+        config=config,
+    )
+
+    deployment = platform_core.deploy_fleet(
+        fleet_id=fleet.fleet_id,
+        version=data.get("version", ""),
+        strategy=strategy,
+    )
+
+    return {
+        "fleet": fleet.to_dict(),
+        "deployment": deployment.to_dict(),
+    }
+
+
+@router.post("/platform/fleet/sync-knowledge")
+async def sync_fleet_knowledge(data: dict):
+    """Cross-agent knowledge synchronization across a fleet.
+
+    Collects knowledge entries from all agents, resolves conflicts
+    using the chosen strategy, and distributes resolved entries back.
+    """
+    strategy = ConflictResolutionStrategy.LAST_WRITE_WINS
+    if data.get("strategy"):
+        try:
+            strategy = ConflictResolutionStrategy(data["strategy"])
+        except ValueError:
+            pass
+
+    result = platform_core.sync_knowledge(
+        fleet_id=data.get("fleet_id"),
+        agent_ids=data.get("agent_ids"),
+        strategy=strategy,
+    )
+    return result.to_dict()
+
+
+@router.get("/platform/health-dashboard")
+async def platform_health_dashboard():
+    """Get the platform health dashboard with comprehensive system status.
+
+    Returns agent health, component statuses, resource utilization,
+    active alerts, and overall system health score.
+    """
+    report = await platform_core.generate_health_report()
+    stats = platform_core.get_stats()
+    return {
+        "health": report.to_dict(),
+        "stats": stats,
+    }
+
+
+@router.post("/platform/auto-scale")
+async def auto_scale_agents(data: dict):
+    """Auto-scale agents based on demand and resource thresholds.
+
+    Scales a fleet to the target number of agent instances based on
+    current load metrics and defined scaling policies.
+    """
+    fleet_id = data.get("fleet_id", "")
+    target_count = data.get("target_count", 1)
+
+    result = platform_core.scale_fleet(
+        fleet_id=fleet_id,
+        target_count=target_count,
+    )
+    return result
+
+
+@router.get("/platform/quotas")
+async def get_resource_quotas(agent_id: str | None = None):
+    """Get resource quotas and usage status for agents.
+
+    Returns quota definitions, current usage, and compliance status
+    for all agents or a specific agent.
+    """
+    if agent_id:
+        quota = platform_core.get_resource_quota(agent_id)
+        if not quota:
+            return {"agent_id": agent_id, "quota": None, "message": "No quota defined"}
+        status = platform_core.check_quota(agent_id)
+        return {
+            "agent_id": agent_id,
+            "quota": quota.to_dict(),
+            "status": status.to_dict() if status else None,
+        }
+
+    statuses = platform_core.list_all_quota_statuses()
+    return {
+        "quotas": [s.to_dict() for s in statuses],
+        "total": len(statuses),
+    }
+
+
+@router.post("/platform/events/broadcast")
+async def broadcast_platform_event(data: dict):
+    """Broadcast a platform event to all agents.
+
+    Publishes an event to the event bus with the specified type,
+    source, data payload, and priority.
+    """
+    event = event_bus.publish(
+        event_type=data.get("event_type", "platform.broadcast"),
+        source=data.get("source", "api"),
+        data=data.get("data", {}),
+        priority=data.get("priority", 5),
+    )
+    return {"event_id": event.event_id, "broadcast": True}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Agent Composer API — Unified Agent Orchestration
+# ═══════════════════════════════════════════════════════════════════
+
+from agent.agent_composer import agent_composer, ExecutionStrategy, AgentMode
+
+
+@router.post("/agents/compose/execute")
+async def compose_execute(data: dict):
+    """Execute through the Agent Composer with strategy selection.
+
+    The Agent Composer analyzes the request, selects the optimal
+    execution strategy, coordinates all subsystems (brain, reasoning,
+    memory, sessions), and returns a comprehensive result with full traceability.
+    """
+    mode = AgentMode.REACTIVE
+    if data.get("mode"):
+        try:
+            mode = AgentMode(data["mode"])
+        except ValueError:
+            pass
+
+    result = await agent_composer.execute(
+        message=data.get("message", ""),
+        agent_id=data.get("agent_id", ""),
+        agent_name=data.get("agent_name", "Buddy"),
+        system_prompt=data.get("system_prompt", ""),
+        conversation_history=data.get("conversation_history"),
+        mode=mode,
+        enable_tools=data.get("enable_tools", True),
+        enable_reasoning=data.get("enable_reasoning", False),
+        session_id=data.get("session_id", ""),
+        metadata=data.get("metadata", {}),
+    )
+
+    return {
+        "result_id": result.result_id,
+        "content": result.content,
+        "success": result.success,
+        "error": result.error,
+        "strategy_used": result.strategy_used.value,
+        "phase_count": len(result.phases),
+        "phases": [
+            {
+                "phase_id": p.phase_id,
+                "name": p.name,
+                "state": p.state.value,
+                "strategy": p.strategy.value,
+                "duration_ms": p.duration_ms,
+                "tokens_used": p.tokens_used,
+                "error": p.error,
+            }
+            for p in result.phases
+        ],
+        "total_duration_ms": round(result.total_duration_ms, 1),
+        "total_tokens": result.total_tokens,
+        "improvements": result.improvements,
+        "timestamp": result.timestamp,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# AgentFlow API — Self-Correcting Agent Execution Engine
+# ═══════════════════════════════════════════════════════════════════
+
+from agent.agent_flow import agent_flow, OutputSchema, FlowResult, FlowPhase
+
+
+class FlowStructuredRequest(BaseModel):
+    prompt: str = Field(..., min_length=1)
+    schema_name: str = Field(default="Output")
+    fields: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    required_fields: list[str] = Field(default_factory=list)
+    strict_mode: bool = False
+    system_prompt: str = ""
+    max_retries: int = Field(default=3, ge=1, le=5)
+    temperature: float = Field(default=0.3, ge=0.0, le=1.0)
+
+
+class FlowReasoningRequest(BaseModel):
+    prompt: str = Field(..., min_length=1)
+    system_prompt: str = ""
+    strategies: list[str] | None = None
+    num_paths: int = Field(default=3, ge=1, le=5)
+    synthesize: bool = True
+
+
+class FlowToolChainRequest(BaseModel):
+    task: str = Field(..., min_length=1)
+    tools: list[dict] = Field(default_factory=list)
+    system_prompt: str = ""
+    max_rounds: int = Field(default=8, ge=1, le=20)
+
+
+class FlowCorrectionRequest(BaseModel):
+    prompt: str = Field(..., min_length=1)
+    system_prompt: str = ""
+    quality_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    max_corrections: int = Field(default=3, ge=1, le=5)
+
+
+class FlowStreamRequest(BaseModel):
+    prompt: str = Field(..., min_length=1)
+    system_prompt: str = ""
+    tools: list[dict] = Field(default_factory=list)
+
+
+class ContextManageRequest(BaseModel):
+    messages: list[dict] = Field(default_factory=list)
+    max_tokens: int = Field(default=8000, ge=100, le=32000)
+    preserve_system: bool = True
+
+
+class AuditRequest(BaseModel):
+    flow_id: str = ""
+    include_tool_calls: bool = True
+    include_corrections: bool = True
+
+
+@router.post("/agent-flow/execute-structured")
+async def flow_execute_structured(data: FlowStructuredRequest):
+    """Execute a task with structured output validation.
+    
+    The AgentFlow engine validates output against a schema and
+    automatically retries with corrections if validation fails.
+    """
+    schema = OutputSchema(
+        fields=data.fields,
+        required_fields=data.required_fields,
+        schema_name=data.schema_name,
+        strict_mode=data.strict_mode,
+    )
+    result = await agent_flow.execute_structured(
+        prompt=data.prompt,
+        output_schema=schema,
+        system_prompt=data.system_prompt,
+        max_retries=data.max_retries,
+        temperature=data.temperature,
+    )
+    return {
+        "flow_id": result.flow_id,
+        "success": result.success,
+        "final_output": result.final_output,
+        "structured_output": result.structured_output,
+        "quality_score": round(result.quality_score, 3),
+        "total_corrections": result.total_corrections,
+        "total_duration_ms": round(result.total_duration_ms, 1),
+        "total_tokens": result.total_tokens,
+        "error": result.error,
+        "corrections": [
+            {
+                "phase": c.phase.value,
+                "issue": c.issue[:200],
+                "strategy": c.strategy.value,
+            }
+            for c in result.corrections
+        ],
+    }
+
+
+@router.post("/agent-flow/reason-parallel")
+async def flow_reason_parallel(data: FlowReasoningRequest):
+    """Execute multiple reasoning strategies in parallel.
+    
+    Launches concurrent reasoning paths with different strategies
+    and synthesizes the results into a coherent answer.
+    """
+    result = await agent_flow.reason_parallel(
+        prompt=data.prompt,
+        system_prompt=data.system_prompt,
+        strategies=data.strategies,
+        num_paths=data.num_paths,
+        synthesize=data.synthesize,
+    )
+    return {
+        "flow_id": result.flow_id,
+        "final_output": result.final_output,
+        "quality_score": round(result.quality_score, 3),
+        "total_duration_ms": round(result.total_duration_ms, 1),
+        "total_tokens": result.total_tokens,
+        "reasoning_paths": [
+            {
+                "path_id": p.path_id,
+                "strategy": p.strategy,
+                "confidence": round(p.confidence, 3),
+                "duration_ms": p.duration_ms,
+                "result_preview": p.result[:300],
+            }
+            for p in result.reasoning_paths
+        ],
+        "best_path": (
+            {
+                "strategy": result.best_path.strategy,
+                "confidence": round(result.best_path.confidence, 3),
+            }
+            if result.best_path else None
+        ),
+    }
+
+
+@router.post("/agent-flow/execute-tool-chain")
+async def flow_execute_tool_chain(data: FlowToolChainRequest):
+    """Execute a multi-step task with automatic tool selection and chaining.
+    
+    The agent decides which tools to call, in what order, and handles
+    errors by retrying with alternative approaches.
+    """
+    result = await agent_flow.execute_tool_chain(
+        task=data.task,
+        tools=data.tools,
+        system_prompt=data.system_prompt,
+        max_rounds=data.max_rounds,
+    )
+    return {
+        "flow_id": result.flow_id,
+        "success": result.success,
+        "final_output": result.final_output,
+        "quality_score": round(result.quality_score, 3),
+        "total_tool_calls": result.total_tool_calls,
+        "total_duration_ms": round(result.total_duration_ms, 1),
+        "total_tokens": result.total_tokens,
+        "error": result.error,
+        "tool_calls": [
+            {
+                "call_id": tc.call_id,
+                "tool_name": tc.tool_name,
+                "success": tc.success,
+                "duration_ms": tc.duration_ms,
+                "result_preview": tc.result[:200] if tc.success else tc.error[:200],
+            }
+            for tc in result.tool_calls
+        ],
+    }
+
+
+@router.post("/agent-flow/execute-with-correction")
+async def flow_execute_with_correction(data: FlowCorrectionRequest):
+    """Execute a task with iterative self-correction.
+    
+    The agent evaluates its own output and iteratively improves
+    it through multiple refinement cycles until quality threshold is met.
+    """
+    result = await agent_flow.execute_with_correction(
+        prompt=data.prompt,
+        system_prompt=data.system_prompt,
+        quality_threshold=data.quality_threshold,
+        max_corrections=data.max_corrections,
+    )
+    return {
+        "flow_id": result.flow_id,
+        "final_output": result.final_output,
+        "quality_score": round(result.quality_score, 3),
+        "total_corrections": result.total_corrections,
+        "total_duration_ms": round(result.total_duration_ms, 1),
+        "total_tokens": result.total_tokens,
+        "corrections": [
+            {
+                "phase": c.phase.value,
+                "issue": c.issue[:200],
+                "strategy": c.strategy.value,
+                "quality_before": round(c.quality_before, 3),
+                "quality_after": round(c.quality_after, 3),
+            }
+            for c in result.corrections
+        ],
+    }
+
+
+@router.post("/agent-flow/stream")
+async def flow_stream(data: FlowStreamRequest):
+    """Stream execution with real-time tool call announcements."""
+    async def event_generator():
+        yield f"data: {json.dumps({'type': 'start', 'flow': 'agent_flow'})}\n\n"
+        async for chunk in agent_flow.stream_execute(
+            prompt=data.prompt,
+            system_prompt=data.system_prompt,
+            tools=data.tools if data.tools else None,
+        ):
+            yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/agent-flow/manage-context")
+async def flow_manage_context(data: ContextManageRequest):
+    """Intelligently prune and summarize conversation context."""
+    managed = agent_flow.manage_context(
+        messages=data.messages,
+        max_tokens=data.max_tokens,
+        preserve_system=data.preserve_system,
+    )
+    return {
+        "original_count": len(data.messages),
+        "managed_count": len(managed),
+        "messages": [
+            {"role": m.get("role"), "content_preview": str(m.get("content", ""))[:200]}
+            for m in managed
+        ],
+    }
+
+
+@router.post("/agent-flow/audit")
+async def flow_audit(data: AuditRequest):
+    """Generate a decision audit trail for an agent execution."""
+    # Find the result by flow_id
+    target = None
+    for r in agent_flow._execution_history:
+        if r.flow_id == data.flow_id:
+            target = r
+            break
+
+    if not target:
+        # If no specific flow_id, audit the most recent execution
+        if agent_flow._execution_history:
+            target = agent_flow._execution_history[-1]
+        else:
+            raise HTTPException(404, "No execution found to audit")
+
+    audit = agent_flow.audit_decision(
+        target,
+        include_tool_calls=data.include_tool_calls,
+        include_corrections=data.include_corrections,
+    )
+    return audit
+
+
+@router.get("/agent-flow/stats")
+async def flow_stats():
+    """Get AgentFlow execution statistics."""
+    return agent_flow.get_stats()
+
+
+@router.get("/agent-flow/history")
+async def flow_history(limit: int = Query(default=10, ge=1, le=50)):
+    """Get recent AgentFlow execution history."""
+    return {
+        "executions": agent_flow.get_recent_executions(limit),
+        "total": agent_flow._total_executions,
+    }
 
 
