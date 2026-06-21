@@ -2098,4 +2098,56 @@ export const api = {
     execute: (data: { agent_id: string; message: string; mode?: string; strategy?: string; enable_tools?: boolean; enable_reasoning?: boolean; conversation_history?: any[] }) =>
       request<any>('/agents/compose/execute', { method: 'POST', body: JSON.stringify(data) }),
   },
+
+  // ── AgentFlow ──
+  agentFlow: {
+    stats: () => request<any>('/agent-flow/stats'),
+    history: (limit?: number) => {
+      const qs = limit ? `?limit=${limit}` : '';
+      return request<any>(`/agent-flow/history${qs}`);
+    },
+    executeStructured: (data: {
+      prompt: string;
+      fields: Record<string, any>;
+      required_fields: string[];
+      schema_name?: string;
+      strict_mode?: boolean;
+      system_prompt?: string;
+      max_retries?: number;
+      temperature?: number;
+    }) => request<any>('/agent-flow/execute-structured', { method: 'POST', body: JSON.stringify(data) }),
+    reasonParallel: (data: {
+      prompt: string;
+      system_prompt?: string;
+      strategies?: string[];
+      num_paths?: number;
+      synthesize?: boolean;
+    }) => request<any>('/agent-flow/reason-parallel', { method: 'POST', body: JSON.stringify(data) }),
+    executeToolChain: (data: {
+      task: string;
+      tools?: Record<string, any>[];
+      system_prompt?: string;
+      max_rounds?: number;
+    }) => request<any>('/agent-flow/execute-tool-chain', { method: 'POST', body: JSON.stringify(data) }),
+    executeWithCorrection: (data: {
+      prompt: string;
+      system_prompt?: string;
+      quality_threshold?: number;
+      max_corrections?: number;
+    }) => request<any>('/agent-flow/execute-with-correction', { method: 'POST', body: JSON.stringify(data) }),
+    stream: (data: { prompt: string; system_prompt?: string; tools?: Record<string, any>[] }) => {
+      const controller = new AbortController();
+      const response = fetch('/api/agent-flow/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        signal: controller.signal,
+      });
+      return response;
+    },
+    manageContext: (data: { messages: Record<string, any>[]; max_tokens?: number; preserve_system?: boolean }) =>
+      request<any>('/agent-flow/manage-context', { method: 'POST', body: JSON.stringify(data) }),
+    audit: (data: { flow_id?: string; include_tool_calls?: boolean; include_corrections?: boolean }) =>
+      request<any>('/agent-flow/audit', { method: 'POST', body: JSON.stringify(data) }),
+  },
 };
