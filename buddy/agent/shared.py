@@ -93,6 +93,11 @@ from agent.agent_context_manager import AgentContextManager, ContextItem, Contex
 from agent.model_proxy import ModelProxyLayer, ModelProfile, ProviderType, ModelCapability, ProxyStrategy, ProxyRequest, ProxyResponse, model_proxy
 from agent.skill_compiler import SkillCompiler, SkillDefinition, SkillStatus, SkillLanguage, SkillParameter, CompilationResult, skill_compiler
 from agent.unified_runtime import UnifiedAgentRuntime, RuntimeSession, RuntimeMode, RuntimePhase, unified_runtime
+from agent.agent_deep_reasoning import DeepReasoningEngine, DeepReasoningResult, ThoughtNode, ReasoningBranch, BranchStatus, VoteStrategy, deep_reasoning
+from agent.agent_self_improve import SelfImprovementEngine, SynthesizedSkill, AgentNudge, NudgeType, NudgePriority, SkillOrigin, SkillLifecycle, ImprovementMetrics, self_improvement
+from agent.agent_session import AgentSessionManager, CollaborativeSession, SessionMessage, SessionArtifact, SessionParticipant, SessionRole, SessionState, MessageRole, agent_session_manager
+from agent.agent_unified_brain import UnifiedBrain, BrainContext, BrainPerception, BrainCognition, BrainAction, BrainReflection, BrainCycleResult, BrainMode, PerceptionType, CognitivePhase, unified_brain
+from agent.agent_platform_core import PlatformCore, PlatformConfig, RuntimeInstance, RuntimeState, SandboxEnvironment, SandboxType, HealthReport, HealthStatus, PlatformAlert, AlertSeverity, ContextSyncEvent, platform_core
 
 orchestrator = Orchestrator()
 skills_registry = SkillsRegistry()
@@ -165,3 +170,10 @@ white_memory_instance = white_memory
 experience_db_instance = experience_db
 agent_protocol_instance = agent_protocol
 experiment_tracker_instance = experiment_tracker
+
+# New unified brain and platform core instances
+unified_brain_instance = unified_brain
+platform_core_instance = platform_core
+
+# Runtime coordinator instance
+from agent.agent_runtime_coordinator import RuntimeCoordinator, CoordinatorState, ExecutionMode, ModuleType, CoordinatorConfig, ExecutionContext, ExecutionResult, CoordinatorStats, runtime_coordinator
