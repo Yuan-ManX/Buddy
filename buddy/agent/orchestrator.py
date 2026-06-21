@@ -223,6 +223,29 @@ class Orchestrator:
         engine = self.get_engine(agent_id, agent_name, instructions)
         return await engine.chat_with_plan(message, conversation_history=history, stream=stream)
 
+    async def chat_with_brain(
+        self,
+        agent_id: str,
+        agent_name: str,
+        instructions: str,
+        message: str,
+        history: list[dict] | None = None,
+        stream: bool = False,
+        enable_tools: bool = True,
+        enable_reasoning: bool = False,
+        mode: str = "auto",
+    ) -> str | AsyncIterator[str]:
+        """Chat powered by the Unified Brain perceive-think-act-reflect cycle."""
+        engine = self.get_engine(agent_id, agent_name, instructions)
+        return await engine.chat_with_brain(
+            message,
+            conversation_history=history,
+            stream=stream,
+            enable_tools=enable_tools,
+            enable_reasoning=enable_reasoning,
+            mode=mode,
+        )
+
     # ── Multi-Agent Trust & Reputation ──────────────────────
 
     def update_trust(self, from_agent: str, to_agent: str, score: float):
