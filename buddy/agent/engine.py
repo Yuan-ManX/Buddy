@@ -40,6 +40,9 @@ from agent.proactive import ProactiveDiscoveryEngine
 from agent.metacognition import MetaCognition, StrategyDecision, ExecutionMode
 from agent.agent_evolution import AgentEvolution, ExperienceType, ExperienceOutcome
 from agent.learning_orchestrator import learning_orchestrator
+from agent.agent_deep_reasoning import DeepReasoningEngine, deep_reasoning
+from agent.agent_self_improve import SelfImprovementEngine, self_improvement
+from agent.agent_unified_brain import UnifiedBrain, BrainContext, BrainMode, unified_brain
 
 logger = logging.getLogger("buddy.engine")
 
@@ -201,6 +204,9 @@ class AgentEngine:
         self.proactive = ProactiveDiscoveryEngine(agent_id=agent_id, client=self.client)
         self.metacognition = MetaCognition(agent_id=agent_id)
         self.evolution = AgentEvolution(agent_id=agent_id, client=self.client)
+        self.deep_reasoning = DeepReasoningEngine(client=self.client)
+        self.self_improve = self_improvement
+        self.unified_brain = unified_brain
         self._reactive_loop: ReactiveLoop | None = None
         self._conversation_id: str | None = None
         self._iteration_budget = IterationBudget(settings.MAX_ITERATIONS)
@@ -392,6 +398,152 @@ class AgentEngine:
                 planning_engine.update_step_status(plan.id, step.id, StepStatus.COMPLETED, step_result)
 
             return f"**Plan: {plan.title}**\n\n" + "\n\n".join(results)
+
+    # ── Brain-Powered Chat ─────────────────────────────────
+
+    async def chat_with_brain(
+        self,
+        message: str,
+        conversation_history: list[dict] | None = None,
+        stream: bool = False,
+        enable_tools: bool = True,
+        enable_reasoning: bool = False,
+        mode: str = "auto",
+    ) -> str | AsyncIterator[str]:
+        """Chat powered by the Unified Brain perceive-think-act-reflect cycle.
+
+        The Unified Brain provides intelligent routing through:
+        - Perception: Intent classification, complexity estimation, mode selection
+        - Cognition: Strategy selection, plan generation, tool requirement analysis
+        - Action: Response generation with tool execution
+        - Reflection: Quality assessment, pattern detection, improvement suggestions
+
+        Args:
+            mode: 'auto' lets the brain decide, or 'reactive'/'deliberative'/'creative'/'analytical'
+        """
+        system_prompt = await self._build_system_prompt(enable_tools)
+
+        brain_context = BrainContext(
+            user_message=message,
+            conversation_history=conversation_history or [],
+            agent_id=self.agent_id,
+            agent_name=self.agent_name,
+            system_prompt=system_prompt,
+            active_tools=tool_registry.get_tool_names() if enable_tools else [],
+            session_id=self._conversation_id or "",
+        )
+
+        try:
+            if stream:
+                return self._brain_stream_chat(brain_context, mode)
+            else:
+                return await self._brain_chat(brain_context, mode, enable_reasoning)
+        except Exception as e:
+            logger.error(f"Brain-powered chat error: {e}")
+            # Fall back to standard chat
+            return await self.chat(message, conversation_history, stream, enable_tools, enable_reasoning)
+
+    async def _brain_chat(
+        self,
+        brain_context: BrainContext,
+        mode: str = "auto",
+        enable_reasoning: bool = False,
+    ) -> str:
+        """Execute a brain-powered chat with full perceive-think-act-reflect cycle."""
+        # Map mode string to BrainMode
+        mode_map = {
+            "auto": None,
+            "reactive": BrainMode.REACTIVE,
+            "deliberative": BrainMode.DELIBERATIVE,
+            "creative": BrainMode.CREATIVE,
+            "analytical": BrainMode.ANALYTICAL,
+            "collaborative": BrainMode.COLLABORATIVE,
+        }
+        brain_mode = mode_map.get(mode)
+
+        # Execute through unified brain
+        brain_result = await self.unified_brain.process(brain_context, mode=brain_mode)
+
+        content = brain_result.action.content if brain_result.action else ""
+
+        # If deep reasoning is enabled and complexity warrants it, enhance
+        if enable_reasoning and brain_result.perception and brain_result.perception.complexity > 0.5:
+            try:
+                reasoning_result = await self.deep_reasoning.reason(
+                    query=brain_context.user_message,
+                    strategy="tree_of_thought" if brain_result.perception.complexity > 0.7 else "self_consistency",
+                )
+                if reasoning_result.final_answer:
+                    content = reasoning_result.final_answer
+            except Exception as e:
+                logger.warning(f"Deep reasoning enhancement failed: {e}")
+
+        # Store brain cycle data for introspection
+        self._execution_trajectory["brain_cycles"] = self._execution_trajectory.get("brain_cycles", [])
+        self._execution_trajectory["brain_cycles"].append({
+            "cycle_id": brain_result.cycle_id,
+            "mode": brain_result.mode.value,
+            "perception": {
+                "intent": brain_result.perception.intent if brain_result.perception else "",
+                "complexity": round(brain_result.perception.complexity, 2) if brain_result.perception else 0,
+            } if brain_result.perception else {},
+            "cognition": {
+                "strategy": brain_result.cognition.reasoning_strategy if brain_result.cognition else "",
+                "confidence": round(brain_result.cognition.confidence, 2) if brain_result.cognition else 0,
+            } if brain_result.cognition else {},
+            "reflection": {
+                "quality_score": round(brain_result.reflection.quality_score, 2) if brain_result.reflection else 0,
+            } if brain_result.reflection else {},
+            "timestamp": brain_result.perception.timestamp if brain_result.perception else "",
+        })
+
+        # Store in memory
+        await self.memory.store(
+            content=f"User: {brain_context.user_message}\nAssistant: {content[:500]}",
+            memory_type="event",
+            importance=0.5,
+        )
+
+        # Record for metacognition
+        if brain_result.perception:
+            task_sig = MetaCognition.fingerprint(brain_context.user_message)
+            self.metacognition.record_outcome(
+                task_signature=task_sig,
+                decision=StrategyDecision(
+                    execution_mode=ExecutionMode.PARALLEL,
+                    model="auto",
+                    reasoning_style=brain_result.cognition.reasoning_strategy if brain_result.cognition else "balanced",
+                    temperature=0.7,
+                    max_tokens=2048,
+                ),
+                success=brain_result.success,
+                quality_score=brain_result.reflection.quality_score if brain_result.reflection else 0.7,
+                actual_tokens=brain_result.total_tokens,
+            )
+
+        return content
+
+    async def _brain_stream_chat(
+        self,
+        brain_context: BrainContext,
+        mode: str = "auto",
+    ) -> AsyncIterator[str]:
+        """Stream brain-powered chat with real-time output."""
+        mode_map = {
+            "auto": None,
+            "reactive": BrainMode.REACTIVE,
+            "deliberative": BrainMode.DELIBERATIVE,
+            "creative": BrainMode.CREATIVE,
+            "analytical": BrainMode.ANALYTICAL,
+        }
+        brain_mode = mode_map.get(mode)
+
+        try:
+            async for token in self.unified_brain.process_stream(brain_context):
+                yield token
+        except Exception as e:
+            logger.error(f"Brain stream failed: {e}")
+            yield f"\n\n[Error: {str(e)}]"
 
     # ── Internal Chat Methods ───────────────────────────────
 
