@@ -315,6 +315,58 @@ class AgentReasoningEngine:
         traces = self._history.get(agent_id, [])
         return sorted(traces, key=lambda t: t.created_at, reverse=True)[:limit]
 
+    def reflect_on_trace(
+        self,
+        trace_id: str,
+        agent_id: str,
+    ) -> dict[str, Any]:
+        """Run a reflection session on the reasoning trace.
+
+        Integrates with the Reflection Engine to analyze the reasoning
+        process and generate improvement insights.
+        """
+        trace = self.get_trace(trace_id)
+        if not trace:
+            return {"error": "Trace not found"}
+
+        from agent.agent_reflection import reflection_engine, ReflectionDepth
+
+        session = reflection_engine.start_session(
+            agent_id=agent_id,
+            depth=ReflectionDepth.STRUCTURAL,
+        )
+
+        for step in trace.steps:
+            outcome = "success" if step.status == StepStatus.COMPLETED else "partial"
+            reflection_engine.record_action(
+                session_id=session.session_id,
+                action_type="reasoning_step",
+                description=step.content[:100],
+                outcome=outcome,
+                confidence=step.confidence,
+                context={"strategy": trace.strategy.value, "step_number": step.step_number},
+            )
+
+        insights = reflection_engine.reflect(session.session_id)
+        plan = session.improvement_plan
+
+        return {
+            "trace_id": trace_id,
+            "steps_analyzed": len(trace.steps),
+            "insights": [
+                {
+                    "type": i.insight_type.value,
+                    "content": i.content,
+                    "priority": i.priority.value,
+                    "suggested_action": i.suggested_action,
+                }
+                for i in insights
+            ],
+            "improvement_plan": plan,
+            "overall_score": session.overall_score,
+            "summary": session.summary,
+        }
+
     def get_stats(self, agent_id: str | None = None) -> dict:
         """Get reasoning engine statistics."""
         if agent_id:
