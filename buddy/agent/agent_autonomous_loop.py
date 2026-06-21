@@ -409,6 +409,58 @@ class AutonomousLoopEngine:
             "sub_goals": len(goal.sub_goals),
         }
 
+    def create_goal_from_decomposition(
+        self,
+        title: str,
+        description: str,
+        context: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        strategy: str = "dependency_first",
+    ) -> AutonomousGoal:
+        """Create a goal with sub-goals decomposed from the description.
+
+        Uses the Goal Decomposer to break the task into structured sub-goals
+        with dependency management and execution ordering.
+        """
+        from agent.agent_goal_decomposer import goal_decomposer, DecompositionStrategy
+
+        strategy_enum = DecompositionStrategy(strategy)
+        tree = goal_decomposer.decompose(
+            description=description,
+            strategy=strategy_enum,
+            context=context,
+            tags=tags,
+        )
+
+        goal = self.create_goal(
+            title=title or description[:80],
+            description=description,
+            context=context or {},
+            tags=tags or [],
+        )
+
+        # Store goal tree reference
+        goal.metadata["goal_tree_id"] = tree.goal_id
+
+        # Add sub-goals as steps
+        for layer in tree.execution_order:
+            for sub_id in layer:
+                sg = tree.sub_goals[sub_id]
+                self.add_step(
+                    goal=goal,
+                    description=sg.description,
+                    action=sg.sub_type.value,
+                    tool_name="agent_core",
+                    arguments={
+                        "sub_goal_id": sg.sub_id,
+                        "sub_goal_type": sg.sub_type.value,
+                        "estimated_tokens": sg.estimated_tokens,
+                    },
+                )
+
+        logger.info(f"Created goal '{title}' with {len(tree.sub_goals)} decomposed sub-goals")
+        return goal
+
     def get_stats(self) -> dict[str, Any]:
         """Get engine statistics."""
         return {
