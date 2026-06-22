@@ -16497,3 +16497,472 @@ async def remove_mcp_server(server_name: str):
     return {"server_name": server_name, "removed": True}
 
 
+# ═══════════════════════════════════════════════════════════
+# Goal Decomposer API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import goal_decomposer, DecompositionStrategy
+
+
+class DecomposeRequest(BaseModel):
+    description: str = Field(..., min_length=1)
+    strategy: str = "dependency_first"
+    tags: list[str] = Field(default_factory=list)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/goal-decomposer/stats")
+async def get_goal_decomposer_stats():
+    """Get goal decomposer statistics."""
+    return goal_decomposer.get_stats()
+
+
+@router.get("/goal-decomposer/trees")
+async def list_goal_trees():
+    """List all goal trees."""
+    return {"trees": goal_decomposer.list_trees()}
+
+
+@router.post("/goal-decomposer/decompose")
+async def decompose_goal(data: DecomposeRequest):
+    """Decompose a goal into sub-goals."""
+    strategy = DecompositionStrategy(data.strategy)
+    tree = goal_decomposer.decompose(
+        description=data.description,
+        strategy=strategy,
+        context=data.context,
+        tags=data.tags,
+    )
+    return {
+        "goal_id": tree.goal_id,
+        "description": tree.root_description,
+        "strategy": tree.strategy.value,
+        "sub_goals": len(tree.sub_goals),
+        "execution_order": [[sg_id for sg_id in layer] for layer in tree.execution_order],
+        "max_parallelism": tree.max_parallelism,
+        "estimated_tokens": tree.total_estimated_tokens,
+        "estimated_duration_ms": tree.total_estimated_duration_ms,
+        "critical_path": tree.get_critical_path(),
+        "progress": tree.get_progress(),
+    }
+
+
+@router.get("/goal-decomposer/trees/{goal_id}")
+async def get_goal_tree(goal_id: str):
+    """Get a specific goal tree."""
+    tree = goal_decomposer.get_tree(goal_id)
+    if not tree:
+        raise HTTPException(404, "Goal tree not found")
+    return {
+        "goal_id": tree.goal_id,
+        "description": tree.root_description,
+        "strategy": tree.strategy.value,
+        "sub_goals": {
+            sg_id: {
+                "description": sg.description,
+                "type": sg.sub_type.value,
+                "status": sg.status,
+                "dependencies": sg.dependencies,
+                "priority": sg.priority,
+                "assigned_agent": sg.assigned_agent,
+            }
+            for sg_id, sg in tree.sub_goals.items()
+        },
+        "execution_order": [[sg_id for sg_id in layer] for layer in tree.execution_order],
+        "progress": tree.get_progress(),
+        "critical_path": tree.get_critical_path(),
+    }
+
+
+@router.get("/goal-decomposer/trees/{goal_id}/next-layer")
+async def get_next_layer(goal_id: str):
+    """Get the next executable layer of sub-goals."""
+    layer = goal_decomposer.get_next_layer(goal_id)
+    return {
+        "goal_id": goal_id,
+        "next_layer": [
+            {
+                "sub_id": sg.sub_id,
+                "description": sg.description,
+                "type": sg.sub_type.value,
+                "priority": sg.priority,
+                "dependencies": sg.dependencies,
+            }
+            for sg in layer
+        ],
+    }
+
+
+@router.post("/goal-decomposer/trees/{goal_id}/recompose")
+async def recompose_goal(goal_id: str, data: DecomposeRequest):
+    """Re-decompose a goal based on feedback."""
+    try:
+        tree = goal_decomposer.recompose(goal_id, data.description)
+        return {"goal_id": tree.goal_id, "sub_goals": len(tree.sub_goals)}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+# ═══════════════════════════════════════════════════════════
+# Self-Reflection API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import self_reflection_engine, ReflectionDepth
+
+
+class StartReflectionRequest(BaseModel):
+    agent_id: str = Field(default="default")
+    depth: str = "structural"
+
+
+class RecordActionRequest(BaseModel):
+    session_id: str
+    action_type: str
+    description: str
+    outcome: str = "unknown"
+    confidence: float = 0.5
+    duration_ms: float = 0.0
+    tokens_used: int = 0
+    tools_called: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+@router.get("/self-reflection/stats")
+async def get_self_reflection_stats():
+    """Get self-reflection engine statistics."""
+    return self_reflection_engine.get_stats()
+
+
+@router.post("/self-reflection/sessions")
+async def start_reflection_session(data: StartReflectionRequest):
+    """Start a new self-reflection session."""
+    session = self_reflection_engine.start_session(
+        agent_id=data.agent_id,
+        depth=ReflectionDepth(data.depth),
+    )
+    return {
+        "session_id": session.session_id,
+        "agent_id": session.agent_id,
+        "depth": session.depth.value,
+    }
+
+
+@router.post("/self-reflection/actions")
+async def record_action(data: RecordActionRequest):
+    """Record an action for reflection."""
+    action = self_reflection_engine.record_action(
+        session_id=data.session_id,
+        action_type=data.action_type,
+        description=data.description,
+        outcome=data.outcome,
+        confidence=data.confidence,
+        duration_ms=data.duration_ms,
+        tokens_used=data.tokens_used,
+        tools_called=data.tools_called,
+        errors=data.errors,
+    )
+    if not action:
+        raise HTTPException(404, "Session not found")
+    return {"action_id": action.action_id, "outcome": action.outcome}
+
+
+@router.post("/self-reflection/sessions/{session_id}/reflect")
+async def reflect_on_session(session_id: str):
+    """Execute reflection on a session."""
+    insights = self_reflection_engine.reflect(session_id)
+    session = self_reflection_engine.get_session(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    return {
+        "session_id": session_id,
+        "insights": [
+            {
+                "insight_id": i.insight_id,
+                "type": i.insight_type.value,
+                "content": i.content,
+                "priority": i.priority.value,
+                "confidence": i.confidence,
+                "suggested_action": i.suggested_action,
+            }
+            for i in insights
+        ],
+        "overall_score": session.overall_score,
+        "summary": session.summary,
+        "improvement_plan": session.improvement_plan,
+    }
+
+
+@router.get("/self-reflection/insights")
+async def get_top_insights(limit: int = 10):
+    """Get top unapplied insights."""
+    return {"insights": self_reflection_engine.get_top_insights(limit)}
+
+
+@router.post("/self-reflection/insights/{insight_id}/apply")
+async def apply_insight(insight_id: str):
+    """Mark an insight as applied."""
+    success = self_reflection_engine.apply_insight(insight_id)
+    if not success:
+        raise HTTPException(404, "Insight not found")
+    return {"insight_id": insight_id, "applied": True}
+
+
+@router.get("/self-reflection/history/{agent_id}")
+async def get_improvement_history(agent_id: str, limit: int = 20):
+    """Get improvement history for an agent."""
+    return {"history": self_reflection_engine.get_improvement_history(agent_id, limit)}
+
+
+# ═══════════════════════════════════════════════════════════
+# Memory Consolidator API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import memory_consolidator, ConsolidationStrategy, MemoryImportance
+
+
+class StoreMemoryRequest(BaseModel):
+    content: str
+    importance: str = "medium"
+    tags: list[str] = Field(default_factory=list)
+    layer: str = "episodic"
+    memory_type: str = "episodic"
+    source_session: str = ""
+
+
+class SearchMemoryRequest(BaseModel):
+    query: str
+    memory_type: str | None = None
+    limit: int = 10
+
+
+class ConsolidateMemoryRequest(BaseModel):
+    strategy: str = "summarize"
+    target_layer: str = "episodic"
+    limit: int = 50
+
+
+@router.get("/memory-consolidator/stats")
+async def get_memory_consolidator_stats():
+    """Get memory consolidator statistics."""
+    return memory_consolidator.get_stats()
+
+
+@router.post("/memory-consolidator/store")
+async def store_memory(data: StoreMemoryRequest):
+    """Store a memory entry."""
+    importance = MemoryImportance(data.importance)
+    layer = data.memory_type or data.layer
+    if layer == "episodic":
+        entry = memory_consolidator.store_episodic(
+            content=data.content,
+            importance=importance,
+            tags=data.tags,
+        )
+    elif layer == "semantic":
+        entry = memory_consolidator.store_semantic(
+            content=data.content,
+            importance=importance,
+            tags=data.tags,
+        )
+    elif layer == "procedural":
+        entry = memory_consolidator.store_procedural(
+            content=data.content,
+            importance=importance,
+            tags=data.tags,
+        )
+    else:
+        raise HTTPException(400, f"Invalid layer: {layer}")
+    return {
+        "entry_id": entry.entry_id,
+        "layer": entry.layer,
+        "memory_type": entry.layer,
+        "importance": entry.importance.value,
+        "tags": entry.tags,
+        "content": data.content[:200],
+        "source_session": data.source_session,
+        "access_count": getattr(entry, 'access_count', 0),
+        "last_accessed": getattr(entry, 'last_accessed', ''),
+        "created_at": getattr(entry, 'created_at', ''),
+    }
+
+
+@router.get("/memory-consolidator/search")
+async def search_memories(query: str, layer: str | None = None, limit: int = 10):
+    """Search memories."""
+    results = memory_consolidator.search(query=query, layer=layer, limit=limit)
+    return {
+        "results": [
+            {
+                "entry_id": e.entry_id,
+                "layer": e.layer,
+                "content": e.content[:200],
+                "importance": e.importance.value,
+                "access_count": e.access_count,
+                "tags": e.tags,
+            }
+            for e in results
+        ]
+    }
+
+
+@router.post("/memory-consolidator/consolidate")
+async def consolidate_memories(data: ConsolidateMemoryRequest = Body(default=ConsolidateMemoryRequest())):
+    """Consolidate memories."""
+    strategy = data.strategy
+    layer = data.target_layer
+    strat = ConsolidationStrategy(strategy)
+    results = memory_consolidator.consolidate(strategy=strat, target_layer=layer)
+    return {
+        "consolidated": [
+            {
+                "consolidated_id": cm.memory_id if hasattr(cm, 'memory_id') else '',
+                "summary": cm.summary[:200] if hasattr(cm, 'summary') else '',
+                "source_entries": getattr(cm, 'source_entries', []),
+                "strategy": cm.consolidation_strategy.value if hasattr(cm, 'consolidation_strategy') else strategy,
+                "quality_score": getattr(cm, 'quality_score', 0.5),
+                "entry_count": cm.source_count if hasattr(cm, 'source_count') else 0,
+                "created_at": getattr(cm, 'created_at', ''),
+            }
+            for cm in results
+        ]
+    }
+
+
+@router.post("/memory-consolidator/decay")
+async def apply_memory_decay(data: dict = Body(default={})):
+    """Apply memory decay check."""
+    threshold = data.get("threshold", 0.1)
+    result = memory_consolidator.check_decay(threshold=threshold)
+    return {"removed": result.get("removed", 0) if isinstance(result, dict) else 0}
+
+
+@router.get("/memory-consolidator/concept-map")
+async def get_concept_map():
+    """Get concept-to-entry mapping."""
+    return {"concept_map": memory_consolidator.get_concept_map()}
+
+
+# ═══════════════════════════════════════════════════════════
+# Context Compressor API
+# ═══════════════════════════════════════════════════════════
+
+from agent.shared import context_compressor, CompressionStrategy, ContentPriority
+
+
+class AddContextChunkRequest(BaseModel):
+    content: str
+    role: str = "user"
+    priority: str = "background"
+    importance: float = 0.5
+    source: str = ""
+
+
+class CompressContextRequest(BaseModel):
+    strategy: str = "hierarchical"
+    target_tokens: int | None = None
+
+
+class SetBudgetRequest(BaseModel):
+    max_tokens: int
+    auto_compress: bool = True
+
+
+@router.get("/context-compressor/stats")
+async def get_context_compressor_stats():
+    """Get context compressor statistics."""
+    return context_compressor.get_stats()
+
+
+@router.post("/context-compressor/chunks")
+async def add_context_chunk(data: AddContextChunkRequest):
+    """Add a chunk to the context."""
+    priority = ContentPriority(data.priority)
+    chunk = context_compressor.add_chunk(
+        content=data.content,
+        role=data.role,
+        priority=priority,
+        importance=data.importance,
+    )
+    return {
+        "chunk_id": chunk.chunk_id,
+        "token_count": chunk.token_count,
+        "priority": chunk.priority.value,
+        "source": data.source,
+        "content": data.content[:200],
+        "created_at": chunk.created_at if hasattr(chunk, 'created_at') else "",
+    }
+
+
+@router.post("/context-compressor/compress")
+async def compress_context(data: CompressContextRequest = Body(default=CompressContextRequest())):
+    """Compress the context."""
+    strategy = data.strategy
+    target_tokens = data.target_tokens
+    strat = CompressionStrategy(strategy)
+    result = context_compressor.compress(strategy=strat, target_tokens=target_tokens)
+    return {
+        "compression_id": getattr(result, 'compression_id', ''),
+        "original_chunks": result.original_chunks,
+        "compressed_chunks": result.compressed_chunks,
+        "original_tokens": result.original_tokens,
+        "compressed_tokens": result.compressed_tokens,
+        "compression_ratio": result.compression_ratio,
+        "tokens_saved": result.original_tokens - result.compressed_tokens,
+        "strategy": result.strategy.value,
+        "summary": result.summary,
+        "duration_ms": result.duration_ms,
+        "created_at": getattr(result, 'created_at', ''),
+    }
+
+
+@router.get("/context-compressor/context")
+async def get_context(max_tokens: int | None = None):
+    """Get current context with budget information."""
+    messages = context_compressor.get_context(max_tokens=max_tokens)
+    budget = context_compressor.get_token_budget() if hasattr(context_compressor, 'get_token_budget') else {
+        "max_tokens": getattr(context_compressor, '_token_budget', 4096),
+        "current_tokens": sum(len(m.get("content", "")) // 4 for m in messages),
+        "remaining": 0,
+        "usage_percent": 0,
+        "auto_compress": True,
+    }
+    if isinstance(budget, dict):
+        budget["remaining"] = budget.get("max_tokens", 4096) - budget.get("current_tokens", 0)
+        budget["usage_percent"] = round((budget.get("current_tokens", 0) / max(budget.get("max_tokens", 1), 1)) * 100, 1)
+    return {
+        "chunks": [
+            {
+                "chunk_id": m.get("chunk_id", ""),
+                "content": m.get("content", ""),
+                "priority": m.get("priority", "background"),
+                "source": m.get("source", ""),
+                "token_count": m.get("token_count", 0),
+                "created_at": m.get("created_at", ""),
+            }
+            for m in messages
+        ],
+        "budget": budget,
+        "count": len(messages),
+    }
+
+
+@router.post("/context-compressor/clear")
+async def clear_context():
+    """Clear all context."""
+    context_compressor.clear()
+    return {"success": True}
+
+
+@router.put("/context-compressor/budget")
+async def set_context_budget(data: SetBudgetRequest):
+    """Set token budget."""
+    context_compressor.set_token_budget(data.max_tokens)
+    return {
+        "max_tokens": data.max_tokens,
+        "auto_compress": data.auto_compress,
+        "current_tokens": 0,
+        "remaining": data.max_tokens,
+        "usage_percent": 0.0,
+    }
+
+
