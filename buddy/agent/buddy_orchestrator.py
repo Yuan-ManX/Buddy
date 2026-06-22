@@ -494,6 +494,81 @@ class BuddyOrchestrator:
             logger.error(f"Learning cycle failed: {e}")
             return {"success": False, "error": str(e)}
 
+    # ── New Module Integrations ─────────────────────────────────
+
+    def get_goal_decomposer_stats(self) -> dict[str, Any]:
+        """Get goal decomposer statistics."""
+        try:
+            from agent.agent_goal_decomposer import goal_decomposer
+            return goal_decomposer.get_stats()
+        except Exception as e:
+            logger.warning(f"Goal decomposer stats failed: {e}")
+            return {"total_decompositions": 0}
+
+    def decompose_goal(
+        self,
+        description: str,
+        strategy: str = "dependency_first",
+        context: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Decompose a goal using the Goal Decomposer."""
+        try:
+            from agent.agent_goal_decomposer import goal_decomposer, DecompositionStrategy
+            tree = goal_decomposer.decompose(
+                description=description,
+                strategy=DecompositionStrategy(strategy),
+                context=context,
+                tags=tags,
+            )
+            return {
+                "goal_id": tree.goal_id,
+                "sub_goals": len(tree.sub_goals),
+                "execution_order": [[sg_id for sg_id in layer] for layer in tree.execution_order],
+                "critical_path": tree.get_critical_path(),
+                "progress": tree.get_progress(),
+            }
+        except Exception as e:
+            logger.error(f"Goal decomposition failed: {e}")
+            return {"error": str(e)}
+
+    def get_self_reflection_stats(self) -> dict[str, Any]:
+        """Get self-reflection engine statistics."""
+        try:
+            from agent.agent_self_reflection import self_reflection_engine
+            return self_reflection_engine.get_stats()
+        except Exception as e:
+            logger.warning(f"Self-reflection stats failed: {e}")
+            return {"total_sessions": 0}
+
+    def start_reflection_session(self, agent_id: str) -> dict[str, Any]:
+        """Start a self-reflection session."""
+        try:
+            from agent.agent_self_reflection import self_reflection_engine
+            session = self_reflection_engine.start_session(agent_id=agent_id)
+            return {"session_id": session.session_id, "agent_id": session.agent_id}
+        except Exception as e:
+            logger.error(f"Reflection session failed: {e}")
+            return {"error": str(e)}
+
+    def get_memory_consolidator_stats(self) -> dict[str, Any]:
+        """Get memory consolidator statistics."""
+        try:
+            from agent.agent_memory_consolidator import memory_consolidator
+            return memory_consolidator.get_stats()
+        except Exception as e:
+            logger.warning(f"Memory consolidator stats failed: {e}")
+            return {"episodic_count": 0}
+
+    def get_context_compressor_stats(self) -> dict[str, Any]:
+        """Get context compressor statistics."""
+        try:
+            from agent.agent_context_compressor import context_compressor
+            return context_compressor.get_stats()
+        except Exception as e:
+            logger.warning(f"Context compressor stats failed: {e}")
+            return {"total_chunks": 0}
+
     # ── Comprehensive Execution ─────────────────────────────────
 
     async def execute(
