@@ -92,6 +92,10 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'contextmanager', label: 'Context', icon: '📋' },
   { id: 'unifiedconsole', label: 'Console', icon: '🖥️' },
   { id: 'experiments', label: 'Experiments', icon: '🧪' },
+  { id: 'goalDecomposer', label: 'Goals', icon: '🎯' },
+  { id: 'selfReflection', label: 'Reflect', icon: '🪞' },
+  { id: 'memoryConsolidator', label: 'MemConsol', icon: '🧠' },
+  { id: 'contextCompressor', label: 'CtxComp', icon: '📦' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
