@@ -99,6 +99,12 @@ from agent.agent_session import AgentSessionManager, CollaborativeSession, Sessi
 from agent.agent_unified_brain import UnifiedBrain, BrainContext, BrainPerception, BrainCognition, BrainAction, BrainReflection, BrainCycleResult, BrainMode, PerceptionType, CognitivePhase, unified_brain
 from agent.agent_platform_core import PlatformCore, PlatformConfig, RuntimeInstance, RuntimeState, SandboxEnvironment, SandboxType, HealthReport, HealthStatus, PlatformAlert, AlertSeverity, ContextSyncEvent, platform_core
 
+# New AI-native agent modules
+from agent.agent_goal_decomposer import goal_decomposer, GoalDecomposer, GoalTree, SubGoal, DecompositionStrategy, SubGoalType, DependencyType
+from agent.agent_self_reflection import self_reflection_engine, SelfReflectionEngine, SelfReflectionSession, ActionRecord, SelfReflectionInsight, ReflectionDepth, ReflectionPerspective, InsightType, ImprovementPriority
+from agent.agent_memory_consolidator import memory_consolidator, MemoryConsolidator, MemoryEntry, ConsolidatedMemory, ConsolidationStrategy, MemoryImportance
+from agent.agent_context_compressor import context_compressor, ContextCompressor, ContextChunk, CompressionResult, CompressionStrategy, ContentPriority
+
 orchestrator = Orchestrator()
 skills_registry = SkillsRegistry()
 context_manager_instance = context_manager
