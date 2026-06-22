@@ -15,7 +15,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from loguru import logger
+import logging
+
+logger = logging.getLogger("buddy.memory_consolidator")
 
 
 class ConsolidationStrategy(str, Enum):
