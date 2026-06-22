@@ -16,7 +16,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from loguru import logger
+import logging
+
+logger = logging.getLogger("buddy.context_compressor")
 
 
 class CompressionStrategy(str, Enum):
@@ -33,6 +35,7 @@ class ContentPriority(str, Enum):
     """Priority levels for context content."""
     SYSTEM = "system"       # System prompts (highest)
     CRITICAL = "critical"   # Critical instructions
+    CORE = "core"           # Core context
     RECENT = "recent"       # Recent messages
     RELEVANT = "relevant"   # Semantically relevant
     BACKGROUND = "background"  # Background context
