@@ -329,16 +329,16 @@ class AgentReasoningEngine:
         if not trace:
             return {"error": "Trace not found"}
 
-        from agent.agent_reflection import reflection_engine, ReflectionDepth
+        from agent.agent_self_reflection import self_reflection_engine, ReflectionDepth
 
-        session = reflection_engine.start_session(
+        session = self_reflection_engine.start_session(
             agent_id=agent_id,
             depth=ReflectionDepth.STRUCTURAL,
         )
 
         for step in trace.steps:
             outcome = "success" if step.status == StepStatus.COMPLETED else "partial"
-            reflection_engine.record_action(
+            self_reflection_engine.record_action(
                 session_id=session.session_id,
                 action_type="reasoning_step",
                 description=step.content[:100],
@@ -347,7 +347,7 @@ class AgentReasoningEngine:
                 context={"strategy": trace.strategy.value, "step_number": step.step_number},
             )
 
-        insights = reflection_engine.reflect(session.session_id)
+        insights = self_reflection_engine.reflect(session.session_id)
         plan = session.improvement_plan
 
         return {
