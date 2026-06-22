@@ -103,6 +103,10 @@ import { UnifiedAgentPanel } from './components/UnifiedAgentPanel';
 import { AgentFlowPanel } from './components/AgentFlowPanel';
 import { ProfilePanel } from './components/ProfilePanel';
 import { MCPToolsPanel } from './components/MCPToolsPanel';
+import { GoalDecomposerPanel } from './components/GoalDecomposerPanel';
+import { SelfReflectionPanel } from './components/SelfReflectionPanel';
+import { MemoryConsolidatorPanel } from './components/MemoryConsolidatorPanel';
+import { ContextCompressorPanel } from './components/ContextCompressorPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { CommandPalette } from './components/CommandPalette';
@@ -299,6 +303,10 @@ export default function App() {
     { id: 'go-swarm', label: 'Go to Swarm', description: 'Agent swarm engine', category: 'Navigation', action: () => setActiveTab('swarm') },
     { id: 'go-knowledge', label: 'Go to Knowledge Base', description: 'RAG knowledge management', category: 'Navigation', action: () => setActiveTab('knowledge') },
     { id: 'go-nexus', label: 'Go to Nexus', description: 'Coordination hub', category: 'Navigation', action: () => setActiveTab('nexus') },
+    { id: 'go-goals', label: 'Go to Goals', description: 'Goal decomposition engine', category: 'Navigation', action: () => setActiveTab('goalDecomposer') },
+    { id: 'go-reflect', label: 'Go to Self-Reflection', description: 'Agent self-reflection', category: 'Navigation', action: () => setActiveTab('selfReflection') },
+    { id: 'go-memconsol', label: 'Go to Memory Consolidator', description: 'Memory consolidation', category: 'Navigation', action: () => setActiveTab('memoryConsolidator') },
+    { id: 'go-ctxcomp', label: 'Go to Context Compressor', description: 'Context compression', category: 'Navigation', action: () => setActiveTab('contextCompressor') },
     { id: 'refresh', label: 'Refresh Data', description: 'Reload all data from server', category: 'System', action: () => { loadData(); } },
   ], [handleCreateConv, loadData]);
 
@@ -572,6 +580,10 @@ export default function App() {
         {activeTab === 'agentflow' && <AgentFlowPanel />}
         {activeTab === 'profile' && <ProfilePanel />}
         {activeTab === 'mcptools' && <MCPToolsPanel />}
+{activeTab === 'goalDecomposer' && <GoalDecomposerPanel />}
+{activeTab === 'selfReflection' && <SelfReflectionPanel />}
+{activeTab === 'memoryConsolidator' && <MemoryConsolidatorPanel />}
+{activeTab === 'contextCompressor' && <ContextCompressorPanel />}
 
         {/* Agent-specific panels */}
         {selectedAgent && (
@@ -654,7 +666,7 @@ export default function App() {
     )}
 
         {/* Empty state — no agent and no global panel selected */}
-        {!selectedAgent && !['overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend', 'agentcore', 'synthesis', 'intelligence', 'runtimepanel', 'skillcompiler', 'conversationsearch', 'governance', 'smartrouter', 'agentmesh', 'learningloop', 'experience', 'collabspace', 'contextengine', 'automation', 'skillfabric', 'usermodel', 'evolvingskills', 'subagentmesh', 'protocol', 'sandbox', 'toolexec', 'modelorch', 'deployment', 'productcomposer', 'agentorchestrator', 'dreammode', 'reflection', 'intent', 'fleet', 'knowledgenetwork', 'reasoning', 'modelproxy', 'toolcomposer', 'contextmanager', 'unifiedconsole', 'experiments', 'unifiedbrain', 'platformcore', 'unifiedagent', 'agentflow', 'profile', 'mcptools'].includes(activeTab) && (
+        {!selectedAgent && !['overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend', 'agentcore', 'synthesis', 'intelligence', 'runtimepanel', 'skillcompiler', 'conversationsearch', 'governance', 'smartrouter', 'agentmesh', 'learningloop', 'experience', 'collabspace', 'contextengine', 'automation', 'skillfabric', 'usermodel', 'evolvingskills', 'subagentmesh', 'protocol', 'sandbox', 'toolexec', 'modelorch', 'deployment', 'productcomposer', 'agentorchestrator', 'dreammode', 'reflection', 'intent', 'fleet', 'knowledgenetwork', 'reasoning', 'modelproxy', 'toolcomposer', 'contextmanager', 'unifiedconsole', 'experiments', 'unifiedbrain', 'platformcore', 'unifiedagent', 'agentflow', 'profile', 'mcptools', 'goalDecomposer', 'selfReflection', 'memoryConsolidator', 'contextCompressor'].includes(activeTab) && (
           <div className="main-empty">
             <div className="main-empty-icon">B</div>
             <h2>Welcome to Buddy</h2>
