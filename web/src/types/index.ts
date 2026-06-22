@@ -1,4 +1,4 @@
-export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse' | 'persona' | 'learning' | 'gateway' | 'daemon' | 'swarm' | 'knowledge' | 'runtime' | 'scheduler' | 'studio' | 'workflow' | 'board' | 'compounding' | 'whitememory' | 'pipeline' | 'capability' | 'kgraph' | 'memorysync' | 'phub' | 'costs' | 'workspaces' | 'agentdashboard' | 'proactive' | 'metacognition' | 'evolution' | 'kanban' | 'activity' | 'runtimemonitor' | 'skillmanager' | 'agent-comparison' | 'agentself' | 'plugins' | 'imhub' | 'marketplace' | 'taskqueue' | 'runtimebackend' | 'agentcore' | 'synthesis' | 'intelligence' | 'runtimepanel' | 'skillcompiler' | 'conversationsearch' | 'governance' | 'smartrouter' | 'identitycore' | 'agentmesh' | 'learningloop' | 'experience' | 'collabspace' | 'contextengine' | 'automation' | 'skillfabric' | 'usermodel' | 'evolvingskills' | 'subagentmesh' | 'protocol' | 'sandbox' | 'streaming' | 'toolexec' | 'browseragent' | 'terminalagent' | 'planexec' | 'modelorch' | 'deployment' | 'telemetry' | 'mcpconnector' | 'integrationhub' | 'productcomposer' | 'agentorchestrator' | 'dreammode' | 'whitememory' | 'reflection' | 'intent' | 'fleet' | 'eventpipeline' | 'knowledgenetwork' | 'reasoning' | 'modelproxy' | 'toolcomposer' | 'contextmanager' | 'unifiedconsole' | 'experiments' | 'unifiedbrain' | 'platformcore' | 'runtimecoordinator' | 'unifiedagent' | 'agentflow' | 'profile' | 'mcptools';
+export type TabView = 'chat' | 'tasks' | 'skills' | 'memory' | 'autopilot' | 'subagents' | 'tools' | 'plans' | 'workspace' | 'dream' | 'mcp' | 'collaboration' | 'approval' | 'events' | 'overview' | 'dashboard' | 'nexus' | 'forge' | 'identity' | 'trajectory' | 'squads' | 'guard' | 'pulse' | 'persona' | 'learning' | 'gateway' | 'daemon' | 'swarm' | 'knowledge' | 'runtime' | 'scheduler' | 'studio' | 'workflow' | 'board' | 'compounding' | 'whitememory' | 'pipeline' | 'capability' | 'kgraph' | 'memorysync' | 'phub' | 'costs' | 'workspaces' | 'agentdashboard' | 'proactive' | 'metacognition' | 'evolution' | 'kanban' | 'activity' | 'runtimemonitor' | 'skillmanager' | 'agent-comparison' | 'agentself' | 'plugins' | 'imhub' | 'marketplace' | 'taskqueue' | 'runtimebackend' | 'agentcore' | 'synthesis' | 'intelligence' | 'runtimepanel' | 'skillcompiler' | 'conversationsearch' | 'governance' | 'smartrouter' | 'identitycore' | 'agentmesh' | 'learningloop' | 'experience' | 'collabspace' | 'contextengine' | 'automation' | 'skillfabric' | 'usermodel' | 'evolvingskills' | 'subagentmesh' | 'protocol' | 'sandbox' | 'streaming' | 'toolexec' | 'browseragent' | 'terminalagent' | 'planexec' | 'modelorch' | 'deployment' | 'telemetry' | 'mcpconnector' | 'integrationhub' | 'productcomposer' | 'agentorchestrator' | 'dreammode' | 'whitememory' | 'reflection' | 'intent' | 'fleet' | 'eventpipeline' | 'knowledgenetwork' | 'reasoning' | 'modelproxy' | 'toolcomposer' | 'contextmanager' | 'unifiedconsole' | 'experiments' | 'unifiedbrain' | 'platformcore' | 'runtimecoordinator' | 'unifiedagent' | 'agentflow' | 'profile' | 'mcptools' | 'goalDecomposer' | 'selfReflection' | 'memoryConsolidator' | 'contextCompressor';
 
 export interface Agent {
   id: string;
@@ -1984,4 +1984,158 @@ export interface LearningSkill {
   success_rate: number;
   skill_source: string;
   tools_required: string[];
+}
+
+// ── Goal Decomposer Types ──
+export interface GoalDecomposerStats {
+  total_decompositions: number;
+  active_trees: number;
+  completed_trees: number;
+  failed_trees: number;
+  by_strategy: Record<string, number>;
+}
+export interface SubGoalInfo {
+  sub_goal_id: string;
+  description: string;
+  sub_goal_type: string;
+  status: string;
+  dependencies: string[];
+  assigned_agent: string;
+  priority: number;
+  estimated_effort: string;
+  tags: string[];
+}
+export interface GoalTree {
+  goal_id: string;
+  description: string;
+  strategy: string;
+  sub_goals: SubGoalInfo[];
+  execution_order: string[][];
+  critical_path: string[];
+  progress: { total: number; completed: number; in_progress: number; pending: number; failed: number; percentage: number };
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+}
+export interface DecomposeResult {
+  goal_id: string;
+  sub_goals: number;
+  execution_order: string[][];
+  critical_path: string[];
+  progress: { total: number; completed: number; in_progress: number; pending: number; failed: number; percentage: number };
+}
+
+// ── Self-Reflection Types ──
+export interface SelfReflectionStats {
+  total_sessions: number;
+  active_sessions: number;
+  total_actions: number;
+  total_insights: number;
+  average_confidence: number;
+  by_perspective: Record<string, number>;
+}
+export interface SelfReflectionSession {
+  session_id: string;
+  agent_id: string;
+  status: string;
+  action_count: number;
+  insight_count: number;
+  created_at: string;
+}
+export interface ActionRecord {
+  action_id: string;
+  session_id: string;
+  action_type: string;
+  description: string;
+  context: Record<string, unknown>;
+  timestamp: string;
+}
+export interface SelfReflectionInsight {
+  insight_id: string;
+  session_id: string;
+  type: string;
+  perspective: string;
+  description: string;
+  confidence: number;
+  priority: string;
+  actionable: boolean;
+  applied: boolean;
+  created_at: string;
+}
+export interface ReflectionResult {
+  session_id: string;
+  insights: SelfReflectionInsight[];
+  total_insights: number;
+  average_confidence: number;
+}
+
+// ── Memory Consolidator Types ──
+export interface MemoryConsolidatorStats {
+  episodic_count: number;
+  semantic_count: number;
+  procedural_count: number;
+  total_consolidations: number;
+  memory_usage: number;
+  by_strategy: Record<string, number>;
+}
+export interface MemoryEntryItem {
+  entry_id: string;
+  content: string;
+  memory_type: string;
+  importance: number;
+  tags: string[];
+  source_session: string;
+  access_count: number;
+  last_accessed: string;
+  created_at: string;
+}
+export interface ConsolidatedMemory {
+  consolidated_id: string;
+  source_entries: string[];
+  summary: string;
+  strategy: string;
+  quality_score: number;
+  entry_count: number;
+  created_at: string;
+}
+export interface ConceptNode {
+  concept: string;
+  weight: number;
+  connections: Array<{ concept: string; strength: number }>;
+  entry_count: number;
+}
+
+// ── Context Compressor Types ──
+export interface ContextCompressorStats {
+  total_chunks: number;
+  active_chunks: number;
+  total_compressions: number;
+  total_tokens_saved: number;
+  average_compression_ratio: number;
+  by_strategy: Record<string, number>;
+}
+export interface ContextChunk {
+  chunk_id: string;
+  content: string;
+  priority: string;
+  source: string;
+  token_count: number;
+  created_at: string;
+}
+export interface CompressionResult {
+  compression_id: string;
+  strategy: string;
+  original_tokens: number;
+  compressed_tokens: number;
+  compression_ratio: number;
+  tokens_saved: number;
+  summary: string;
+  created_at: string;
+}
+export interface TokenBudget {
+  max_tokens: number;
+  current_tokens: number;
+  remaining: number;
+  usage_percent: number;
+  auto_compress: boolean;
 }
