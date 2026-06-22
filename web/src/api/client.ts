@@ -2192,4 +2192,106 @@ export const api = {
     cancel: (id: string) => request<any>(`/pipelines/${id}/cancel`, { method: 'POST' }),
     progress: (id: string) => request<any>(`/pipelines/${id}/progress`),
   },
+
+  goalDecomposer: {
+    stats: () => request<import('../types').GoalDecomposerStats>('/goal-decomposer/stats'),
+    trees: () => request<{ trees: import('../types').GoalTree[] }>('/goal-decomposer/trees'),
+    tree: (goalId: string) => request<import('../types').GoalTree>(`/goal-decomposer/trees/${goalId}`),
+    decompose: (data: { description: string; strategy?: string; context?: Record<string, unknown>; tags?: string[] }) =>
+      request<import('../types').DecomposeResult>('/goal-decomposer/decompose', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    nextLayer: (goalId: string) => request<{ layer: string[]; progress: Record<string, unknown> }>(
+      `/goal-decomposer/trees/${goalId}/next-layer`
+    ),
+    recompose: (goalId: string, description: string) =>
+      request<import('../types').GoalTree>(`/goal-decomposer/trees/${goalId}/recompose`, {
+        method: 'POST',
+        body: JSON.stringify({ description }),
+      }),
+  },
+
+  selfReflection: {
+    stats: () => request<import('../types').SelfReflectionStats>('/self-reflection/stats'),
+    startSession: (agentId: string) =>
+      request<import('../types').SelfReflectionSession>('/self-reflection/sessions', {
+        method: 'POST',
+        body: JSON.stringify({ agent_id: agentId }),
+      }),
+    recordAction: (data: { session_id: string; action_type: string; description: string; context?: Record<string, unknown> }) =>
+      request<import('../types').ActionRecord>('/self-reflection/actions', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    reflect: (sessionId: string) =>
+      request<import('../types').ReflectionResult>(`/self-reflection/sessions/${sessionId}/reflect`, {
+        method: 'POST',
+      }),
+    insights: (params?: { session_id?: string; perspective?: string; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.session_id) qs.set('session_id', params.session_id);
+      if (params?.perspective) qs.set('perspective', params.perspective);
+      if (params?.limit) qs.set('limit', String(params.limit));
+      return request<{ insights: import('../types').SelfReflectionInsight[] }>(
+        `/self-reflection/insights?${qs.toString()}`
+      );
+    },
+    applyInsight: (insightId: string) =>
+      request<{ success: boolean }>(`/self-reflection/insights/${insightId}/apply`, { method: 'POST' }),
+    history: (agentId: string) =>
+      request<{ sessions: import('../types').SelfReflectionSession[] }>(`/self-reflection/history/${agentId}`),
+  },
+
+  memoryConsolidator: {
+    stats: () => request<import('../types').MemoryConsolidatorStats>('/memory-consolidator/stats'),
+    store: (data: { content: string; memory_type?: string; importance?: number; tags?: string[]; source_session?: string }) =>
+      request<import('../types').MemoryEntryItem>('/memory-consolidator/store', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    search: (params: { query: string; memory_type?: string; limit?: number }) => {
+      const qs = new URLSearchParams();
+      qs.set('query', params.query);
+      if (params.memory_type) qs.set('memory_type', params.memory_type);
+      if (params.limit) qs.set('limit', String(params.limit));
+      return request<{ results: import('../types').MemoryEntryItem[] }>(
+        `/memory-consolidator/search?${qs.toString()}`
+      );
+    },
+    consolidate: (data: { strategy?: string; target_layer?: string; limit?: number }) =>
+      request<{ consolidated: import('../types').ConsolidatedMemory[] }>('/memory-consolidator/consolidate', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    decay: (data: { threshold?: number }) =>
+      request<{ removed: number }>('/memory-consolidator/decay', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    conceptMap: () => request<{ concepts: import('../types').ConceptNode[] }>('/memory-consolidator/concept-map'),
+  },
+
+  contextCompressor: {
+    stats: () => request<import('../types').ContextCompressorStats>('/context-compressor/stats'),
+    addChunk: (data: { content: string; priority?: string; source?: string }) =>
+      request<import('../types').ContextChunk>('/context-compressor/chunks', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    compress: (data: { strategy?: string; target_tokens?: number }) =>
+      request<import('../types').CompressionResult>('/context-compressor/compress', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    context: () => request<{ chunks: import('../types').ContextChunk[]; budget: import('../types').TokenBudget }>(
+      '/context-compressor/context'
+    ),
+    clear: () => request<{ success: boolean }>('/context-compressor/clear', { method: 'POST' }),
+    setBudget: (data: { max_tokens: number; auto_compress?: boolean }) =>
+      request<import('../types').TokenBudget>('/context-compressor/budget', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+  },
 };
