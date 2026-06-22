@@ -17,7 +17,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable
 
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class DecompositionStrategy(str, Enum):
