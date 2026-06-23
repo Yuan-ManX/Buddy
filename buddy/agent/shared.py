@@ -183,3 +183,23 @@ platform_core_instance = platform_core
 
 # Runtime coordinator instance
 from agent.agent_runtime_coordinator import RuntimeCoordinator, CoordinatorState, ExecutionMode, ModuleType, CoordinatorConfig, ExecutionContext, ExecutionResult, CoordinatorStats, runtime_coordinator
+
+# New AI-native unified agent system modules
+from agent.agent_unified_system import (
+    UnifiedAgentSystem, SystemMode, CognitivePhase, ExecutionStrategy,
+    AgentCapability, PerceptionFrame, CognitiveState, ActionStep,
+    ExecutionPlan, ReflectionInsight, SystemResult, unified_system,
+)
+from agent.agent_knowledge_fabric import (
+    KnowledgeFabric, KnowledgeDomain, KnowledgeType, KnowledgeStatus,
+    RelationType, KnowledgeNode, KnowledgeEdge, TopicCluster,
+    KnowledgeQuery, KnowledgeQueryResult, knowledge_fabric,
+)
+from agent.agent_collaborative_intelligence import (
+    CollaborativeIntelligence, CollaborationMode, AgentRole, ConsensusMethod,
+    CollaborationPhase, Collaborator, CollaborationContext, Contribution,
+    Vote, ConsensusResult, CollaborationSession, collaborative_intelligence,
+)
+
+# Buddy Orchestrator instance
+from agent.buddy_orchestrator import buddy_orchestrator, BuddyOrchestrator, OrchestrationMode, OrchestrationStatus, OrchestrationContext, OrchestrationResult
