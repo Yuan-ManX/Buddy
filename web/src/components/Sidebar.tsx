@@ -22,6 +22,7 @@ interface SidebarProps {
 
 // Tab categories with grouping
 const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
+  { id: 'commandCenter', label: 'Command Center', icon: '🏰' },
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
   { id: 'overview', label: 'Overview', icon: '🔍' },
   { id: 'agent-comparison', label: 'Compare', icon: '⚖️' },
@@ -96,6 +97,9 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'selfReflection', label: 'Reflect', icon: '🪞' },
   { id: 'memoryConsolidator', label: 'MemConsol', icon: '🧠' },
   { id: 'contextCompressor', label: 'CtxComp', icon: '📦' },
+  { id: 'unifiedSystem', label: 'Unified', icon: '🧬' },
+  { id: 'knowledgeFabric', label: 'K-Fabric', icon: '🧵' },
+  { id: 'collaborativeIntelligence', label: 'CollabAI', icon: '🤝' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
