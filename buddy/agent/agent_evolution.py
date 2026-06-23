@@ -15,6 +15,8 @@ Core capabilities:
 - Effectiveness scoring and ranking
 """
 
+from __future__ import annotations
+
 import uuid
 import time
 import logging
