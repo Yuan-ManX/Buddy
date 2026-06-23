@@ -16966,3 +16966,478 @@ async def set_context_budget(data: SetBudgetRequest):
     }
 
 
+# ── Agent Command Center API ──
+
+class CommandCenterRequest(BaseModel):
+    agent_id: str | None = None
+
+
+@router.get("/command-center/status")
+async def get_command_center_status(agent_id: str | None = None):
+    """Get unified command center status across all agent subsystems."""
+    status_data = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "agent_id": agent_id,
+        "subsystems": {},
+    }
+
+    # Goal Decomposer
+    try:
+        from agent.shared import goal_decomposer
+        gd_stats = goal_decomposer.get_stats()
+        status_data["subsystems"]["goal_decomposer"] = {
+            "status": "active",
+            "total_decompositions": gd_stats.get("total_decompositions", 0),
+            "active_trees": gd_stats.get("active_goal_trees", 0),
+            "completed_trees": gd_stats.get("completed_goal_trees", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["goal_decomposer"] = {"status": "error", "message": str(e)}
+
+    # Self-Reflection
+    try:
+        from agent.shared import self_reflection_engine
+        sr_stats = self_reflection_engine.get_stats()
+        status_data["subsystems"]["self_reflection"] = {
+            "status": "active",
+            "total_sessions": sr_stats.get("total_sessions", 0),
+            "active_sessions": sr_stats.get("active_sessions", 0),
+            "total_insights": sr_stats.get("total_insights", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["self_reflection"] = {"status": "error", "message": str(e)}
+
+    # Memory Consolidator
+    try:
+        from agent.shared import memory_consolidator
+        mc_stats = memory_consolidator.get_stats()
+        status_data["subsystems"]["memory_consolidator"] = {
+            "status": "active",
+            "episodic": mc_stats.get("episodic_count", 0),
+            "semantic": mc_stats.get("semantic_count", 0),
+            "procedural": mc_stats.get("procedural_count", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["memory_consolidator"] = {"status": "error", "message": str(e)}
+
+    # Context Compressor
+    try:
+        from agent.shared import context_compressor
+        cc_stats = context_compressor.get_stats()
+        status_data["subsystems"]["context_compressor"] = {
+            "status": "active",
+            "total_chunks": cc_stats.get("total_chunks", 0),
+            "total_compressions": cc_stats.get("total_compressions", 0),
+            "tokens_saved": cc_stats.get("total_tokens_saved", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["context_compressor"] = {"status": "error", "message": str(e)}
+
+    # Governance
+    try:
+        from agent.shared import governance_engine
+        gov_stats = governance_engine.get_stats()
+        status_data["subsystems"]["governance"] = {
+            "status": "active",
+            "policies": gov_stats.get("total_server_policies", 0) + gov_stats.get("total_agent_policies", 0),
+            "pending_approvals": gov_stats.get("pending_approvals", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["governance"] = {"status": "error", "message": str(e)}
+
+    # Smart Router
+    try:
+        from agent.shared import smart_router
+        sr_stats = smart_router.get_stats()
+        status_data["subsystems"]["smart_router"] = {
+            "status": "active",
+            "total_models": sr_stats.get("total_models", 0),
+            "total_decisions": sr_stats.get("total_decisions", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["smart_router"] = {"status": "error", "message": str(e)}
+
+    # Identity Core
+    try:
+        from agent.shared import identity_registry
+        identity_stats = identity_registry.get_stats()
+        status_data["subsystems"]["identity_core"] = {
+            "status": "active",
+            "total_identities": identity_stats.get("total_identities", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["identity_core"] = {"status": "error", "message": str(e)}
+
+    # Workspace Manager
+    try:
+        from agent.shared import workspace_manager
+        ws_stats = workspace_manager.get_stats()
+        status_data["subsystems"]["workspace_manager"] = {
+            "status": "active",
+            "total_workspaces": ws_stats.get("total_workspaces", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["workspace_manager"] = {"status": "error", "message": str(e)}
+
+    # Agent Mesh
+    try:
+        from agent.shared import agent_mesh
+        mesh_status = agent_mesh.get_mesh_status()
+        status_data["subsystems"]["agent_mesh"] = {
+            "status": "active",
+            "total_nodes": mesh_status.get("total_nodes", 0),
+            "healthy_nodes": mesh_status.get("healthy_nodes", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["agent_mesh"] = {"status": "error", "message": str(e)}
+
+    # Learning Loop
+    try:
+        from agent.shared import learning_loop
+        ll_status = learning_loop.get_status()
+        status_data["subsystems"]["learning_loop"] = {
+            "status": "active",
+            "observations": ll_status.get("observation", {}).get("total_observations", 0),
+            "patterns": ll_status.get("extraction", {}).get("total_patterns", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["learning_loop"] = {"status": "error", "message": str(e)}
+
+    # Persona
+    try:
+        from agent.shared import persona_registry
+        persona_stats = persona_registry.get_stats()
+        status_data["subsystems"]["persona"] = {
+            "status": "active",
+            "total_personas": persona_stats.get("total_personas", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["persona"] = {"status": "error", "message": str(e)}
+
+    # Count active subsystems
+    active_count = sum(
+        1 for s in status_data["subsystems"].values()
+        if s.get("status") == "active"
+    )
+    error_count = sum(
+        1 for s in status_data["subsystems"].values()
+        if s.get("status") == "error"
+    )
+    status_data["summary"] = {
+        "total_subsystems": len(status_data["subsystems"]),
+        "active_subsystems": active_count,
+        "error_subsystems": error_count,
+        "overall_status": "healthy" if error_count == 0 else "degraded" if error_count < len(status_data["subsystems"]) // 2 else "critical",
+    }
+
+    # Unified Agent System
+    try:
+        from agent.shared import unified_system
+        us_stats = unified_system.get_stats()
+        status_data["subsystems"]["unified_system"] = {
+            "status": "active",
+            "total_executions": us_stats.get("total_executions", 0),
+            "active_sessions": us_stats.get("active_sessions", 0),
+            "total_insights": us_stats.get("total_insights", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["unified_system"] = {"status": "error", "message": str(e)}
+
+    # Knowledge Fabric
+    try:
+        from agent.shared import knowledge_fabric
+        kf_stats = knowledge_fabric.get_stats()
+        status_data["subsystems"]["knowledge_fabric"] = {
+            "status": "active",
+            "total_nodes": kf_stats.get("total_nodes", 0),
+            "total_edges": kf_stats.get("total_edges", 0),
+            "total_clusters": kf_stats.get("total_clusters", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["knowledge_fabric"] = {"status": "error", "message": str(e)}
+
+    # Collaborative Intelligence
+    try:
+        from agent.shared import collaborative_intelligence
+        ci_stats = collaborative_intelligence.get_stats()
+        status_data["subsystems"]["collaborative_intelligence"] = {
+            "status": "active",
+            "total_sessions": ci_stats.get("total_sessions", 0),
+            "active_sessions": ci_stats.get("active_sessions", 0),
+            "registered_agents": ci_stats.get("registered_agents", 0),
+        }
+    except Exception as e:
+        status_data["subsystems"]["collaborative_intelligence"] = {"status": "error", "message": str(e)}
+
+    return status_data
+
+
+# ── Unified Agent System API ─────────────────────────────────────────
+
+class UnifiedCycleRequest(BaseModel):
+    content: str = Field(..., min_length=1)
+    agent_id: str = Field(default="")
+    mode: str = Field(default="reactive")
+    enable_tools: bool = Field(default=True)
+    enable_reasoning: bool = Field(default=True)
+    enable_reflection: bool = Field(default=True)
+
+
+@router.post("/unified-system/run")
+async def run_unified_cycle(data: UnifiedCycleRequest):
+    """Execute a complete unified agent cognitive cycle (perceive → reason → plan → execute → reflect)."""
+    from agent.shared import buddy_orchestrator
+    result = await buddy_orchestrator.run_unified_cycle(
+        content=data.content,
+        agent_id=data.agent_id,
+        mode=data.mode,
+        enable_tools=data.enable_tools,
+        enable_reasoning=data.enable_reasoning,
+        enable_reflection=data.enable_reflection,
+    )
+    return result
+
+
+@router.get("/unified-system/stats")
+async def get_unified_system_stats():
+    """Get unified agent system statistics."""
+    from agent.shared import buddy_orchestrator
+    return buddy_orchestrator.get_unified_system_stats()
+
+
+@router.get("/unified-system/insights")
+async def get_unified_insights(limit: int = 20):
+    """Get recent insights from the unified system."""
+    from agent.shared import buddy_orchestrator
+    return {"insights": buddy_orchestrator.get_recent_insights(limit)}
+
+
+# ── Knowledge Fabric API ────────────────────────────────────────────
+
+class KnowledgeFabricQueryRequest(BaseModel):
+    query_text: str = Field(default="")
+    domains: list[str] = Field(default_factory=list)
+    knowledge_types: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    max_results: int = Field(default=10, ge=1, le=100)
+    include_related: bool = Field(default=True)
+
+
+class KnowledgeNodeCreateRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=256)
+    content: str = Field(default="")
+    summary: str = Field(default="")
+    domain: str = Field(default="custom")
+    knowledge_type: str = Field(default="fact")
+    tags: list[str] = Field(default_factory=list)
+    source: str = Field(default="")
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    importance: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+@router.post("/knowledge-fabric/query")
+async def query_knowledge_fabric(data: KnowledgeFabricQueryRequest):
+    """Query the knowledge fabric for relevant knowledge."""
+    from agent.shared import buddy_orchestrator
+    return buddy_orchestrator.query_knowledge_fabric(
+        query_text=data.query_text,
+        domains=data.domains if data.domains else None,
+        knowledge_types=data.knowledge_types if data.knowledge_types else None,
+        tags=data.tags if data.tags else None,
+        max_results=data.max_results,
+        include_related=data.include_related,
+    )
+
+
+@router.post("/knowledge-fabric/synthesize")
+async def synthesize_knowledge(query_text: str = Body(..., embed=True), max_sources: int = Body(default=5, embed=True)):
+    """Synthesize knowledge from multiple sources."""
+    from agent.shared import buddy_orchestrator
+    return buddy_orchestrator.synthesize_knowledge(query_text, max_sources)
+
+
+@router.post("/knowledge-fabric/auto-link")
+async def auto_link_knowledge():
+    """Auto-link knowledge nodes in the fabric."""
+    from agent.shared import buddy_orchestrator
+    return buddy_orchestrator.auto_link_knowledge()
+
+
+@router.get("/knowledge-fabric/stats")
+async def get_knowledge_fabric_stats():
+    """Get knowledge fabric statistics."""
+    from agent.shared import buddy_orchestrator
+    return buddy_orchestrator.get_knowledge_fabric_stats()
+
+
+@router.post("/knowledge-fabric/nodes")
+async def create_knowledge_node(data: KnowledgeNodeCreateRequest):
+    """Create a new knowledge node in the fabric."""
+    try:
+        from agent.agent_knowledge_fabric import (
+            knowledge_fabric, KnowledgeNode, KnowledgeDomain, KnowledgeType
+        )
+        node = KnowledgeNode(
+            title=data.title,
+            content=data.content,
+            summary=data.summary,
+            domain=KnowledgeDomain(data.domain) if data.domain in [d.value for d in KnowledgeDomain] else KnowledgeDomain.CUSTOM,
+            knowledge_type=KnowledgeType(data.knowledge_type) if data.knowledge_type in [k.value for k in KnowledgeType] else KnowledgeType.FACT,
+            tags=data.tags,
+            source=data.source,
+            confidence=data.confidence,
+            importance=data.importance,
+        )
+        node_id = knowledge_fabric.add_node(node)
+        return {"node_id": node_id, "title": data.title}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/knowledge-fabric/nodes/{node_id}")
+async def get_knowledge_node(node_id: str):
+    """Get a specific knowledge node."""
+    try:
+        from agent.agent_knowledge_fabric import knowledge_fabric
+        node = knowledge_fabric.get_node(node_id)
+        if not node:
+            raise HTTPException(status_code=404, detail="Node not found")
+        return {
+            "node_id": node.node_id,
+            "title": node.title,
+            "content": node.content,
+            "summary": node.summary,
+            "domain": node.domain.value,
+            "knowledge_type": node.knowledge_type.value,
+            "tags": node.tags,
+            "confidence": node.confidence,
+            "importance": node.importance,
+            "version": node.version,
+            "created_at": node.created_at,
+            "updated_at": node.updated_at,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/knowledge-fabric/export")
+async def export_knowledge_fabric():
+    """Export the entire knowledge fabric."""
+    try:
+        from agent.agent_knowledge_fabric import knowledge_fabric
+        return knowledge_fabric.export_fabric()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Collaborative Intelligence API ──────────────────────────────────
+
+class CollaborationSessionCreateRequest(BaseModel):
+    topic: str = Field(..., min_length=1, max_length=512)
+    goal: str = Field(default="", max_length=1024)
+    mode: str = Field(default="roundtable")
+    agent_ids: list[str] = Field(default_factory=list)
+    shared_knowledge: list[str] = Field(default_factory=list)
+
+
+class CollaborationContributionRequest(BaseModel):
+    session_id: str = Field(...)
+    agent_id: str = Field(...)
+    content: str = Field(..., min_length=1)
+    content_type: str = Field(default="text")
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+class DebateRequest(BaseModel):
+    topic: str = Field(..., min_length=1)
+    agent_ids: list[str] = Field(..., min_length=2)
+    max_rounds: int = Field(default=3, ge=1, le=10)
+
+
+class RoundtableRequest(BaseModel):
+    topic: str = Field(..., min_length=1)
+    agent_ids: list[str] = Field(..., min_length=1)
+    roles: dict[str, str] = Field(default_factory=dict)
+
+
+@router.post("/collaboration/sessions")
+async def create_collaboration_session(data: CollaborationSessionCreateRequest):
+    """Create a multi-agent collaboration session."""
+    from agent.shared import buddy_orchestrator
+    return buddy_orchestrator.create_collaboration_session(
+        topic=data.topic,
+        goal=data.goal,
+        mode=data.mode,
+        agent_ids=data.agent_ids if data.agent_ids else None,
+        shared_knowledge=data.shared_knowledge,
+    )
+
+
+@router.post("/collaboration/contributions")
+async def add_collaboration_contribution(data: CollaborationContributionRequest):
+    """Add a contribution to a collaboration session."""
+    from agent.shared import buddy_orchestrator
+    return buddy_orchestrator.add_collaboration_contribution(
+        session_id=data.session_id,
+        agent_id=data.agent_id,
+        content=data.content,
+        content_type=data.content_type,
+        confidence=data.confidence,
+    )
+
+
+@router.post("/collaboration/sessions/{session_id}/consensus")
+async def build_consensus(session_id: str, method: str = Body(default="weighted_vote", embed=True)):
+    """Build consensus among collaborators."""
+    from agent.shared import buddy_orchestrator
+    return buddy_orchestrator.build_collaboration_consensus(
+        session_id=session_id,
+        method=method,
+    )
+
+
+@router.post("/collaboration/sessions/{session_id}/synthesize")
+async def synthesize_collaboration(session_id: str):
+    """Synthesize collaboration session results."""
+    from agent.shared import buddy_orchestrator
+    return buddy_orchestrator.synthesize_collaboration(session_id)
+
+
+@router.get("/collaboration/sessions/{session_id}")
+async def get_collaboration_summary(session_id: str):
+    """Get a collaboration session summary."""
+    from agent.shared import buddy_orchestrator
+    return buddy_orchestrator.get_collaboration_summary(session_id)
+
+
+@router.post("/collaboration/debate")
+async def run_debate(data: DebateRequest):
+    """Run a multi-agent debate."""
+    from agent.shared import buddy_orchestrator
+    return await buddy_orchestrator.run_debate(
+        topic=data.topic,
+        agent_ids=data.agent_ids,
+        max_rounds=data.max_rounds,
+    )
+
+
+@router.post("/collaboration/roundtable")
+async def run_roundtable(data: RoundtableRequest):
+    """Run a multi-agent roundtable."""
+    from agent.shared import buddy_orchestrator
+    return await buddy_orchestrator.run_roundtable(
+        topic=data.topic,
+        agent_ids=data.agent_ids,
+        roles=data.roles if data.roles else None,
+    )
+
+
+@router.get("/collaboration/stats")
+async def get_collaboration_stats():
+    """Get collaborative intelligence statistics."""
+    from agent.shared import buddy_orchestrator
+    return buddy_orchestrator.get_collaborative_intelligence_stats()
+
+
