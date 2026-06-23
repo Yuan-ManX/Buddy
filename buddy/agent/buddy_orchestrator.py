@@ -569,6 +569,321 @@ class BuddyOrchestrator:
             logger.warning(f"Context compressor stats failed: {e}")
             return {"total_chunks": 0}
 
+    # ── Unified Agent System Integration ───────────────────────
+
+    def get_unified_system_stats(self) -> dict[str, Any]:
+        """Get unified agent system statistics."""
+        try:
+            from agent.agent_unified_system import unified_system
+            return unified_system.get_stats()
+        except Exception as e:
+            logger.warning(f"Unified system stats failed: {e}")
+            return {"total_executions": 0}
+
+    async def run_unified_cycle(
+        self,
+        content: str,
+        agent_id: str = "",
+        mode: str = "reactive",
+        enable_tools: bool = True,
+        enable_reasoning: bool = True,
+        enable_reflection: bool = True,
+    ) -> dict[str, Any]:
+        """Run a complete unified agent cognitive cycle."""
+        try:
+            from agent.agent_unified_system import unified_system, SystemMode
+            system_mode = SystemMode(mode) if mode in [m.value for m in SystemMode] else SystemMode.REACTIVE
+            result = await unified_system.run(
+                content=content,
+                agent_id=agent_id,
+                mode=system_mode,
+                enable_tools=enable_tools,
+                enable_reasoning=enable_reasoning,
+                enable_reflection=enable_reflection,
+            )
+            return {
+                "session_id": result.session_id,
+                "mode": result.mode.value,
+                "success": result.success,
+                "content": result.content,
+                "error": result.error,
+                "latency_ms": result.latency_ms,
+                "metadata": result.metadata,
+                "insights": [
+                    {"category": i.category, "description": i.description, "severity": i.severity}
+                    for i in result.insights
+                ] if result.insights else [],
+            }
+        except Exception as e:
+            logger.error(f"Unified cycle failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    def get_recent_insights(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Get recent insights from the unified system."""
+        try:
+            from agent.agent_unified_system import unified_system
+            return unified_system.get_recent_insights(limit)
+        except Exception as e:
+            logger.warning(f"Recent insights failed: {e}")
+            return []
+
+    # ── Knowledge Fabric Integration ───────────────────────────
+
+    def get_knowledge_fabric_stats(self) -> dict[str, Any]:
+        """Get knowledge fabric statistics."""
+        try:
+            from agent.agent_knowledge_fabric import knowledge_fabric
+            return knowledge_fabric.get_stats()
+        except Exception as e:
+            logger.warning(f"Knowledge fabric stats failed: {e}")
+            return {"total_nodes": 0}
+
+    def query_knowledge_fabric(
+        self,
+        query_text: str = "",
+        domains: list[str] | None = None,
+        knowledge_types: list[str] | None = None,
+        tags: list[str] | None = None,
+        max_results: int = 10,
+        include_related: bool = True,
+    ) -> dict[str, Any]:
+        """Query the knowledge fabric."""
+        try:
+            from agent.agent_knowledge_fabric import (
+                knowledge_fabric, KnowledgeQuery, KnowledgeDomain, KnowledgeType
+            )
+            query = KnowledgeQuery(
+                text=query_text,
+                domains=[KnowledgeDomain(d) for d in domains] if domains else [],
+                knowledge_types=[KnowledgeType(k) for k in knowledge_types] if knowledge_types else [],
+                tags=tags or [],
+                max_results=max_results,
+                include_related=include_related,
+            )
+            result = knowledge_fabric.query(query)
+            return {
+                "query_id": result.query_id,
+                "total_matches": result.total_matches,
+                "query_time_ms": result.query_time_ms,
+                "nodes": [
+                    {
+                        "node_id": n.node_id,
+                        "title": n.title,
+                        "summary": n.summary,
+                        "domain": n.domain.value,
+                        "knowledge_type": n.knowledge_type.value,
+                        "confidence": n.confidence,
+                        "tags": n.tags,
+                    }
+                    for n in result.nodes
+                ],
+                "suggested_related": result.suggested_related,
+            }
+        except Exception as e:
+            logger.error(f"Knowledge fabric query failed: {e}")
+            return {"error": str(e)}
+
+    def synthesize_knowledge(self, query_text: str, max_sources: int = 5) -> dict[str, Any]:
+        """Synthesize knowledge from the fabric."""
+        try:
+            from agent.agent_knowledge_fabric import knowledge_fabric
+            return knowledge_fabric.synthesize(query_text, max_sources)
+        except Exception as e:
+            logger.error(f"Knowledge synthesis failed: {e}")
+            return {"summary": "", "sources": []}
+
+    def auto_link_knowledge(self) -> dict[str, Any]:
+        """Auto-link knowledge nodes in the fabric."""
+        try:
+            from agent.agent_knowledge_fabric import knowledge_fabric
+            new_edges = knowledge_fabric.auto_link_nodes()
+            return {"new_edges": new_edges}
+        except Exception as e:
+            logger.error(f"Auto-link failed: {e}")
+            return {"new_edges": 0}
+
+    # ── Collaborative Intelligence Integration ─────────────────
+
+    def get_collaborative_intelligence_stats(self) -> dict[str, Any]:
+        """Get collaborative intelligence statistics."""
+        try:
+            from agent.agent_collaborative_intelligence import collaborative_intelligence
+            return collaborative_intelligence.get_stats()
+        except Exception as e:
+            logger.warning(f"Collaborative intelligence stats failed: {e}")
+            return {"total_sessions": 0}
+
+    def create_collaboration_session(
+        self,
+        topic: str,
+        goal: str = "",
+        mode: str = "roundtable",
+        agent_ids: list[str] | None = None,
+        shared_knowledge: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Create a multi-agent collaboration session."""
+        try:
+            from agent.agent_collaborative_intelligence import (
+                collaborative_intelligence, CollaborationMode
+            )
+            collab_mode = CollaborationMode(mode) if mode in [m.value for m in CollaborationMode] else CollaborationMode.ROUNDTABLE
+            session = collaborative_intelligence.create_session(
+                topic=topic,
+                goal=goal,
+                mode=collab_mode,
+                agent_ids=agent_ids,
+                shared_knowledge=shared_knowledge,
+            )
+            return {
+                "session_id": session.session_id,
+                "mode": session.mode.value,
+                "topic": session.context.topic,
+                "collaborators": len(session.collaborators),
+                "phase": session.phase.value,
+            }
+        except Exception as e:
+            logger.error(f"Collaboration session creation failed: {e}")
+            return {"error": str(e)}
+
+    def add_collaboration_contribution(
+        self,
+        session_id: str,
+        agent_id: str,
+        content: str,
+        content_type: str = "text",
+        confidence: float = 0.5,
+    ) -> dict[str, Any]:
+        """Add a contribution to a collaboration session."""
+        try:
+            from agent.agent_collaborative_intelligence import collaborative_intelligence
+            contribution = collaborative_intelligence.add_contribution(
+                session_id=session_id,
+                agent_id=agent_id,
+                content=content,
+                content_type=content_type,
+                confidence=confidence,
+            )
+            if contribution:
+                return {
+                    "contribution_id": contribution.contribution_id,
+                    "agent_id": contribution.agent_id,
+                    "role": contribution.role.value,
+                    "phase": contribution.phase.value,
+                }
+            return {"error": "Session not found"}
+        except Exception as e:
+            logger.error(f"Contribution failed: {e}")
+            return {"error": str(e)}
+
+    def build_collaboration_consensus(
+        self,
+        session_id: str,
+        method: str = "weighted_vote",
+    ) -> dict[str, Any]:
+        """Build consensus in a collaboration session."""
+        try:
+            from agent.agent_collaborative_intelligence import (
+                collaborative_intelligence, ConsensusMethod
+            )
+            consensus_method = ConsensusMethod(method) if method in [m.value for m in ConsensusMethod] else ConsensusMethod.WEIGHTED_VOTE
+            result = collaborative_intelligence.build_consensus(
+                session_id=session_id,
+                method=consensus_method,
+            )
+            return {
+                "decision": result.decision,
+                "confidence": result.confidence,
+                "achieved": result.achieved,
+                "vote_distribution": result.vote_distribution,
+                "dissenting_opinions": result.dissenting_opinions,
+                "rounds_needed": result.rounds_needed,
+            }
+        except Exception as e:
+            logger.error(f"Consensus building failed: {e}")
+            return {"error": str(e)}
+
+    def synthesize_collaboration(self, session_id: str) -> dict[str, Any]:
+        """Synthesize collaboration session results."""
+        try:
+            from agent.agent_collaborative_intelligence import collaborative_intelligence
+            output = collaborative_intelligence.synthesize(session_id)
+            return {"output": output}
+        except Exception as e:
+            logger.error(f"Collaboration synthesis failed: {e}")
+            return {"error": str(e)}
+
+    def get_collaboration_summary(self, session_id: str) -> dict[str, Any]:
+        """Get a collaboration session summary."""
+        try:
+            from agent.agent_collaborative_intelligence import collaborative_intelligence
+            return collaborative_intelligence.get_session_summary(session_id)
+        except Exception as e:
+            logger.error(f"Collaboration summary failed: {e}")
+            return {"found": False}
+
+    async def run_debate(
+        self,
+        topic: str,
+        agent_ids: list[str],
+        max_rounds: int = 3,
+    ) -> dict[str, Any]:
+        """Run a multi-agent debate."""
+        try:
+            from agent.agent_collaborative_intelligence import collaborative_intelligence
+            session = await collaborative_intelligence.run_debate(
+                topic=topic,
+                agent_ids=agent_ids,
+                max_rounds=max_rounds,
+            )
+            return {
+                "session_id": session.session_id,
+                "consensus": {
+                    "decision": session.consensus.decision,
+                    "confidence": session.consensus.confidence,
+                    "achieved": session.consensus.achieved,
+                } if session.consensus else None,
+                "contributions": len(session.contributions),
+                "final_output": session.final_output[:500],
+            }
+        except Exception as e:
+            logger.error(f"Debate failed: {e}")
+            return {"error": str(e)}
+
+    async def run_roundtable(
+        self,
+        topic: str,
+        agent_ids: list[str],
+        roles: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Run a multi-agent roundtable."""
+        try:
+            from agent.agent_collaborative_intelligence import (
+                collaborative_intelligence, AgentRole
+            )
+            parsed_roles = None
+            if roles:
+                parsed_roles = {
+                    aid: AgentRole(r) for aid, r in roles.items()
+                    if r in [ar.value for ar in AgentRole]
+                }
+            session = await collaborative_intelligence.run_roundtable(
+                topic=topic,
+                agent_ids=agent_ids,
+                roles=parsed_roles,
+            )
+            return {
+                "session_id": session.session_id,
+                "collaborators": [
+                    {"agent_id": c.agent_id, "name": c.name, "role": c.role.value}
+                    for c in session.collaborators
+                ],
+                "contributions": len(session.contributions),
+                "final_output": session.final_output[:500],
+            }
+        except Exception as e:
+            logger.error(f"Roundtable failed: {e}")
+            return {"error": str(e)}
+
     # ── Comprehensive Execution ─────────────────────────────────
 
     async def execute(
