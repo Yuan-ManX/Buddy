@@ -133,6 +133,9 @@ from agent.agent_browser import BrowserAutomation, BrowserSession, BrowserAction
 from agent.agent_system_tools import SystemToolManager, CommandRisk, FileOperation, CommandResult, FileOperationResult, ClipboardContent, system_tools
 from agent.platform_pipeline import PipelineEngine, Pipeline, PipelineStage, StageStatus, PipelineType, PipelineStatus, PipelineCheckpoint, pipeline_engine
 from agent.platform_gateway import PlatformGateway, ProviderCatalog, ProviderConfig, ProviderType, ProviderStatus, RoutingStrategy, ProviderCapability, RoutingRule, GatewayRequest, GatewayResponse, platform_gateway
+from agent.agent_code_review import CodeReviewEngine, ReviewDimension, Severity, ReviewStatus, ReviewFinding, CodeReview, ReviewPattern, code_review_engine
+from agent.agent_swarm_orchestrator import SwarmOrchestrator, SwarmRole, ConsensusMethod, SwarmState, SwarmMember, SwarmTask, ConsensusResult, SwarmSession, EmergentPattern, swarm_orchestrator
+from agent.platform_console import PlatformConsole, ConsoleAlert, SystemComponent, HealthStatus, ComponentHealth, SystemHealth, ResourceSnapshot, FeatureFlag, AuditEntry, platform_console
 
 __all__ = [
     "AgentEngine",
@@ -229,4 +232,8 @@ __all__ = [
     "SystemToolManager", "CommandRisk", "FileOperation", "CommandResult", "FileOperationResult", "ClipboardContent", "system_tools",
     "PipelineEngine", "Pipeline", "PipelineStage", "StageStatus", "PipelineType", "PipelineStatus", "PipelineCheckpoint", "pipeline_engine",
     "PlatformGateway", "ProviderCatalog", "ProviderConfig", "ProviderType", "ProviderStatus", "RoutingStrategy", "ProviderCapability", "RoutingRule", "GatewayRequest", "GatewayResponse", "platform_gateway",
+    # New agent modules
+    "CodeReviewEngine", "ReviewDimension", "Severity", "ReviewStatus", "ReviewFinding", "CodeReview", "ReviewPattern", "code_review_engine",
+    "SwarmOrchestrator", "SwarmRole", "ConsensusMethod", "SwarmState", "SwarmMember", "SwarmTask", "ConsensusResult", "SwarmSession", "EmergentPattern", "swarm_orchestrator",
+    "PlatformConsole", "ConsoleAlert", "SystemComponent", "HealthStatus", "ComponentHealth", "SystemHealth", "ResourceSnapshot", "FeatureFlag", "AuditEntry", "platform_console",
 ]
