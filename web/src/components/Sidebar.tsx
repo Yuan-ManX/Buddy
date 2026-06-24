@@ -100,6 +100,11 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'unifiedSystem', label: 'Unified', icon: '🧬' },
   { id: 'knowledgeFabric', label: 'K-Fabric', icon: '🧵' },
   { id: 'collaborativeIntelligence', label: 'CollabAI', icon: '🤝' },
+  { id: 'knowledgeGraphViz', label: 'KGraph', icon: '🔗' },
+  { id: 'skillExplorer', label: 'Skills', icon: '🧰' },
+  { id: 'codeReview', label: 'Review', icon: '🔍' },
+  { id: 'swarmConsole', label: 'Swarm', icon: '🐝' },
+  { id: 'platformConsole', label: 'Console', icon: '🖥️' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
