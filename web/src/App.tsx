@@ -111,6 +111,11 @@ import { AgentCommandCenter } from './components/AgentCommandCenter';
 import { UnifiedSystemPanel } from './components/UnifiedSystemPanel';
 import { KnowledgeFabricPanel } from './components/KnowledgeFabricPanel';
 import { CollaborativeIntelligencePanel } from './components/CollaborativeIntelligencePanel';
+import { KnowledgeGraphViz } from './components/KnowledgeGraphViz';
+import { SkillExplorer } from './components/SkillExplorer';
+import { CodeReviewPanel } from './components/CodeReviewPanel';
+import { SwarmConsolePanel } from './components/SwarmConsolePanel';
+import { PlatformConsolePanel } from './components/PlatformConsolePanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { CommandPalette } from './components/CommandPalette';
@@ -593,6 +598,11 @@ export default function App() {
 {activeTab === 'unifiedSystem' && <UnifiedSystemPanel />}
 {activeTab === 'knowledgeFabric' && <KnowledgeFabricPanel />}
 {activeTab === 'collaborativeIntelligence' && <CollaborativeIntelligencePanel />}
+{activeTab === 'knowledgeGraphViz' && <KnowledgeGraphViz onNavigate={(tab: string) => setActiveTab(tab as TabView)} />}
+{activeTab === 'skillExplorer' && <SkillExplorer onNavigate={(tab: string) => setActiveTab(tab as TabView)} />}
+{activeTab === 'codeReview' && <CodeReviewPanel onNavigate={(tab: string) => setActiveTab(tab as TabView)} />}
+{activeTab === 'swarmConsole' && <SwarmConsolePanel onNavigate={(tab: string) => setActiveTab(tab as TabView)} />}
+{activeTab === 'platformConsole' && <PlatformConsolePanel onNavigate={(tab: string) => setActiveTab(tab as TabView)} />}
 
         {/* Agent-specific panels */}
         {selectedAgent && (
