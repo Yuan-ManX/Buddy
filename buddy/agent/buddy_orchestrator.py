@@ -1069,6 +1069,188 @@ class BuddyOrchestrator:
             for r in self._session_history[-limit:]
         ]
 
+    # ═══ Code Review Integration ═══════════════════════════════════
+
+    def get_code_review_stats(self) -> dict[str, Any]:
+        """Get code review engine statistics."""
+        try:
+            from agent.agent_code_review import code_review_engine
+            return code_review_engine.get_review_stats()
+        except Exception as e:
+            logger.error(f"Code review stats failed: {e}")
+            return {"error": str(e)}
+
+    async def run_code_review(
+        self,
+        content: str,
+        file_path: str = "",
+        language: str = "python",
+        use_llm: bool = False,
+    ) -> dict[str, Any]:
+        """Run a code review on the given content."""
+        try:
+            from agent.agent_code_review import code_review_engine
+            result = await code_review_engine.review_code(
+                content=content,
+                file_path=file_path,
+                language=language,
+                use_llm=use_llm,
+            )
+            return result.to_dict()
+        except Exception as e:
+            logger.error(f"Code review failed: {e}")
+            return {"error": str(e)}
+
+    async def run_code_review_diff(
+        self,
+        diff_content: str,
+        file_paths: list[str] | None = None,
+        language: str = "python",
+    ) -> dict[str, Any]:
+        """Run a code review on a diff."""
+        try:
+            from agent.agent_code_review import code_review_engine
+            result = await code_review_engine.review_diff(
+                diff_content=diff_content,
+                file_paths=file_paths or [],
+                language=language,
+            )
+            return result.to_dict()
+        except Exception as e:
+            logger.error(f"Diff review failed: {e}")
+            return {"error": str(e)}
+
+    # ═══ Swarm Orchestration Integration ══════════════════════════
+
+    def get_swarm_orchestrator_stats(self) -> dict[str, Any]:
+        """Get swarm orchestrator metrics."""
+        try:
+            from agent.agent_swarm_orchestrator import swarm_orchestrator
+            return swarm_orchestrator.get_swarm_metrics()
+        except Exception as e:
+            logger.error(f"Swarm stats failed: {e}")
+            return {"error": str(e)}
+
+    async def form_agent_swarm(
+        self,
+        topic: str,
+        required_capabilities: list[str] | None = None,
+        min_members: int = 3,
+        max_members: int = 8,
+    ) -> dict[str, Any]:
+        """Form a new agent swarm for collaborative problem solving."""
+        try:
+            from agent.agent_swarm_orchestrator import swarm_orchestrator
+            result = await swarm_orchestrator.form_swarm(
+                topic=topic,
+                required_capabilities=required_capabilities or [],
+                min_members=min_members,
+                max_members=max_members,
+            )
+            return {
+                "swarm_id": result.session_id,
+                "topic": result.topic,
+                "member_count": len(result.members),
+                "state": result.state.value,
+                "members": [m.to_dict() if hasattr(m, 'to_dict') else {"agent_id": m.agent_id, "role": m.role.value} for m in result.members],
+            }
+        except Exception as e:
+            logger.error(f"Swarm formation failed: {e}")
+            return {"error": str(e)}
+
+    async def reach_swarm_consensus(
+        self,
+        swarm_id: str,
+        question: str,
+        options: list[str] | None = None,
+        method: str = "majority",
+    ) -> dict[str, Any]:
+        """Reach consensus within a swarm."""
+        try:
+            from agent.agent_swarm_orchestrator import swarm_orchestrator, ConsensusMethod
+            cons_method = ConsensusMethod(method) if method in [m.value for m in ConsensusMethod] else ConsensusMethod.MAJORITY
+            result = await swarm_orchestrator.reach_consensus(
+                swarm_id=swarm_id,
+                question=question,
+                options=options or [],
+                method=cons_method,
+            )
+            return result.to_dict() if hasattr(result, 'to_dict') else {"decision": result.decision, "confidence": result.confidence}
+        except Exception as e:
+            logger.error(f"Consensus failed: {e}")
+            return {"error": str(e)}
+
+    async def execute_swarm_task(
+        self,
+        swarm_id: str,
+        task_description: str,
+    ) -> dict[str, Any]:
+        """Execute a task across the swarm."""
+        try:
+            from agent.agent_swarm_orchestrator import swarm_orchestrator
+            result = await swarm_orchestrator.execute_swarm_task(
+                swarm_id=swarm_id,
+                task_description=task_description,
+            )
+            return result.to_dict() if hasattr(result, 'to_dict') else {"status": "completed", "task_id": result.task_id}
+        except Exception as e:
+            logger.error(f"Swarm task failed: {e}")
+            return {"error": str(e)}
+
+    # ═══ Platform Console Integration ═════════════════════════════
+
+    async def get_platform_health(self) -> dict[str, Any]:
+        """Get comprehensive platform health report."""
+        try:
+            from agent.platform_console import platform_console
+            result = await platform_console.get_system_health()
+            return {
+                "overall_status": result.overall_status.value,
+                "components": {c.component.value: c.status.value for c in result.components},
+                "uptime_seconds": result.uptime_seconds,
+                "active_agents": result.active_agents,
+                "total_requests": result.total_requests,
+                "error_rate": result.error_rate,
+            }
+        except Exception as e:
+            logger.error(f"Platform health check failed: {e}")
+            return {"error": str(e)}
+
+    async def get_platform_resources(self) -> dict[str, Any]:
+        """Get current resource snapshot."""
+        try:
+            from agent.platform_console import platform_console
+            result = await platform_console.get_resource_snapshot()
+            return {
+                "cpu_percent": result.cpu_percent,
+                "memory_percent": result.memory_percent,
+                "disk_percent": result.disk_percent,
+                "active_connections": result.active_connections,
+                "queue_depth": result.queue_depth,
+                "token_usage": result.token_usage,
+            }
+        except Exception as e:
+            logger.error(f"Resource snapshot failed: {e}")
+            return {"error": str(e)}
+
+    async def get_platform_fleet(self) -> dict[str, Any]:
+        """Get agent fleet status."""
+        try:
+            from agent.platform_console import platform_console
+            return await platform_console.get_agent_fleet_status()
+        except Exception as e:
+            logger.error(f"Fleet status failed: {e}")
+            return {"error": str(e)}
+
+    async def run_platform_diagnostics(self) -> dict[str, Any]:
+        """Run full system diagnostics."""
+        try:
+            from agent.platform_console import platform_console
+            return await platform_console.run_diagnostics()
+        except Exception as e:
+            logger.error(f"Diagnostics failed: {e}")
+            return {"error": str(e)}
+
 
 # Global orchestrator instance
 buddy_orchestrator = BuddyOrchestrator()
