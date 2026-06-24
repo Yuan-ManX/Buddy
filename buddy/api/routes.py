@@ -17441,3 +17441,258 @@ async def get_collaboration_stats():
     return buddy_orchestrator.get_collaborative_intelligence_stats()
 
 
+# ── Code Review API ──────────────────────────────────────────
+
+class CodeReviewRequest(BaseModel):
+    content: str = Field(..., min_length=1)
+    file_path: str = Field(default="")
+    language: str = Field(default="python")
+    use_llm: bool = Field(default=False)
+
+
+class DiffReviewRequest(BaseModel):
+    diff_content: str = Field(..., min_length=1)
+    file_paths: list[str] = Field(default_factory=list)
+    language: str = Field(default="python")
+
+
+class BatchReviewRequest(BaseModel):
+    files: list[dict[str, str]] = Field(..., min_length=1)
+
+
+class VersionCompareRequest(BaseModel):
+    old_code: str = Field(..., min_length=1)
+    new_code: str = Field(..., min_length=1)
+    file_path: str = Field(default="")
+
+
+@router.post("/code-review/review")
+async def review_code(data: CodeReviewRequest):
+    """Review a single code file."""
+    from agent.agent_code_review import code_review_engine
+    result = await code_review_engine.review_code(
+        content=data.content,
+        file_path=data.file_path,
+        language=data.language,
+        use_llm=data.use_llm,
+    )
+    return result.to_dict()
+
+
+@router.post("/code-review/diff")
+async def review_diff(data: DiffReviewRequest):
+    """Review a code diff/patch."""
+    from agent.agent_code_review import code_review_engine
+    result = await code_review_engine.review_diff(
+        diff_content=data.diff_content,
+        file_paths=data.file_paths,
+        language=data.language,
+    )
+    return result.to_dict()
+
+
+@router.post("/code-review/batch")
+async def batch_review(data: BatchReviewRequest):
+    """Review multiple files in batch."""
+    from agent.agent_code_review import code_review_engine
+    results = await code_review_engine.batch_review(data.files)
+    return [r.to_dict() for r in results]
+
+
+@router.post("/code-review/compare")
+async def compare_versions(data: VersionCompareRequest):
+    """Compare two code versions."""
+    from agent.agent_code_review import code_review_engine
+    result = await code_review_engine.compare_versions(
+        old_code=data.old_code,
+        new_code=data.new_code,
+        file_path=data.file_path,
+    )
+    return result.to_dict()
+
+
+@router.get("/code-review/stats")
+async def get_code_review_stats():
+    """Get code review statistics."""
+    from agent.agent_code_review import code_review_engine
+    return code_review_engine.get_review_stats()
+
+
+# ── Swarm Orchestration API ──────────────────────────────────
+
+class SwarmFormRequest(BaseModel):
+    topic: str = Field(..., min_length=1)
+    required_capabilities: list[str] = Field(default_factory=list)
+    min_members: int = Field(default=3, ge=1, le=20)
+    max_members: int = Field(default=8, ge=1, le=50)
+
+
+class ConsensusRequest(BaseModel):
+    swarm_id: str = Field(..., min_length=1)
+    question: str = Field(..., min_length=1)
+    options: list[str] = Field(default_factory=list)
+    method: str = Field(default="majority")
+
+
+class SwarmTaskRequest(BaseModel):
+    swarm_id: str = Field(..., min_length=1)
+    task_description: str = Field(..., min_length=1)
+
+
+class ParallelExploreRequest(BaseModel):
+    swarm_id: str = Field(..., min_length=1)
+    topic: str = Field(..., min_length=1)
+    num_explorers: int = Field(default=4, ge=1, le=10)
+
+
+@router.post("/swarm-orchestrator/form")
+async def form_swarm(data: SwarmFormRequest):
+    """Dynamically form an agent swarm."""
+    from agent.agent_swarm_orchestrator import swarm_orchestrator
+    result = await swarm_orchestrator.form_swarm(
+        topic=data.topic,
+        required_capabilities=data.required_capabilities,
+        min_members=data.min_members,
+        max_members=data.max_members,
+    )
+    return result
+
+
+@router.post("/swarm-orchestrator/consensus")
+async def reach_consensus(data: ConsensusRequest):
+    """Reach consensus within a swarm."""
+    from agent.agent_swarm_orchestrator import swarm_orchestrator, ConsensusMethod
+    method = ConsensusMethod(data.method) if data.method in [m.value for m in ConsensusMethod] else ConsensusMethod.MAJORITY
+    result = await swarm_orchestrator.reach_consensus(
+        swarm_id=data.swarm_id,
+        question=data.question,
+        options=data.options,
+        method=method,
+    )
+    return result
+
+
+@router.post("/swarm-orchestrator/execute")
+async def execute_swarm_task(data: SwarmTaskRequest):
+    """Execute a task across the swarm."""
+    from agent.agent_swarm_orchestrator import swarm_orchestrator
+    result = await swarm_orchestrator.execute_swarm_task(
+        swarm_id=data.swarm_id,
+        task_description=data.task_description,
+    )
+    return result
+
+
+@router.post("/swarm-orchestrator/explore")
+async def parallel_explore(data: ParallelExploreRequest):
+    """Run parallel exploration within a swarm."""
+    from agent.agent_swarm_orchestrator import swarm_orchestrator
+    result = await swarm_orchestrator.parallel_explore(
+        swarm_id=data.swarm_id,
+        topic=data.topic,
+        num_explorers=data.num_explorers,
+    )
+    return result
+
+
+@router.post("/swarm-orchestrator/{swarm_id}/synthesize")
+async def synthesize_results(swarm_id: str):
+    """Synthesize swarm results."""
+    from agent.agent_swarm_orchestrator import swarm_orchestrator
+    result = await swarm_orchestrator.synthesize_results(swarm_id)
+    return result
+
+
+@router.post("/swarm-orchestrator/{swarm_id}/dissolve")
+async def dissolve_swarm(swarm_id: str):
+    """Dissolve a swarm."""
+    from agent.agent_swarm_orchestrator import swarm_orchestrator
+    result = await swarm_orchestrator.dissolve_swarm(swarm_id)
+    return result
+
+
+@router.get("/swarm-orchestrator/metrics")
+async def get_swarm_metrics():
+    """Get swarm performance metrics."""
+    from agent.agent_swarm_orchestrator import swarm_orchestrator
+    return swarm_orchestrator.get_swarm_metrics()
+
+
+# ── Platform Console API ─────────────────────────────────────
+
+@router.get("/platform-console/health")
+async def get_platform_health():
+    """Get comprehensive system health report."""
+    from agent.platform_console import platform_console
+    return await platform_console.get_system_health()
+
+
+@router.get("/platform-console/resources")
+async def get_resource_snapshot():
+    """Get current resource usage snapshot."""
+    from agent.platform_console import platform_console
+    return await platform_console.get_resource_snapshot()
+
+
+@router.get("/platform-console/analytics")
+async def get_usage_analytics(days: int = Query(default=7, ge=1, le=90)):
+    """Get usage analytics for the specified time range."""
+    from agent.platform_console import platform_console
+    return await platform_console.get_usage_analytics(days)
+
+
+@router.get("/platform-console/audit")
+async def get_audit_logs(
+    component: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+):
+    """Query audit logs with optional filters."""
+    from agent.platform_console import platform_console
+    filters = {}
+    if component:
+        filters["component"] = component
+    if severity:
+        filters["severity"] = severity
+    return await platform_console.get_audit_logs(filters, limit)
+
+
+@router.get("/platform-console/features")
+async def get_feature_flags():
+    """List all feature flags."""
+    from agent.platform_console import platform_console
+    return await platform_console.get_feature_flags()
+
+
+@router.put("/platform-console/features/{flag_id}")
+async def set_feature_flag(flag_id: str, data: dict):
+    """Update a feature flag."""
+    from agent.platform_console import platform_console
+    return await platform_console.set_feature_flag(
+        flag_id=flag_id,
+        enabled=data.get("enabled", True),
+        rollout_percentage=data.get("rollout_percentage", 100),
+    )
+
+
+@router.post("/platform-console/diagnostics")
+async def run_diagnostics():
+    """Run full system diagnostics."""
+    from agent.platform_console import platform_console
+    return await platform_console.run_diagnostics()
+
+
+@router.get("/platform-console/costs")
+async def get_cost_breakdown(days: int = Query(default=30, ge=1, le=365)):
+    """Get cost breakdown analysis."""
+    from agent.platform_console import platform_console
+    return await platform_console.get_cost_breakdown(days)
+
+
+@router.get("/platform-console/fleet")
+async def get_agent_fleet_status():
+    """Get agent fleet status overview."""
+    from agent.platform_console import platform_console
+    return await platform_console.get_agent_fleet_status()
+
+
