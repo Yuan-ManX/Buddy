@@ -1,3 +1,44 @@
+interface CodeReviewFinding {
+  id: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  dimension: string;
+  line_start: number;
+  line_end: number;
+  title: string;
+  description: string;
+  suggestion: string;
+}
+
+interface CodeReviewResult {
+  review_id: string;
+  score: number;
+  summary: string;
+  commentary: string;
+  findings: CodeReviewFinding[];
+  severity_distribution: Record<string, number>;
+  metrics: Record<string, number>;
+}
+
+interface CodeReviewBatchResult {
+  batch_id: string;
+  results: Array<{ file_path: string; review: CodeReviewResult }>;
+  overall_score: number;
+}
+
+interface CodeReviewStats {
+  total_reviews: number;
+  average_score: number;
+  critical_issues_found: number;
+  patterns_learned: number;
+  recent_reviews: Array<{
+    review_id: string;
+    file_path: string;
+    score: number;
+    critical_count: number;
+    timestamp: string;
+  }>;
+}
+
 const BASE_URL = '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -2291,6 +2332,30 @@ export const api = {
     setBudget: (data: { max_tokens: number; auto_compress?: boolean }) =>
       request<import('../types').TokenBudget>('/context-compressor/budget', {
         method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+  },
+
+  codeReview: {
+    review: (data: { code: string; language: string; file_path?: string }) =>
+      request<CodeReviewResult>('/code-review/review', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    diff: (data: { diff: string; file_paths?: string[] }) =>
+      request<CodeReviewResult>('/code-review/diff', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    batch: (data: { files: Array<{ code: string; language: string; file_path: string }> }) =>
+      request<CodeReviewBatchResult>('/code-review/batch', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    stats: () => request<CodeReviewStats>('/code-review/stats'),
+    compare: (data: { original: string; modified: string; language: string }) =>
+      request<CodeReviewResult>('/code-review/compare', {
+        method: 'POST',
         body: JSON.stringify(data),
       }),
   },
