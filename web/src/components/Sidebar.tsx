@@ -105,6 +105,16 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'codeReview', label: 'Review', icon: '🔍' },
   { id: 'swarmConsole', label: 'Swarm', icon: '🐝' },
   { id: 'platformConsole', label: 'Console', icon: '🖥️' },
+  { id: 'teamArchitect', label: 'Team', icon: '🏗️' },
+  { id: 'evolutionLoop', label: 'Evolve', icon: '🔄' },
+  { id: 'proactiveEngine', label: 'Proactive', icon: '🎯' },
+  { id: 'sentienceCore', label: 'Sentience', icon: '🧬' },
+  { id: 'capabilityMesh', label: 'CapMesh', icon: '🕸️' },
+  { id: 'presenceEngine', label: 'Presence', icon: '👁️' },
+  { id: 'feedbackOrchestrator', label: 'Feedback', icon: '📡' },
+  { id: 'sessionCommander', label: 'Sessions', icon: '📋' },
+  { id: 'runtimeScheduler', label: 'Scheduler', icon: '⚡' },
+  { id: 'workspaceNexus', label: 'Nexus', icon: '🔗' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
