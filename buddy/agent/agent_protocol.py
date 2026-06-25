@@ -15,6 +15,8 @@ Core capabilities:
 - Message validation and schema enforcement
 """
 
+from __future__ import annotations
+
 import uuid
 import time
 import logging
