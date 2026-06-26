@@ -2359,4 +2359,340 @@ export const api = {
         body: JSON.stringify(data),
       }),
   },
+
+  // ── Evolution Loop ──
+  evolutionLoop: {
+    stats: () => request<any>('/evolution-loop/stats'),
+    skills: (params?: { category?: string; status?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.category) qs.set('category', params.category);
+      if (params?.status) qs.set('status', params.status);
+      return request<{ skills: any[] }>(`/evolution-loop/skills?${qs.toString()}`);
+    },
+    createSkill: (data: {
+      name: string;
+      description?: string;
+      category?: string;
+      triggers?: string[];
+      steps?: string[];
+      status?: string;
+    }) =>
+      request<any>('/evolution-loop/skills', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    createEvent: (data: {
+      trigger?: string;
+      session_id?: string;
+      agent_id?: string;
+      description?: string;
+      context?: string;
+      outcome?: string;
+      complexity_score?: number;
+      novel_patterns?: string[];
+      skills_used?: string[];
+      tokens_used?: number;
+      duration_ms?: number;
+      user_feedback?: string;
+    }) =>
+      request<any>('/evolution-loop/events', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    nudges: () => request<{ nudges: any[] }>('/evolution-loop/nudges'),
+    processNudge: (data: { nudge_index: number; action: string }) =>
+      request<any>('/evolution-loop/nudges/process', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    userModel: (userId: string) =>
+      request<any>(`/evolution-loop/user-model?user_id=${encodeURIComponent(userId)}`),
+    setPreference: (data: { key: string; value: any }) =>
+      request<any>('/evolution-loop/user-model/preference', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    compress: (data: { max_events: number }) =>
+      request<any>('/evolution-loop/compress', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
+
+  // ── Team Architect ──
+  teamArchitect: {
+    stats: () => request<any>('/team-architect/stats'),
+    patterns: () => request<any>('/team-architect/patterns'),
+    patternInfo: (patternName: string) => request<any>(`/team-architect/pattern/${patternName}`),
+    analyze: (data: { domain_description: string; team_name?: string; preferred_pattern?: string; agent_count?: number; complexity?: string; scale?: string }) =>
+      request<any>('/team-architect/analyze', { method: 'POST', body: JSON.stringify(data) }),
+    generate: (data: { domain_description: string; team_name?: string; preferred_pattern?: string; agent_count?: number; complexity?: string; scale?: string }) =>
+      request<any>('/team-architect/generate', { method: 'POST', body: JSON.stringify(data) }),
+    teams: (pattern?: string) => request<any>(`/team-architect/teams${pattern ? `?pattern=${pattern}` : ''}`),
+    team: (teamId: string) => request<any>(`/team-architect/teams/${teamId}`),
+    validate: (teamId: string) => request<any>(`/team-architect/teams/${teamId}/validate`, { method: 'POST' }),
+    clone: (teamId: string, newName: string) =>
+      request<any>(`/team-architect/teams/${teamId}/clone`, { method: 'POST', body: JSON.stringify({ new_name: newName }) }),
+    evolve: (data: { team_id: string; changes: string[]; success_metrics: Record<string, number>; lessons_learned: string[]; agent_adjustments?: Record<string, any> }) =>
+      request<any>('/team-architect/evolve', { method: 'POST', body: JSON.stringify(data) }),
+  },
+
+  // ── Proactive Engine ──
+  proactiveEngine: {
+    stats: () => request<any>('/proactive-engine/stats'),
+    queue: () => request<any>('/proactive-engine/queue'),
+    completed: (limit = 20) => request<any>(`/proactive-engine/completed?limit=${limit}`),
+    discover: () => request<any>('/proactive-engine/discover', { method: 'POST' }),
+    execute: () => request<any>('/proactive-engine/execute', { method: 'POST' }),
+    skip: (taskId: string) => request<any>(`/proactive-engine/skip/${taskId}`, { method: 'POST' }),
+    prioritize: (taskId: string, priority: number) =>
+      request<any>(`/proactive-engine/prioritize/${taskId}`, { method: 'POST', body: JSON.stringify({ priority }) }),
+    clearCompleted: () => request<any>('/proactive-engine/clear-completed', { method: 'POST' }),
+    monitors: () => request<any>('/proactive-engine/monitors'),
+    createMonitor: (data: { name: string; source?: string; check_interval_seconds?: number; enabled?: boolean }) =>
+      request<any>('/proactive-engine/monitors', { method: 'POST', body: JSON.stringify(data) }),
+    toggleMonitor: (monitorId: string, enabled: boolean) =>
+      request<any>(`/proactive-engine/monitors/${monitorId}/toggle`, { method: 'POST', body: JSON.stringify({ enabled }) }),
+    start: () => request<any>('/proactive-engine/start', { method: 'POST' }),
+    stop: () => request<any>('/proactive-engine/stop', { method: 'POST' }),
+    idle: () => request<any>('/proactive-engine/idle'),
+  },
+
+  // ── Sentience Core ──
+  sentienceCore: {
+    stats: () => request<any>('/sentience/stats'),
+    state: () => request<any>('/sentience/state'),
+    identity: () => request<any>('/sentience/identity'),
+    updateIdentity: (data: { name?: string; role?: string; traits?: Record<string, any> }) =>
+      request<any>('/sentience/identity', { method: 'PUT', body: JSON.stringify(data) }),
+    cycles: (limit = 20) => request<any>(`/sentience/cycles?limit=${limit}`),
+    insights: (limit = 20) => request<any>(`/sentience/insights?limit=${limit}`),
+    goals: (status = 'active') => request<any>(`/sentience/goals?status=${status}`),
+    completeGoal: (goalId: string) =>
+      request<any>(`/sentience/goals/${goalId}/complete`, { method: 'POST' }),
+    perceptions: (limit = 10) => request<any>(`/sentience/perceptions?limit=${limit}`),
+    runCycle: (data: { channel?: string; content?: Record<string, any>; intensity?: number; urgency?: number; source_id?: string; mode?: string }) =>
+      request<any>('/sentience/cycle', { method: 'POST', body: JSON.stringify(data) }),
+    reset: () => request<any>('/sentience/reset', { method: 'POST' }),
+  },
+
+  // ── Capability Mesh ──
+  capabilityMesh: {
+    stats: () => request<any>('/capability-mesh/stats'),
+    list: (params?: { domain?: string; cap_type?: string; maturity?: string; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.domain) qs.set('domain', params.domain);
+      if (params?.cap_type) qs.set('cap_type', params.cap_type);
+      if (params?.maturity) qs.set('maturity', params.maturity);
+      if (params?.limit) qs.set('limit', String(params.limit));
+      return request<any>(`/capability-mesh/capabilities?${qs.toString()}`);
+    },
+    register: (data: { name: string; description?: string; domain?: string; cap_type?: string; maturity?: string; tags?: string[]; dependencies?: string[]; estimated_cost_ms?: number; estimated_tokens?: number; provider_id?: string }) =>
+      request<any>('/capability-mesh/capabilities', { method: 'POST', body: JSON.stringify(data) }),
+    unregister: (capabilityId: string) =>
+      request<any>(`/capability-mesh/capabilities/${capabilityId}`, { method: 'DELETE' }),
+    discover: (q: string, params?: { domain?: string; cap_type?: string; min_trust?: number; limit?: number }) => {
+      const qs = new URLSearchParams();
+      qs.set('q', q);
+      if (params?.domain) qs.set('domain', params.domain);
+      if (params?.cap_type) qs.set('cap_type', params.cap_type);
+      if (params?.min_trust) qs.set('min_trust', String(params.min_trust));
+      if (params?.limit) qs.set('limit', String(params.limit));
+      return request<any>(`/capability-mesh/discover?${qs.toString()}`);
+    },
+    compose: (data: { name: string; description?: string; capability_ids: string[]; strategy?: string }) =>
+      request<any>('/capability-mesh/compose', { method: 'POST', body: JSON.stringify(data) }),
+    autoCompose: (data: { query: string; max_steps?: number; strategy?: string }) =>
+      request<any>('/capability-mesh/auto-compose', { method: 'POST', body: JSON.stringify(data) }),
+    execute: (data: { plan_id: string; initial_input?: any }) =>
+      request<any>('/capability-mesh/execute', { method: 'POST', body: JSON.stringify(data) }),
+    plans: () => request<any>('/capability-mesh/plans'),
+    domainCoverage: () => request<any>('/capability-mesh/domain-coverage'),
+    providers: () => request<any>('/capability-mesh/providers'),
+    registerNode: (data: { name: string; address?: string; metadata?: Record<string, any> }) =>
+      request<any>('/capability-mesh/nodes', { method: 'POST', body: JSON.stringify(data) }),
+    nodes: (state?: string) => {
+      const qs = state ? `?state=${state}` : '';
+      return request<any>(`/capability-mesh/nodes${qs}`);
+    },
+    nodeHeartbeat: (nodeId: string) =>
+      request<any>(`/capability-mesh/nodes/${nodeId}/heartbeat`, { method: 'POST' }),
+    reset: () => request<any>('/capability-mesh/reset', { method: 'POST' }),
+  },
+
+  // ── Presence Engine ──
+  presenceEngine: {
+    stats: (agentId?: string) => {
+      const qs = agentId ? `?agent_id=${agentId}` : '';
+      return request<any>(`/presence/stats${qs}`);
+    },
+    createProfile: (data: { agent_id: string; display_name?: string; bio?: string; role?: string; expertise?: string[]; traits?: Record<string, any> }) =>
+      request<any>('/presence/profiles', { method: 'POST', body: JSON.stringify(data) }),
+    getProfile: (agentId: string) => request<any>(`/presence/profiles/${agentId}`),
+    updateProfile: (agentId: string, data: Record<string, any>) =>
+      request<any>(`/presence/profiles/${agentId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    setPresence: (data: { agent_id: string; state: string; status_message?: string; platforms?: string[] }) =>
+      request<any>('/presence/set', { method: 'POST', body: JSON.stringify(data) }),
+    getPresence: (agentId: string) => request<any>(`/presence/${agentId}`),
+    allPresence: () => request<any>('/presence'),
+    connect: (agentId: string, platform = 'web') =>
+      request<any>(`/presence/${agentId}/connect?platform=${platform}`, { method: 'POST' }),
+    disconnect: (agentId: string, platform = 'web') =>
+      request<any>(`/presence/${agentId}/disconnect?platform=${platform}`, { method: 'POST' }),
+    heartbeat: (agentId: string) =>
+      request<any>(`/presence/${agentId}/heartbeat`, { method: 'POST' }),
+    isAvailable: (agentId: string) => request<any>(`/presence/${agentId}/available`),
+    currentActivity: (agentId: string) => request<any>(`/presence/${agentId}/activity`),
+    timeline: (agentId: string, limit = 50, activityType?: string) => {
+      const qs = new URLSearchParams();
+      qs.set('limit', String(limit));
+      if (activityType) qs.set('activity_type', activityType);
+      return request<any>(`/presence/${agentId}/timeline?${qs.toString()}`);
+    },
+    setSchedule: (data: { agent_id: string; mode?: string; active_days?: number[]; active_hours_start?: string; active_hours_end?: string; max_concurrent_sessions?: number; auto_away_after_ms?: number; auto_offline_after_ms?: number }) =>
+      request<any>('/presence/schedule', { method: 'POST', body: JSON.stringify(data) }),
+    getSchedule: (agentId: string) => request<any>(`/presence/schedule/${agentId}`),
+    saveContext: (data: { agent_id: string; previous_session_id?: string; summary?: string; key_points?: string[]; active_topics?: string[]; pending_items?: any[]; user_preferences?: Record<string, any> }) =>
+      request<any>('/presence/context/save', { method: 'POST', body: JSON.stringify(data) }),
+    getContext: (agentId: string) => request<any>(`/presence/context/${agentId}`),
+    continuityPrompt: (agentId: string) => request<any>(`/presence/context/${agentId}/prompt`),
+    events: (agentId?: string, limit = 50) => {
+      const qs = new URLSearchParams();
+      if (agentId) qs.set('agent_id', agentId);
+      qs.set('limit', String(limit));
+      return request<any>(`/presence/events?${qs.toString()}`);
+    },
+    reset: (agentId?: string) => {
+      const qs = agentId ? `?agent_id=${agentId}` : '';
+      return request<any>(`/presence/reset${qs}`, { method: 'POST' });
+    },
+  },
+
+  // ── Feedback Orchestrator ──
+  feedbackOrchestrator: {
+    stats: () => request<any>('/feedback-orchestrator/stats'),
+    collect: (data: { source: string; severity?: string; confidence?: number; target_module?: string; payload?: Record<string, any>; session_id?: string; agent_id?: string }) =>
+      request<any>('/feedback-orchestrator/collect', { method: 'POST', body: JSON.stringify(data) }),
+    route: (data: { source: string; severity?: string; confidence?: number; target_module?: string; payload?: Record<string, any>; session_id?: string; agent_id?: string }) =>
+      request<any>('/feedback-orchestrator/route', { method: 'POST', body: JSON.stringify(data) }),
+    execute: (data: { source: string; severity?: string; confidence?: number; target_module?: string; payload?: Record<string, any>; session_id?: string; agent_id?: string }) =>
+      request<any>('/feedback-orchestrator/execute', { method: 'POST', body: JSON.stringify(data) }),
+    analytics: (windowHours = 24) => request<any>(`/feedback-orchestrator/analytics?window_hours=${windowHours}`),
+    addRule: (data: { rule_type?: string; source_filter?: string; target_filter?: string; severity_threshold?: string; action_type?: string; target_module?: string; action_params?: Record<string, any>; priority?: number }) =>
+      request<any>('/feedback-orchestrator/routing-rules', { method: 'POST', body: JSON.stringify(data) }),
+    removeRule: (ruleId: string) =>
+      request<any>(`/feedback-orchestrator/routing-rules/${ruleId}`, { method: 'DELETE' }),
+    reset: () => request<any>('/feedback-orchestrator/reset', { method: 'POST' }),
+  },
+
+  // ── Session Commander ──
+  sessionCommander: {
+    stats: () => request<any>('/session-commander/stats'),
+    createGroup: (data: { name: string; description?: string; session_ids?: string[]; parent_id?: string }) =>
+      request<any>('/session-commander/groups', { method: 'POST', body: JSON.stringify(data) }),
+    getGroups: () => request<any>('/session-commander/groups'),
+    getGroup: (groupId: string) => request<any>(`/session-commander/groups/${groupId}`),
+    deleteGroup: (groupId: string) =>
+      request<any>(`/session-commander/groups/${groupId}`, { method: 'DELETE' }),
+    batchSummarize: (sessionIds: string[]) =>
+      request<any>('/session-commander/batch/summarize', { method: 'POST', body: JSON.stringify({ session_ids: sessionIds }) }),
+    batchArchive: (sessionIds: string[]) =>
+      request<any>('/session-commander/batch/archive', { method: 'POST', body: JSON.stringify({ session_ids: sessionIds }) }),
+    batchMerge: (sessionIds: string[]) =>
+      request<any>('/session-commander/batch/merge', { method: 'POST', body: JSON.stringify({ session_ids: sessionIds }) }),
+    batchExport: (sessionIds: string[]) =>
+      request<any>('/session-commander/batch/export', { method: 'POST', body: JSON.stringify({ session_ids: sessionIds }) }),
+    batchDelete: (sessionIds: string[]) =>
+      request<any>('/session-commander/batch/delete', { method: 'POST', body: JSON.stringify({ session_ids: sessionIds }) }),
+    getBatch: (opId: string) => request<any>(`/session-commander/batch/${opId}`),
+    pauseSession: (sessionId: string) =>
+      request<any>(`/session-commander/${sessionId}/pause`, { method: 'POST' }),
+    resumeSession: (sessionId: string) =>
+      request<any>(`/session-commander/${sessionId}/resume`, { method: 'POST' }),
+    createSnapshot: (data: { session_id: string; description?: string; state?: Record<string, any> }) =>
+      request<any>('/session-commander/snapshots', { method: 'POST', body: JSON.stringify(data) }),
+    restoreSnapshot: (sessionId: string, snapshotId: string) =>
+      request<any>(`/session-commander/${sessionId}/restore?snapshot_id=${snapshotId}`, { method: 'POST' }),
+    getSnapshots: (sessionId: string) => request<any>(`/session-commander/${sessionId}/snapshots`),
+    branchSession: (data: { session_id: string; branch_point?: string; state?: Record<string, any> }) =>
+      request<any>('/session-commander/branches', { method: 'POST', body: JSON.stringify(data) }),
+    getBranches: (sessionId: string) => request<any>(`/session-commander/${sessionId}/branches`),
+    mergeSessions: (sessionIds: string[]) =>
+      request<any>('/session-commander/merge', { method: 'POST', body: JSON.stringify({ session_ids: sessionIds }) }),
+    searchSessions: (data: { query?: string; date_from?: string; date_to?: string; agent_id?: string; user_id?: string; state?: string; tags?: string[]; sort_by?: string; limit?: number }) =>
+      request<any>('/session-commander/search', { method: 'POST', body: JSON.stringify(data) }),
+    createTemplate: (data: { name: string; system_prompt?: string; tools?: string[]; skills?: string[]; settings?: Record<string, any> }) =>
+      request<any>('/session-commander/templates', { method: 'POST', body: JSON.stringify(data) }),
+    listTemplates: () => request<any>('/session-commander/templates'),
+    reset: () => request<any>('/session-commander/reset', { method: 'POST' }),
+  },
+
+  // ── Runtime Scheduler ──
+  runtimeScheduler: {
+    stats: () => request<any>('/runtime-scheduler/stats'),
+    enqueue: (data: { priority?: string; agent_id?: string; payload?: Record<string, any>; estimated_cost?: number; deadline?: string }) =>
+      request<any>('/runtime-scheduler/enqueue', { method: 'POST', body: JSON.stringify(data) }),
+    dequeue: (taskId: string) =>
+      request<any>(`/runtime-scheduler/dequeue?task_id=${taskId}`, { method: 'POST' }),
+    getNext: (agentId?: string) => {
+      const qs = agentId ? `?agent_id=${agentId}` : '';
+      return request<any>(`/runtime-scheduler/next${qs}`);
+    },
+    complete: (taskId: string) =>
+      request<any>(`/runtime-scheduler/complete?task_id=${taskId}`, { method: 'POST' }),
+    fail: (taskId: string, error = '') =>
+      request<any>(`/runtime-scheduler/fail?task_id=${taskId}&error=${encodeURIComponent(error)}`, { method: 'POST' }),
+    addDependency: (data: { task_id: string; depends_on: string; dependency_type?: string }) =>
+      request<any>('/runtime-scheduler/dependencies', { method: 'POST', body: JSON.stringify(data) }),
+    resolveDependencies: (taskId: string) => request<any>(`/runtime-scheduler/dependencies/${taskId}`),
+    setQuota: (data: { agent_id: string; max_tokens_per_minute?: number; max_concurrent?: number; max_memory_mb?: number }) =>
+      request<any>('/runtime-scheduler/quota', { method: 'POST', body: JSON.stringify(data) }),
+    checkQuota: (agentId: string) => request<any>(`/runtime-scheduler/quota/${agentId}`),
+    getSchedule: (agentId?: string) => {
+      const qs = agentId ? `?agent_id=${agentId}` : '';
+      return request<any>(`/runtime-scheduler/schedule${qs}`);
+    },
+    optimizeSchedule: (agentId?: string) => {
+      const qs = agentId ? `?agent_id=${agentId}` : '';
+      return request<any>(`/runtime-scheduler/optimize${qs}`, { method: 'POST' });
+    },
+    listTasks: (status = '') => {
+      const qs = status ? `?status=${status}` : '';
+      return request<any>(`/runtime-scheduler/tasks${qs}`);
+    },
+    reset: () => request<any>('/runtime-scheduler/reset', { method: 'POST' }),
+  },
+
+  // ── Workspace Nexus ──
+  workspaceNexus: {
+    stats: () => request<any>('/workspace-nexus/stats'),
+    createWorkspace: (data: { name: string; description?: string; template_id?: string }) =>
+      request<any>('/workspace-nexus/workspaces', { method: 'POST', body: JSON.stringify(data) }),
+    listWorkspaces: (status = '') => {
+      const qs = status ? `?status=${status}` : '';
+      return request<any>(`/workspace-nexus/workspaces${qs}`);
+    },
+    getWorkspace: (workspaceId: string) => request<any>(`/workspace-nexus/workspaces/${workspaceId}`),
+    activateWorkspace: (workspaceId: string) =>
+      request<any>(`/workspace-nexus/workspaces/${workspaceId}/activate`, { method: 'POST' }),
+    archiveWorkspace: (workspaceId: string) =>
+      request<any>(`/workspace-nexus/workspaces/${workspaceId}/archive`, { method: 'POST' }),
+    connectSubsystem: (data: { workspace_id: string; subsystem_type: string; subsystem_id: string; config?: Record<string, any> }) =>
+      request<any>('/workspace-nexus/connections', { method: 'POST', body: JSON.stringify(data) }),
+    disconnectSubsystem: (connectionId: string) =>
+      request<any>(`/workspace-nexus/connections/${connectionId}`, { method: 'DELETE' }),
+    getConnections: (workspaceId: string) => request<any>(`/workspace-nexus/workspaces/${workspaceId}/connections`),
+    createContextFlow: (data: { workspace_id: string; source_subsystem?: string; target_subsystem?: string; content?: Record<string, any>; priority?: string }) =>
+      request<any>('/workspace-nexus/context-flows', { method: 'POST', body: JSON.stringify(data) }),
+    getContextFlows: (workspaceId: string, limit = 50) =>
+      request<any>(`/workspace-nexus/workspaces/${workspaceId}/context-flows?limit=${limit}`),
+    syncContext: (workspaceId: string) =>
+      request<any>(`/workspace-nexus/workspaces/${workspaceId}/sync`, { method: 'POST' }),
+    getAnalytics: (workspaceId: string) => request<any>(`/workspace-nexus/workspaces/${workspaceId}/analytics`),
+    registerTemplate: (data: { name: string; default_tools?: string[]; default_skills?: string[]; default_prompt?: string; settings?: Record<string, any> }) =>
+      request<any>('/workspace-nexus/templates', { method: 'POST', body: JSON.stringify(data) }),
+    listTemplates: () => request<any>('/workspace-nexus/templates'),
+    summary: () => request<any>('/workspace-nexus/summary'),
+    reset: () => request<any>('/workspace-nexus/reset', { method: 'POST' }),
+  },
 };
