@@ -1502,7 +1502,7 @@ export const PlatformConsolePanel: React.FC<PlatformConsolePanelProps> = ({ onNa
 
   const auditTotalPages = audit ? Math.ceil(audit.total / AUDIT_PAGE_SIZE) : 1;
 
-  const components = health?.components || DEFAULT_COMPONENTS.map((c) => ({
+  const components: ComponentHealth[] = health?.components || DEFAULT_COMPONENTS.map((c) => ({
     id: c.id,
     name: c.name,
     icon: c.icon,
@@ -1510,6 +1510,8 @@ export const PlatformConsolePanel: React.FC<PlatformConsolePanelProps> = ({ onNa
     latency_ms: 0,
     error_count: 0,
     last_checked: '',
+    history: [],
+    metrics: [],
   }));
 
   // ── Render Helpers ──
@@ -1659,12 +1661,12 @@ export const PlatformConsolePanel: React.FC<PlatformConsolePanelProps> = ({ onNa
           </div>
           {expandedComponent === comp.id && (
             <div style={styles.componentRowDetail}>
-              {comp.metrics && comp.metrics.map((m, i) => (
+              {comp.metrics && comp.metrics.map((m: ComponentMetric, i: number) => (
                 <div key={i} style={styles.metricRow}>
                   <span style={styles.metricLabel}>{m.label}</span>
                   <span style={{
                     ...styles.metricValue,
-                    color: HEALTH_COLORS[m.status],
+                    color: HEALTH_COLORS[m.status as HealthStatus],
                   }}>
                     {m.value}
                   </span>
