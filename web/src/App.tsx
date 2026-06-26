@@ -98,7 +98,7 @@ import { UnifiedConsole } from './components/UnifiedConsole';
 import { ExperimentPanel } from './components/ExperimentPanel';
 import { UnifiedBrainPanel } from './components/UnifiedBrainPanel';
 import { PlatformCorePanel } from './components/PlatformCorePanel';
-import { RuntimeCoordinatorPanel } from './components/RuntimeCoordinatorPanel';
+
 import { UnifiedAgentPanel } from './components/UnifiedAgentPanel';
 import { AgentFlowPanel } from './components/AgentFlowPanel';
 import { ProfilePanel } from './components/ProfilePanel';
@@ -116,10 +116,36 @@ import { SkillExplorer } from './components/SkillExplorer';
 import { CodeReviewPanel } from './components/CodeReviewPanel';
 import { SwarmConsolePanel } from './components/SwarmConsolePanel';
 import { PlatformConsolePanel } from './components/PlatformConsolePanel';
+import { TeamArchitectPanel } from './components/TeamArchitectPanel';
+import { EvolutionLoopPanel } from './components/EvolutionLoopPanel';
+import { ProactiveEnginePanel } from './components/ProactiveEnginePanel';
+import { SentienceCorePanel } from './components/SentienceCorePanel';
+import { CapabilityMeshPanel } from './components/CapabilityMeshPanel';
+import { PresenceEnginePanel } from './components/PresenceEnginePanel';
+import { FeedbackOrchestratorPanel } from './components/FeedbackOrchestratorPanel';
+import { SessionCommanderPanel } from './components/SessionCommanderPanel';
+import { RuntimeSchedulerPanel } from './components/RuntimeSchedulerPanel';
+import { WorkspaceNexusPanel } from './components/WorkspaceNexusPanel';
+import { ExecutionCompilerPanel } from './components/ExecutionCompilerPanel';
+import { VerificationPipelinePanel } from './components/VerificationPipelinePanel';
+import { ModelConductorPanel } from './components/ModelConductorPanel';
+import { ContextWeaverPanel } from './components/ContextWeaverPanel';
+import { AutonomyFrameworkPanel } from './components/AutonomyFrameworkPanel';
+import { IntelligenceHubPanel } from './components/IntelligenceHubPanel';
+import { AdaptiveWorkflowsPanel } from './components/AdaptiveWorkflowsPanel';
+import { CrossConnectorPanel } from './components/CrossConnectorPanel';
+import { ChainOfThoughtPanel } from './components/ChainOfThoughtPanel';
+import { IntentResolutionPanel } from './components/IntentResolutionPanel';
+import { DynamicAdaptationPanel } from './components/DynamicAdaptationPanel';
+import { UncertaintyQuantifierPanel } from './components/UncertaintyQuantifierPanel';
+import { FederatedKnowledgePanel } from './components/FederatedKnowledgePanel';
+import { EmergentBehaviorPanel } from './components/EmergentBehaviorPanel';
+import { PerformanceAutotunerPanel } from './components/PerformanceAutotunerPanel';
+import { PlatformResiliencePanel } from './components/PlatformResiliencePanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { CommandPalette } from './components/CommandPalette';
-import { ThemeProvider, useTheme } from './hooks/useTheme';
+
 import { api } from './api/client';
 import type { Agent, Conversation, Message as MsgType, Task, TabView } from './types';
 import './App.css';
@@ -603,6 +629,32 @@ export default function App() {
 {activeTab === 'codeReview' && <CodeReviewPanel onNavigate={(tab: string) => setActiveTab(tab as TabView)} />}
 {activeTab === 'swarmConsole' && <SwarmConsolePanel onNavigate={(tab: string) => setActiveTab(tab as TabView)} />}
 {activeTab === 'platformConsole' && <PlatformConsolePanel onNavigate={(tab: string) => setActiveTab(tab as TabView)} />}
+{activeTab === 'teamArchitect' && <TeamArchitectPanel />}
+{activeTab === 'evolutionLoop' && <EvolutionLoopPanel />}
+{activeTab === 'proactiveEngine' && <ProactiveEnginePanel />}
+{activeTab === 'sentienceCore' && <SentienceCorePanel />}
+{activeTab === 'capabilityMesh' && <CapabilityMeshPanel />}
+{activeTab === 'presenceEngine' && <PresenceEnginePanel />}
+{activeTab === 'feedbackOrchestrator' && <FeedbackOrchestratorPanel />}
+{activeTab === 'sessionCommander' && <SessionCommanderPanel />}
+{activeTab === 'runtimeScheduler' && <RuntimeSchedulerPanel />}
+{activeTab === 'workspaceNexus' && <WorkspaceNexusPanel />}
+{activeTab === 'executionCompiler' && <ExecutionCompilerPanel />}
+{activeTab === 'verificationPipeline' && <VerificationPipelinePanel />}
+{activeTab === 'modelConductor' && <ModelConductorPanel />}
+{activeTab === 'contextWeaver' && <ContextWeaverPanel />}
+{activeTab === 'autonomyFramework' && <AutonomyFrameworkPanel />}
+{activeTab === 'intelligenceHub' && <IntelligenceHubPanel />}
+{activeTab === 'adaptiveWorkflows' && <AdaptiveWorkflowsPanel />}
+{activeTab === 'crossConnector' && <CrossConnectorPanel />}
+{activeTab === 'chainOfThought' && <ChainOfThoughtPanel />}
+{activeTab === 'intentResolution' && <IntentResolutionPanel />}
+{activeTab === 'dynamicAdaptation' && <DynamicAdaptationPanel />}
+{activeTab === 'uncertaintyQuantifier' && <UncertaintyQuantifierPanel />}
+{activeTab === 'federatedKnowledge' && <FederatedKnowledgePanel />}
+{activeTab === 'emergentBehavior' && <EmergentBehaviorPanel />}
+{activeTab === 'performanceAutotuner' && <PerformanceAutotunerPanel />}
+{activeTab === 'platformResilience' && <PlatformResiliencePanel />}
 
         {/* Agent-specific panels */}
         {selectedAgent && (
@@ -685,7 +737,7 @@ export default function App() {
     )}
 
         {/* Empty state — no agent and no global panel selected */}
-        {!selectedAgent && !['commandCenter', 'overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend', 'agentcore', 'synthesis', 'intelligence', 'runtimepanel', 'skillcompiler', 'conversationsearch', 'governance', 'smartrouter', 'agentmesh', 'learningloop', 'experience', 'collabspace', 'contextengine', 'automation', 'skillfabric', 'usermodel', 'evolvingskills', 'subagentmesh', 'protocol', 'sandbox', 'toolexec', 'modelorch', 'deployment', 'productcomposer', 'agentorchestrator', 'dreammode', 'reflection', 'intent', 'fleet', 'knowledgenetwork', 'reasoning', 'modelproxy', 'toolcomposer', 'contextmanager', 'unifiedconsole', 'experiments', 'unifiedbrain', 'platformcore', 'unifiedagent', 'agentflow', 'profile', 'mcptools', 'goalDecomposer', 'selfReflection', 'memoryConsolidator', 'contextCompressor'].includes(activeTab) && (
+        {!selectedAgent && !['commandCenter', 'overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend', 'agentcore', 'synthesis', 'intelligence', 'runtimepanel', 'skillcompiler', 'conversationsearch', 'governance', 'smartrouter', 'agentmesh', 'learningloop', 'experience', 'collabspace', 'contextengine', 'automation', 'skillfabric', 'usermodel', 'evolvingskills', 'subagentmesh', 'protocol', 'sandbox', 'toolexec', 'modelorch', 'deployment', 'productcomposer', 'agentorchestrator', 'dreammode', 'reflection', 'intent', 'fleet', 'knowledgenetwork', 'reasoning', 'modelproxy', 'toolcomposer', 'contextmanager', 'unifiedconsole', 'experiments', 'unifiedbrain', 'platformcore', 'unifiedagent', 'agentflow', 'profile', 'mcptools', 'goalDecomposer', 'selfReflection', 'memoryConsolidator', 'contextCompressor', 'teamArchitect', 'evolutionLoop', 'proactiveEngine', 'executionCompiler', 'verificationPipeline', 'modelConductor', 'contextWeaver', 'autonomyFramework', 'intelligenceHub', 'adaptiveWorkflows', 'crossConnector'].includes(activeTab) && (
           <div className="main-empty">
             <div className="main-empty-icon">B</div>
             <h2>Welcome to Buddy</h2>
