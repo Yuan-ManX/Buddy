@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Comprehensive test of all API endpoints"""
+"""Comprehensive test of all API endpoints with correct paths"""
 import requests
 import sys
 
@@ -26,10 +26,10 @@ endpoints = [
     "/streaming-hub/stats",
     "/tool-network/stats",
     "/code-interpreter/stats",
-    "/analytics/stats",
+    "/analytics-engine/stats",
     "/execution-compiler/stats",
     "/verification-pipeline/stats",
-    "/multi-model/stats",
+    "/model-conductor/stats",
     "/context-weaver/stats",
     "/autonomy-framework/stats",
     "/platform-hub/stats",
@@ -39,27 +39,27 @@ endpoints = [
     "/evolution-loop/stats",
     "/proactive-engine/stats",
     "/unified-system/stats",
-    "/unified-brain/stats",
+    "/brain/stats",
     "/swarm/stats",
     "/subagent-mesh/stats",
-    "/squad/stats",
+    "/squads/stats",
     "/tool-composer/stats",
-    "/self-improve/stats",
+    "/self-improvement/stats",
     "/self-reflection/stats",
-    "/profile/stats",
+    "/profiles",
     "/protocol/stats",
     "/reasoning/stats",
     "/reflection/stats",
     "/synthesis/stats",
-    "/runtime/stats",
-    "/session/stats",
-    "/experiment/stats",
+    "/runtimes-stats",
+    "/sessions/stats",
+    "/experiments/stats",
     "/white-memory/stats",
     "/trajectory/stats",
     "/user-model/stats",
     "/task-queue/stats",
     "/smart-router/stats",
-    "/dream/stats",
+    "/dream-mode/stats",
     "/autopilot/stats",
     "/mcp/stats",
     "/studio/stats",
@@ -71,7 +71,7 @@ endpoints = [
     "/federated-knowledge/stats",
     "/emergent-behavior/stats",
     "/performance-autotuner/stats",
-    "/platform-resilience/stats",
+    "/platform-resilience/report",
 ]
 
 for ep in endpoints:
