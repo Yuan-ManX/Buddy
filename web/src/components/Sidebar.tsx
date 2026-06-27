@@ -137,6 +137,18 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'emergentBehavior', label: 'Emergent', icon: '🔮' },
   { id: 'performanceAutotuner', label: 'AutoTune', icon: '⚡' },
   { id: 'platformResilience', label: 'Resilient', icon: '🛡️' },
+  { id: 'personalMemory', label: 'Memory', icon: '🧠' },
+  { id: 'voiceInterface', label: 'Voice', icon: '🎤' },
+  { id: 'documentIntelligence', label: 'Docs', icon: '📄' },
+  { id: 'notificationHub', label: 'Alerts', icon: '🔔' },
+  { id: 'promptStudio', label: 'Prompts', icon: '✍️' },
+  { id: 'terminalInterface', label: 'Terminal', icon: '💻' },
+  { id: 'reasoningNetwork', label: 'Reasoning', icon: '🧠' },
+  { id: 'synthesisEngine', label: 'Synthesis', icon: '🔮' },
+  { id: 'researchEngine', label: 'Research', icon: '🔬' },
+  { id: 'learningLoop', label: 'Learn', icon: '📚' },
+  { id: 'memoryGraph', label: 'M-Graph', icon: '🕸️' },
+  { id: 'understandingEngine', label: 'Understand', icon: '🔍' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
