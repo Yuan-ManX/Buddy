@@ -290,6 +290,8 @@ class SelfImprovementEngine:
         self._benchmark_history: list[dict[str, SkillBenchmark]] = []
         # Trend snapshots for improvement trend analysis
         self._trend_snapshots: list[TrendSnapshot] = []
+        # Cycle history for tracking improvement cycles
+        self._cycle_history: list[dict[str, Any]] = []
 
     # ── Skill Synthesis ─────────────────────────────────────────────
 
@@ -675,6 +677,14 @@ class SelfImprovementEngine:
                 if len(ops) >= self.MIN_PATTERN_SUPPORT
             ),
         }
+
+    def get_cycle_history(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Get recent improvement cycle history."""
+        return self._cycle_history[-limit:]
+
+    def record_cycle(self, cycle_data: dict[str, Any]) -> None:
+        """Record a completed improvement cycle."""
+        self._cycle_history.append(cycle_data)
 
     # ── Skill Compounding ───────────────────────────────────────────
 
