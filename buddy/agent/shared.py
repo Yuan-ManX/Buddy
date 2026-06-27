@@ -200,6 +200,335 @@ from agent.agent_collaborative_intelligence import (
     CollaborationPhase, Collaborator, CollaborationContext, Contribution,
     Vote, ConsensusResult, CollaborationSession, collaborative_intelligence,
 )
+from agent.agent_team_architect import (
+    TeamArchitect, TeamConfiguration, TeamPattern, AgentRole as TeamAgentRole,
+    CommunicationProtocol, TeamEvolutionDelta, TeamValidationResult,
+    AgentDefinition, team_architect,
+)
+from agent.agent_evolution_loop import (
+    EvolutionLoop, SkillDefinition, SkillStatus, LearningTrigger,
+    LearningEvent, SkillImprovement, UserModel, NudgeType,
+    ImprovementType, EvolutionConfig, evolution_loop,
+)
+from agent.agent_proactive_engine import (
+    ProactiveEngine, ProactiveTask, ProactiveConfig, DiscoverySource,
+    TaskCategory, TaskPriority, TaskStatus, ExecutionMode,
+    MonitorConfig, proactive_engine,
+)
+
+# AI-native sentience and presence modules
+from agent.agent_sentience_core import (
+    AgentSentienceCore, SentienceState, PerceptionChannel, CognitiveMode,
+    VolitionPriority, ActionType, PerceptionFrame, CognitiveContext,
+    VolitionOutput, ActionResult, ReflectionInsight, SentienceCycle,
+    SentienceConfig, SentienceStats, sentience_core,
+)
+from agent.agent_capability_mesh import (
+    CapabilityMesh, CapabilityDomain, CapabilityType, MaturityLevel,
+    CompositionStrategy, MeshNodeState, CapabilityContract, CapabilityVersion,
+    CapabilityDefinition, CapabilityMatch, CompositionStep, CompositionPlan,
+    StepResult, CompositionResult, ProviderReputation, MeshNode, MeshStats,
+    capability_mesh,
+)
+from agent.agent_presence_engine import (
+    PresenceEngine, PresenceState, ActivityType, AvailabilityMode,
+    ContextCarryover, AgentProfile, PresenceStatus, ActivityRecord,
+    AvailabilitySchedule, SessionContext, PresenceEvent, PresenceStats,
+    presence_engine,
+)
+
+# Agent orchestration and lifecycle modules
+from agent.agent_feedback_orchestrator import (
+    FeedbackOrchestrator, FeedbackSource, FeedbackSeverity, ActionType,
+    ActionStatus, TargetModule, RoutingRuleType, FeedbackSignal,
+    RoutingRule, FeedbackAction, ActionResult, SignalTrend,
+    FeedbackAnomaly, FeedbackAnalytics, FeedbackOrchestratorStats,
+    feedback_orchestrator,
+)
+from agent.agent_session_commander import (
+    SessionCommander, SessionGroup, BatchOpType, BatchOpStatus,
+    SessionState, BatchOperation, SessionSnapshot, SessionBranch,
+    SessionTemplate, SessionCommanderStats, session_commander,
+)
+from agent.agent_runtime_scheduler import (
+    RuntimeScheduler, TaskPriority, DependencyType, TaskStatus,
+    ScheduledTask, TaskDependency, ResourceQuota, ScheduleSlot,
+    SchedulePlan, SchedulerStats, runtime_scheduler,
+)
+from agent.agent_workspace_nexus import (
+    WorkspaceNexus, WorkspaceStatus, SubsystemType, ConnectionStatus,
+    ContextPriority, Workspace, WorkspaceTemplate, SubsystemConnection,
+    ContextFlow, WorkspaceAnalytics, WorkspaceNexusStats, workspace_nexus,
+)
 
 # Buddy Orchestrator instance
 from agent.buddy_orchestrator import buddy_orchestrator, BuddyOrchestrator, OrchestrationMode, OrchestrationStatus, OrchestrationContext, OrchestrationResult
+
+# Next-generation cognitive and platform modules
+from agent.agent_cognitive_engine import (
+    AgentCognitiveEngine, CognitivePhase, CognitiveStrategy, IntentLevel,
+    ExecutionStrategy, ContextSource, ConfidenceLevel, PhaseState,
+    CognitiveLoad, CognitiveEngineConfig, PerceptionInput, PerceptionResult,
+    UnderstandingResult, ReasoningResult, PlanResult, ExecutionResult,
+    ReflectionResult, ContextFragment, ContextFusion, IntentResolution,
+    ToolSelection, ResponseSynthesis, CognitiveMetrics, CognitiveCycleResult,
+    get_cognitive_engine, reset_cognitive_engine,
+)
+from agent.agent_platform_orchestrator import (
+    PlatformOrchestrator, ServiceType, ServiceHealth, WorkflowState,
+    TriggerType, StepExecutionMode, IntegrationStatus, CredentialType,
+    PublishingState, DistributionChannel, MetricType, AlertSeverity,
+    WorkspaceRole, CollaborationMode, ServiceVersion, ServiceHeartbeat,
+    ServiceRegistration, WorkflowTrigger, WorkflowStep, WorkflowDefinition,
+    WorkflowExecution, WorkflowTemplate, IntegrationConnection,
+    PublishingContent, PlatformMetric, PerformanceAlert, CostReport,
+    OptimizationSuggestion, Workspace,
+    get_platform_orchestrator, reset_platform_orchestrator,
+)
+from agent.agent_skill_compiler_pro import (
+    SkillCompilerPro, SkillType, SkillStatus, ExecutionState,
+    CompositionStrategy, ExecutionStrategy as SkillExecutionStrategy,
+    DependencyType as SkillDependencyType, ParamType, TestResult,
+    BenchmarkMetric, SkillDefinition, SkillParameter, SkillSchema,
+    SkillMetadata, SkillInstruction, CompilationResult, ExecutionStep,
+    ExecutionResult as SkillExecutionResult, SkillDependency,
+    CompositionPlan, CompositionResult, MarketplaceListing,
+    TestCase, TestSuiteResult, BenchmarkResult, skill_compiler_pro,
+)
+
+# Comprehensive AI-native runtime modules
+from agent.agent_runtime_store import (
+    AgentRuntimeStore, StoreBackend, SnapshotType, StateStatus,
+    CompressionMode, RuntimeStoreConfig, StateSnapshot, StateDiff,
+    AgentStateRecord, StoreStats, get_runtime_store, reset_runtime_store,
+)
+from agent.agent_conversation_memory import (
+    AgentConversationMemory, MessageRole, MemoryImportance, ConversationStatus,
+    SearchMode, ConversationMemoryConfig, ConversationMessage, ConversationTopic,
+    ConversationSummary, Conversation, SearchResult, ConversationMemoryStats,
+    get_conversation_memory, reset_conversation_memory,
+)
+from agent.agent_streaming_hub import (
+    AgentStreamingHub, StreamProtocol, StreamEventType, StreamState,
+    PipelineStage, StreamingHubConfig, StreamEvent, StreamSession,
+    StreamPipeline, StreamingHubStats, get_streaming_hub, reset_streaming_hub,
+)
+from agent.agent_tool_network import (
+    AgentToolNetwork, ToolCategory, ToolRisk, ToolStatus,
+    ExecutionStrategy as NetworkExecStrategy, CacheStrategy,
+    ToolNetworkConfig, ToolParameter, ToolDefinition, ToolExecution,
+    ToolChain, ToolNetworkStats, get_tool_network, reset_tool_network,
+)
+from agent.agent_code_interpreter import (
+    AgentCodeInterpreter, Language, ExecutionStatus, SessionMode,
+    CodeInterpreterConfig, CodeExecution, CodeSession, CodeInterpreterStats,
+    get_code_interpreter, reset_code_interpreter,
+)
+from agent.agent_analytics_engine import (
+    AgentAnalyticsEngine, MetricType, MetricCategory, InsightType,
+    InsightSeverity, TimeRange, AnalyticsConfig, MetricPoint, MetricSeries,
+    AnalyticsInsight, AgentPerformance, AnalyticsSummary,
+    get_analytics_engine, reset_analytics_engine,
+)
+from agent.agent_execution_compiler import (
+    ExecutionCompiler, ExecutionStrategy, NodeType, NodeStatus,
+    CompileOptimization, CachePolicy, ExecutionCompilerConfig,
+    ExecutionNode, ExecutionGraph, CompileResult, ExecutionStats,
+    get_execution_compiler, reset_execution_compiler,
+)
+from agent.agent_verification_pipeline import (
+    VerificationPipeline, VerificationStage, VerdictCode, SeverityLevel,
+    CorrectionStrategy, FactSource, VerificationPipelineConfig,
+    VerificationIssue, StageResult, VerificationResult, VerificationProfile,
+    VerificationStats, get_verification_pipeline, reset_verification_pipeline,
+)
+from agent.agent_multi_model_conductor import (
+    MultiModelConductor, TaskComplexity, ModelTier, RoutingStrategy,
+    ProviderHealth, EnsembleMethod, ConductorConfig, ModelEndpoint,
+    RoutingDecision, ModelExecution, ConductorStats,
+    get_multi_model_conductor, reset_multi_model_conductor,
+)
+from agent.agent_context_weaver import (
+    ContextWeaver, ContextSource, ContextPriority, WeaveStrategy,
+    CompressionMethod, ContextWeaverConfig, ContextItem, ContextBundle,
+    WeaveConfig, WeaverStats, get_context_weaver, reset_context_weaver,
+)
+from agent.agent_autonomy_framework import (
+    AutonomyFramework, AutonomyLevel, ActionCategory, ApprovalStatus,
+    RiskLevel, GuardrailType, EscalationReason, AutonomyConfig,
+    AutonomyPolicy, Guardrail, ApprovalRequest, ActionAuditEntry,
+    TrustScore, AutonomyStats, get_autonomy_framework, reset_autonomy_framework,
+)
+from agent.agent_platform_intelligence_hub import (
+    PlatformIntelligenceHub, IntelligenceType, IntelligencePriority,
+    IntelligenceStatus, ConfidenceLevel, SignalSource, IntelligenceHubConfig,
+    IntelligenceSignal, IntelligenceReport, HubStats,
+    get_intelligence_hub, reset_intelligence_hub,
+)
+from agent.agent_adaptive_workflows import (
+    AdaptiveWorkflowEngine, WorkflowNodeType, WorkflowStatus, TriggerType,
+    OptimizationStrategy, WorkflowEngineConfig, WorkflowNode,
+    WorkflowDefinition, WorkflowExecution, WorkflowTemplate, WorkflowStats,
+    get_adaptive_workflows, reset_adaptive_workflows,
+)
+from agent.agent_cross_connector import (
+    PlatformCrossConnector, IntegrationProtocol, ConnectionState,
+    CommunicationMode, DataFormat, CrossConnectorConfig,
+    IntegrationConnection, SchemaMapping, IntegrationEvent,
+    IntegrationRequest, ConnectorStats,
+    get_cross_connector, reset_cross_connector,
+)
+
+# Singleton instances for new runtime modules
+runtime_store = get_runtime_store()
+conversation_memory = get_conversation_memory()
+streaming_hub = get_streaming_hub()
+tool_network = get_tool_network()
+code_interpreter = get_code_interpreter()
+analytics_engine = get_analytics_engine()
+execution_compiler = get_execution_compiler()
+verification_pipeline = get_verification_pipeline()
+multi_model_conductor = get_multi_model_conductor()
+context_weaver = get_context_weaver()
+autonomy_framework = get_autonomy_framework()
+intelligence_hub = get_intelligence_hub()
+adaptive_workflows = get_adaptive_workflows()
+cross_connector = get_cross_connector()
+
+# Advanced reasoning and intent modules
+from agent.agent_chain_of_thought import (
+    ChainOfThoughtEngine, ReasoningStrategy, ThoughtType, ThoughtStep,
+    QualityScore, ThoughtResult, get_chain_of_thought, reset_chain_of_thought,
+)
+from agent.agent_intent_resolution import (
+    IntentResolutionEngine, IntentCategory, ComplexityLevel, UrgencyLevel,
+    SignalType, Entity, SubIntent, IntentResult, IntentProfile,
+    get_intent_resolution, reset_intent_resolution,
+)
+from agent.agent_dynamic_adaptation import (
+    DynamicAdaptationEngine, DeviationType, AdaptationStrategy, Severity,
+    DeviationReport, AdaptedPlan, MonitorSession, AdaptationLesson,
+    get_dynamic_adaptation, reset_dynamic_adaptation,
+)
+from agent.agent_uncertainty_quantifier import (
+    UncertaintyQuantifier, UncertaintySource, VerificationPriority, RiskLevel,
+    CalibrationMethod, UncertaintyAssessment, CalibratedAssessment,
+    Alternative, RiskProfile, UncertaintyMetrics,
+    get_uncertainty_quantifier, reset_uncertainty_quantifier,
+)
+
+chain_of_thought = get_chain_of_thought()
+intent_resolution = get_intent_resolution()
+dynamic_adaptation = get_dynamic_adaptation()
+uncertainty_quantifier = get_uncertainty_quantifier()
+
+# Platform intelligence and resilience modules
+from agent.agent_federated_knowledge import (
+    FederatedKnowledgeExchange, KnowledgeType, AccessLevel, MergeStrategy,
+    ConflictResolutionMethod, KnowledgeShare, Subscription, PublishedEntry,
+    MergedKnowledge, ResolvedKnowledge, FederationStats,
+    get_federated_knowledge, reset_federated_knowledge,
+)
+from agent.agent_emergent_behavior import (
+    EmergentBehaviorDetector, PatternType, PatternStatus, PatternCategory,
+    Observation, EmergentPattern, PatternClassification, UtilityAssessment,
+    PromotedPattern, SuppressedPattern, EmergenceReport,
+    get_emergent_behavior, reset_emergent_behavior,
+)
+from agent.agent_performance_autotuner import (
+    PerformanceAutotuner, ComponentType as AutotunerComponentType,
+    BottleneckType, Severity as AutotunerSeverity, OptimizationStrategy,
+    RiskLevel as AutotunerRiskLevel, PerformanceProfile, Bottleneck,
+    OptimizationRecommendation, OptimizationResult, TuningResult, TuningReport,
+    get_performance_autotuner, reset_performance_autotuner,
+)
+from agent.agent_platform_resilience import (
+    PlatformResilienceEngine, ComponentType as ResilienceComponentType,
+    FailureType, ComponentStatus, CircuitState, RecoveryStrategy,
+    HealthStatus, FailureReport, RecoveryResult, CircuitBreaker,
+    ResilienceReport, SimulationResult,
+    get_platform_resilience, reset_platform_resilience,
+)
+
+federated_knowledge = get_federated_knowledge()
+emergent_behavior = get_emergent_behavior()
+performance_autotuner = get_performance_autotuner()
+platform_resilience = get_platform_resilience()
+
+# AI-native personal companion modules
+from agent.agent_personal_memory import (
+    PersonalMemoryEngine, MemoryDimension, MemoryStrength, AccessLevel,
+    ConsolidationStrategy, MemoryEntry, MemoryChain, PersonalProfile,
+    ConsolidationReport, get_personal_memory, reset_personal_memory,
+)
+from agent.agent_voice_interface import (
+    VoiceInterfaceEngine, VoiceCommand, AudioFormat, VoiceProfile,
+    EmotionTone, SpeechLanguage, TranscriptionResult, SynthesisRequest,
+    SynthesisResult, ToneAnalysis, VoiceSession, get_voice_interface,
+    reset_voice_interface,
+)
+from agent.agent_document_intelligence import (
+    DocumentIntelligenceEngine, DocumentFormat, DocumentCategory,
+    ExtractionType, DocumentStatus, DocumentInfo, ExtractionResult,
+    DocumentSummary, SearchResult, CompareResult,
+    get_document_intelligence, reset_document_intelligence,
+)
+from agent.agent_notification_hub import (
+    NotificationHub, NotificationChannel, NotificationPriority,
+    NotificationStatus, NotificationTopic, Notification, Subscription,
+    NotificationTemplate, Digest, get_notification_hub,
+    reset_notification_hub,
+)
+from agent.agent_prompt_studio import (
+    PromptStudio, PromptType, PromptCategory, OptimizationStrategy,
+    ABTestStatus, Prompt, PromptVersion, ABTest, OptimizationResult,
+    PromptChain, get_prompt_studio, reset_prompt_studio,
+)
+from agent.agent_terminal_interface import (
+    TerminalInterface, TerminalMode, OutputFormat, CommandCategory,
+    TerminalCommand, CommandResult, REPLSession, TerminalScript,
+    ScriptResult, get_terminal_interface, reset_terminal_interface,
+)
+from agent.agent_reasoning_network import (
+    AgenticReasoningNetwork, ReasoningStrategy, NodeStatus, PathStatus,
+    ReasoningNode, ReasoningPath, ReasoningResult, NetworkStats,
+    get_reasoning_network, reset_reasoning_network,
+)
+from agent.agent_synthesis_engine import (
+    CollaborativeSynthesisEngine, FusionStrategy, ConflictResolution,
+    ContributionRole, AgentContribution, SynthesisSession, SynthesisResult,
+    get_synthesis_engine, reset_synthesis_engine,
+)
+from agent.agent_research_engine import (
+    AutonomousResearchEngine, ResearchPhase, SourceType, EvidenceQuality,
+    ResearchSource, ResearchHypothesis, ResearchTask, ResearchProject,
+    ResearchReport, get_research_engine, reset_research_engine,
+)
+from agent.agent_learning_loop import (
+    InteractiveLearningLoop, FeedbackType, LearningSignal, AdaptationType,
+    LearningEvent, AdaptationRule, LearningSession, UserPreferenceProfile,
+    get_learning_loop, reset_learning_loop,
+)
+from agent.agent_memory_graph import (
+    ContextualMemoryGraph, EdgeType, NodeCategory, RetrievalStrategy,
+    MemoryNode, MemoryEdge, MemorySubgraph, RetrievalResult,
+    get_memory_graph, reset_memory_graph,
+)
+from agent.agent_understanding_engine import (
+    MultiModalUnderstandingEngine, InputModality, ProcessingMode,
+    ModalityInput, UnderstandingResult, FusionResult,
+    get_understanding_engine, reset_understanding_engine,
+)
+
+personal_memory = get_personal_memory()
+voice_interface = get_voice_interface()
+document_intelligence = get_document_intelligence()
+notification_hub = get_notification_hub()
+prompt_studio = get_prompt_studio()
+terminal_interface = get_terminal_interface()
+reasoning_network = get_reasoning_network()
+synthesis_engine = get_synthesis_engine()
+research_engine = get_research_engine()
+learning_loop = get_learning_loop()
+memory_graph = get_memory_graph()
+understanding_engine = get_understanding_engine()
