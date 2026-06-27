@@ -15,6 +15,8 @@ Core capabilities:
 - Results visualization and reporting
 """
 
+from __future__ import annotations
+
 import uuid
 import time
 import logging
