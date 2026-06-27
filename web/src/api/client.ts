@@ -2843,7 +2843,7 @@ export const api = {
     process: (data: { content: string; modality?: string; processing_mode?: string; metadata?: Record<string, unknown> }) =>
       request<any>('/understanding-engine/process', { method: 'POST', body: JSON.stringify(data) }),
     detect: (content: string) =>
-      request<any>(`/understanding-engine/detect?content=${encodeURIComponent(content)}`, { method: 'POST' }),
+      request<any>('/understanding-engine/detect', { method: 'POST', body: JSON.stringify({ content }) }),
     fuse: (data: { input_ids: string[] }) =>
       request<any>('/understanding-engine/fuse', { method: 'POST', body: JSON.stringify(data) }),
     stats: () => request<any>('/understanding-engine/stats'),
