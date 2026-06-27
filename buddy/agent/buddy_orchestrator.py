@@ -1251,6 +1251,150 @@ class BuddyOrchestrator:
             logger.error(f"Diagnostics failed: {e}")
             return {"error": str(e)}
 
+    # ── Team Architect Integration ───────────────────────────────
+
+    def generate_agent_team(
+        self,
+        domain_description: str,
+        team_name: str = "",
+        preferred_pattern: str = "",
+        complexity: str = "medium",
+        scale: str = "small",
+    ) -> dict[str, Any]:
+        """Generate an agent team architecture from a domain description."""
+        try:
+            from agent.agent_team_architect import team_architect
+            team = team_architect.generate_team(
+                domain_description=domain_description,
+                team_name=team_name,
+                preferred_pattern=preferred_pattern or None,
+                context={"complexity": complexity, "scale": scale},
+            )
+            return {
+                "team_id": team.team_id,
+                "name": team.name,
+                "pattern": team.pattern.value,
+                "domain": team.domain,
+                "description": team.description,
+                "agent_count": len(team.agents),
+                "agents": [
+                    {
+                        "agent_id": a.agent_id,
+                        "name": a.name,
+                        "role": a.role.value,
+                        "description": a.description,
+                        "capabilities": a.capabilities,
+                        "required_skills": a.required_skills,
+                        "model_preference": a.model_preference,
+                        "priority": a.priority,
+                    }
+                    for a in team.agents
+                ],
+                "communication_protocol": team.communication_protocol.value,
+                "coordination_rules": team.coordination_rules,
+                "max_parallel_agents": team.max_parallel_agents,
+                "version": team.version,
+                "created_at": team.created_at,
+            }
+        except Exception as e:
+            logger.error(f"Team generation failed: {e}")
+            return {"error": str(e)}
+
+    def get_team_architect_stats(self) -> dict[str, Any]:
+        """Get team architect statistics."""
+        try:
+            from agent.agent_team_architect import team_architect
+            return team_architect.get_stats()
+        except Exception as e:
+            logger.error(f"Team stats failed: {e}")
+            return {}
+
+    # ── Evolution Loop Integration ───────────────────────────────
+
+    def capture_learning_event(
+        self,
+        description: str,
+        context: str = "",
+        outcome: str = "success",
+        complexity_score: float = 0.0,
+        agent_id: str = "",
+        skills_used: list[str] | None = None,
+        novel_patterns: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Capture a learning event for the evolution loop."""
+        try:
+            from agent.agent_evolution_loop import evolution_loop, LearningEvent, LearningTrigger
+            event = LearningEvent(
+                trigger=LearningTrigger.TASK_COMPLETION,
+                agent_id=agent_id,
+                description=description,
+                context=context,
+                outcome=outcome,
+                complexity_score=complexity_score,
+                skills_used=skills_used or [],
+                novel_patterns=novel_patterns or [],
+            )
+            event_id = evolution_loop.capture_event(event)
+            return {"event_id": event_id, "success": True}
+        except Exception as e:
+            logger.error(f"Learning event capture failed: {e}")
+            return {"error": str(e)}
+
+    def get_evolution_stats(self) -> dict[str, Any]:
+        """Get evolution loop statistics."""
+        try:
+            from agent.agent_evolution_loop import evolution_loop
+            return evolution_loop.get_stats()
+        except Exception as e:
+            logger.error(f"Evolution stats failed: {e}")
+            return {}
+
+    def check_evolution_nudges(self) -> dict[str, Any]:
+        """Check for pending evolution nudges."""
+        try:
+            from agent.agent_evolution_loop import evolution_loop
+            nudges = evolution_loop.check_nudges()
+            return {"nudges": nudges, "count": len(nudges)}
+        except Exception as e:
+            logger.error(f"Nudge check failed: {e}")
+            return {"nudges": [], "count": 0}
+
+    # ── Proactive Engine Integration ─────────────────────────────
+
+    async def start_proactive_discovery(self) -> dict[str, Any]:
+        """Start the proactive task discovery engine."""
+        try:
+            from agent.agent_proactive_engine import proactive_engine
+            await proactive_engine.start()
+            tasks = await proactive_engine.discover_tasks()
+            return {
+                "status": "started",
+                "discovered": len(tasks),
+                "tasks": [t.title for t in tasks],
+            }
+        except Exception as e:
+            logger.error(f"Proactive engine start failed: {e}")
+            return {"error": str(e)}
+
+    async def stop_proactive_discovery(self) -> dict[str, Any]:
+        """Stop the proactive task discovery engine."""
+        try:
+            from agent.agent_proactive_engine import proactive_engine
+            await proactive_engine.stop()
+            return {"status": "stopped"}
+        except Exception as e:
+            logger.error(f"Proactive engine stop failed: {e}")
+            return {"error": str(e)}
+
+    def get_proactive_stats(self) -> dict[str, Any]:
+        """Get proactive engine statistics."""
+        try:
+            from agent.agent_proactive_engine import proactive_engine
+            return proactive_engine.get_stats()
+        except Exception as e:
+            logger.error(f"Proactive stats failed: {e}")
+            return {}
+
 
 # Global orchestrator instance
 buddy_orchestrator = BuddyOrchestrator()
