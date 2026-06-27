@@ -2848,6 +2848,5 @@ export const api = {
       request<any>('/understanding-engine/fuse', { method: 'POST', body: JSON.stringify(data) }),
     stats: () => request<any>('/understanding-engine/stats'),
     results: (limit?: number) => request<any>(`/understanding-engine/results?limit=${limit || 10}`),
-    fusions: (limit?: number) => request<any>(`/understanding-engine/fusions?limit=${limit || 5}`),
   },
 };
