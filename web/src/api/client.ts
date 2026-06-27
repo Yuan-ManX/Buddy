@@ -1931,35 +1931,18 @@ export const api = {
 
   // ── Learning Loop (New) ──
   learningLoop: {
-    status: () =>
-      request<import('../types').LearningLoopStatus>('/learning/status'),
-    observe: (data: { observation_type: string; agent_id: string; session_id?: string; content?: Record<string, unknown>; outcome?: string; metadata?: Record<string, unknown> }) =>
-      request<{ observation_id: string; observation_type: string; recorded: boolean }>('/learning/observe', { method: 'POST', body: JSON.stringify(data) }),
-    extract: (agentId?: string, sessionId?: string) =>
-      request<{ patterns: import('../types').LearningPattern[]; total: number }>('/learning/extract', { method: 'POST', body: JSON.stringify({ agent_id: agentId, session_id: sessionId }) }),
-    compound: (agentId: string) =>
-      request<{ skill_id: string; name: string; confidence: number; steps: number } | { error: string }>('/learning/compound', { method: 'POST', body: JSON.stringify({ agent_id: agentId }) }),
-    evolve: (agentId: string) =>
-      request<{ improvements: Array<Record<string, unknown>>; agent_id: string }>('/learning/evolve', { method: 'POST', body: JSON.stringify({ agent_id: agentId }) }),
-    nudges: () =>
-      request<{ nudges: import('../types').LearningNudge[]; total: number }>('/learning/nudges'),
-    dismissNudge: (nudgeId: string) =>
-      request<{ dismissed: boolean; nudge_id: string }>(`/learning/nudges/${nudgeId}/dismiss`, { method: 'POST' }),
-    actOnNudge: (nudgeId: string) =>
-      request<{ acted_upon: boolean; nudge_id: string }>(`/learning/nudges/${nudgeId}/act`, { method: 'POST' }),
-    runCycle: (agentId: string, sessionId?: string) =>
-      request<Record<string, unknown>>('/learning/cycle', { method: 'POST', body: JSON.stringify({ agent_id: agentId, session_id: sessionId }) }),
-    skills: (tag?: string) => {
-      const qs = tag ? `?tag=${encodeURIComponent(tag)}` : '';
-      return request<{ skills: import('../types').LearningSkill[]; total: number }>(`/learning/skills${qs}`);
-    },
-    patterns: (patternType?: string, minConfidence?: number) => {
-      const params = new URLSearchParams();
-      if (patternType) params.set('pattern_type', patternType);
-      if (minConfidence !== undefined) params.set('min_confidence', String(minConfidence));
-      const qs = params.toString();
-      return request<{ patterns: import('../types').LearningPattern[]; total: number }>(`/learning/patterns${qs ? '?' + qs : ''}`);
-    },
+    createSession: (data: { user_id?: string }) =>
+      request<any>('/learning-loop/session', { method: 'POST', body: JSON.stringify(data) }),
+    recordEvent: (data: { session_id: string; feedback_type?: string; signal?: string; description?: string; context?: string; agent_response?: string; user_reaction?: string; confidence?: number; tags?: string[] }) =>
+      request<any>('/learning-loop/event', { method: 'POST', body: JSON.stringify(data) }),
+    createAdaptation: (data: { adaptation_type?: string; condition?: string; action?: string; confidence?: number }) =>
+      request<any>('/learning-loop/adaptation', { method: 'POST', body: JSON.stringify(data) }),
+    learnFromSession: (sessionId: string) =>
+      request<any>(`/learning-loop/learn?session_id=${encodeURIComponent(sessionId)}`, { method: 'POST' }),
+    getProfile: (userId: string) => request<any>(`/learning-loop/profile/${userId}`),
+    stats: () => request<any>('/learning-loop/stats'),
+    events: (limit?: number) => request<any>(`/learning-loop/events?limit=${limit || 20}`),
+    rules: (limit?: number) => request<any>(`/learning-loop/rules?limit=${limit || 10}`),
   },
 
   // ── Experiment Tracker ──
@@ -2694,5 +2677,177 @@ export const api = {
     listTemplates: () => request<any>('/workspace-nexus/templates'),
     summary: () => request<any>('/workspace-nexus/summary'),
     reset: () => request<any>('/workspace-nexus/reset', { method: 'POST' }),
+  },
+
+  // ── Personal Memory ──
+  personalMemory: {
+    capture: (data: { content: string; dimension?: string; confidence?: number; access_level?: string; tags?: string[]; source?: string }) =>
+      request<any>('/personal-memory/capture', { method: 'POST', body: JSON.stringify(data) }),
+    retrieve: (params: { query?: string; dimension?: string; tags?: string; min_strength?: string; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params.query) qs.set('query', params.query);
+      if (params.dimension) qs.set('dimension', params.dimension);
+      if (params.tags) qs.set('tags', params.tags);
+      if (params.min_strength) qs.set('min_strength', params.min_strength);
+      if (params.limit) qs.set('limit', String(params.limit));
+      return request<any>(`/personal-memory/retrieve?${qs.toString()}`);
+    },
+    profile: () => request<any>('/personal-memory/profile'),
+    consolidate: () => request<any>('/personal-memory/consolidate', { method: 'POST' }),
+    stats: () => request<any>('/personal-memory/stats'),
+  },
+
+  // ── Voice Interface ──
+  voiceInterface: {
+    createSession: () => request<any>('/voice-interface/session', { method: 'POST' }),
+    transcribe: (data: { session_id?: string; audio_text?: string; language?: string }) =>
+      request<any>('/voice-interface/transcribe', { method: 'POST', body: JSON.stringify(data) }),
+    synthesize: (data: { text: string; voice_profile?: string; language?: string; speed?: number; pitch?: number; format?: string }) =>
+      request<any>('/voice-interface/synthesize', { method: 'POST', body: JSON.stringify(data) }),
+    analyzeTone: (data: { session_id?: string; text?: string; energy_level?: number; speaking_rate?: number }) =>
+      request<any>('/voice-interface/analyze-tone', { method: 'POST', body: JSON.stringify(data) }),
+    profiles: () => request<any>('/voice-interface/profiles'),
+    stats: () => request<any>('/voice-interface/stats'),
+  },
+
+  // ── Document Intelligence ──
+  documentIntelligence: {
+    upload: (data: { filename: string; format?: string; content?: string; tags?: string[] }) =>
+      request<any>('/document-intelligence/upload', { method: 'POST', body: JSON.stringify(data) }),
+    list: () => request<any>('/document-intelligence/list'),
+    extract: (data: { doc_id: string; extraction_type?: string }) =>
+      request<any>('/document-intelligence/extract', { method: 'POST', body: JSON.stringify(data) }),
+    summarize: (data: { doc_id: string; max_length?: number }) =>
+      request<any>('/document-intelligence/summarize', { method: 'POST', body: JSON.stringify(data) }),
+    search: (data: { query: string; doc_ids?: string[]; limit?: number }) =>
+      request<any>('/document-intelligence/search', { method: 'POST', body: JSON.stringify(data) }),
+    compare: (data: { doc_a_id: string; doc_b_id: string }) =>
+      request<any>('/document-intelligence/compare', { method: 'POST', body: JSON.stringify(data) }),
+    stats: () => request<any>('/document-intelligence/stats'),
+  },
+
+  // ── Notification Hub ──
+  notificationHub: {
+    send: (data: { title: string; body: string; recipient_id?: string; priority?: string; channel?: string; topic?: string; sender_id?: string; action_url?: string; data?: any }) =>
+      request<any>('/notification-hub/send', { method: 'POST', body: JSON.stringify(data) }),
+    subscribe: (data: { subscriber_id: string; topics?: string[]; channels?: string[] }) =>
+      request<any>('/notification-hub/subscribe', { method: 'POST', body: JSON.stringify(data) }),
+    notifications: (recipientId = '', limit = 50) => {
+      const qs = new URLSearchParams();
+      if (recipientId) qs.set('recipient_id', recipientId);
+      qs.set('limit', String(limit));
+      return request<any>(`/notification-hub/notifications?${qs.toString()}`);
+    },
+    unreadCount: (recipientId = '') => {
+      const qs = recipientId ? `?recipient_id=${recipientId}` : '';
+      return request<any>(`/notification-hub/unread-count${qs}`);
+    },
+    markRead: (notificationId: string) =>
+      request<any>(`/notification-hub/mark-read/${notificationId}`, { method: 'POST' }),
+    createTemplate: (data: { name: string; title_template: string; body_template: string; default_priority?: string; default_channel?: string; variables?: string[] }) =>
+      request<any>('/notification-hub/template', { method: 'POST', body: JSON.stringify(data) }),
+    sendFromTemplate: (data: { template_name: string; recipient_id?: string; variables?: Record<string, string>; channel?: string; priority?: string }) =>
+      request<any>('/notification-hub/send-from-template', { method: 'POST', body: JSON.stringify(data) }),
+    stats: () => request<any>('/notification-hub/stats'),
+  },
+
+  // ── Prompt Studio ──
+  promptStudio: {
+    create: (data: { name: string; content: string; type?: string; category?: string; tags?: string[]; description?: string }) =>
+      request<any>('/prompt-studio/create', { method: 'POST', body: JSON.stringify(data) }),
+    update: (promptId: string, data: { content: string; changelog?: string }) =>
+      request<any>(`/prompt-studio/update/${promptId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    list: () => request<any>('/prompt-studio/list'),
+    get: (promptId: string) => request<any>(`/prompt-studio/${promptId}`),
+    versions: (promptId: string) => request<any>(`/prompt-studio/${promptId}/versions`),
+    createABTest: (data: { name: string; prompt_a_id: string; prompt_b_id: string; metric?: string }) =>
+      request<any>('/prompt-studio/ab-test', { method: 'POST', body: JSON.stringify(data) }),
+    optimize: (data: { prompt_id: string; strategy?: string }) =>
+      request<any>('/prompt-studio/optimize', { method: 'POST', body: JSON.stringify(data) }),
+    createChain: (data: { name: string; steps: string[]; description?: string }) =>
+      request<any>('/prompt-studio/chain', { method: 'POST', body: JSON.stringify(data) }),
+    executeChain: (data: { chain_id: string; variables?: Record<string, string> }) =>
+      request<any>('/prompt-studio/chain/execute', { method: 'POST', body: JSON.stringify(data) }),
+    stats: () => request<any>('/prompt-studio/stats'),
+  },
+
+  // ── Terminal Interface ──
+  terminalInterface: {
+    createSession: () => request<any>('/terminal-interface/session', { method: 'POST' }),
+    execute: (data: { session_id?: string; command_line: string }) =>
+      request<any>('/terminal-interface/execute', { method: 'POST', body: JSON.stringify(data) }),
+    commands: () => request<any>('/terminal-interface/commands'),
+    createScript: (data: { name: string; commands: string[]; description?: string }) =>
+      request<any>('/terminal-interface/script', { method: 'POST', body: JSON.stringify(data) }),
+    runScript: (data: { session_id?: string; script_name: string }) =>
+      request<any>('/terminal-interface/script/run', { method: 'POST', body: JSON.stringify(data) }),
+    scripts: () => request<any>('/terminal-interface/scripts'),
+    stats: () => request<any>('/terminal-interface/stats'),
+  },
+
+  // ── Reasoning Network ──
+  reasoningNetwork: {
+    reason: (data: { question: string; strategies?: string[]; max_paths?: number; prune_threshold?: number; initial_context?: string }) =>
+      request<any>('/reasoning-network/reason', { method: 'POST', body: JSON.stringify(data) }),
+    stats: () => request<any>('/reasoning-network/stats'),
+    results: (limit?: number) => request<any>(`/reasoning-network/results?limit=${limit || 10}`),
+  },
+
+  // ── Synthesis Engine ──
+  synthesisEngine: {
+    createSession: (data: { topic: string; description?: string; fusion_strategy?: string; conflict_resolution?: string }) =>
+      request<any>('/synthesis-engine/session', { method: 'POST', body: JSON.stringify(data) }),
+    addContribution: (data: { session_id: string; agent_name: string; content: string; agent_role?: string; confidence?: number; quality_score?: number; key_points?: string[]; references?: string[] }) =>
+      request<any>('/synthesis-engine/contribution', { method: 'POST', body: JSON.stringify(data) }),
+    synthesize: (sessionId: string) =>
+      request<any>(`/synthesis-engine/synthesize?session_id=${encodeURIComponent(sessionId)}`, { method: 'POST' }),
+    getSession: (sessionId: string) => request<any>(`/synthesis-engine/session/${sessionId}`),
+    stats: () => request<any>('/synthesis-engine/stats'),
+    results: (limit?: number) => request<any>(`/synthesis-engine/results?limit=${limit || 10}`),
+  },
+
+  // ── Research Engine ──
+  researchEngine: {
+    createProject: (data: { title: string; research_question: string; description?: string }) =>
+      request<any>('/research-engine/project', { method: 'POST', body: JSON.stringify(data) }),
+    planResearch: (projectId: string) =>
+      request<any>(`/research-engine/plan?project_id=${encodeURIComponent(projectId)}`, { method: 'POST' }),
+    addSource: (data: { project_id: string; title: string; content: string; source_type?: string; url?: string; credibility?: number; key_findings?: string[] }) =>
+      request<any>('/research-engine/source', { method: 'POST', body: JSON.stringify(data) }),
+    addHypothesis: (data: { project_id: string; statement: string; confidence?: number }) =>
+      request<any>('/research-engine/hypothesis', { method: 'POST', body: JSON.stringify(data) }),
+    generateReport: (projectId: string) =>
+      request<any>(`/research-engine/report?project_id=${encodeURIComponent(projectId)}`, { method: 'POST' }),
+    getProject: (projectId: string) => request<any>(`/research-engine/project/${projectId}`),
+    stats: () => request<any>('/research-engine/stats'),
+    reports: (limit?: number) => request<any>(`/research-engine/reports?limit=${limit || 5}`),
+  },
+
+  // ── Memory Graph ──
+  memoryGraph: {
+    addNode: (data: { content: string; category?: string; importance?: number; confidence?: number; tags?: string[]; embedding_hint?: string }) =>
+      request<any>('/memory-graph/node', { method: 'POST', body: JSON.stringify(data) }),
+    addEdge: (data: { source_id: string; target_id: string; edge_type?: string; weight?: number; description?: string }) =>
+      request<any>('/memory-graph/edge', { method: 'POST', body: JSON.stringify(data) }),
+    retrieve: (data: { query?: string; strategy?: string; start_node_id?: string; max_hops?: number; category?: string; tags?: string[]; min_importance?: number; limit?: number }) =>
+      request<any>('/memory-graph/retrieve', { method: 'POST', body: JSON.stringify(data) }),
+    getSubgraph: (nodeId: string, depth?: number) => request<any>(`/memory-graph/subgraph/${nodeId}?depth=${depth || 2}`),
+    findPath: (sourceId: string, targetId: string, maxHops?: number) => request<any>(`/memory-graph/path?source_id=${encodeURIComponent(sourceId)}&target_id=${encodeURIComponent(targetId)}&max_hops=${maxHops || 5}`),
+    centralNodes: (limit?: number) => request<any>(`/memory-graph/central?limit=${limit || 10}`),
+    prune: () => request<any>('/memory-graph/prune', { method: 'POST' }),
+    stats: () => request<any>('/memory-graph/stats'),
+  },
+
+  // ── Understanding Engine ──
+  understandingEngine: {
+    process: (data: { content: string; modality?: string; processing_mode?: string; metadata?: Record<string, unknown> }) =>
+      request<any>('/understanding-engine/process', { method: 'POST', body: JSON.stringify(data) }),
+    detect: (content: string) =>
+      request<any>(`/understanding-engine/detect?content=${encodeURIComponent(content)}`, { method: 'POST' }),
+    fuse: (data: { input_ids: string[] }) =>
+      request<any>('/understanding-engine/fuse', { method: 'POST', body: JSON.stringify(data) }),
+    stats: () => request<any>('/understanding-engine/stats'),
+    results: (limit?: number) => request<any>(`/understanding-engine/results?limit=${limit || 10}`),
+    fusions: (limit?: number) => request<any>(`/understanding-engine/fusions?limit=${limit || 5}`),
   },
 };
