@@ -15,6 +15,8 @@ Core capabilities:
 - Tagging and categorization: rich metadata for search and filtering
 """
 
+from __future__ import annotations
+
 import math
 import uuid
 import time
