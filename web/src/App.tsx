@@ -142,6 +142,25 @@ import { FederatedKnowledgePanel } from './components/FederatedKnowledgePanel';
 import { EmergentBehaviorPanel } from './components/EmergentBehaviorPanel';
 import { PerformanceAutotunerPanel } from './components/PerformanceAutotunerPanel';
 import { PlatformResiliencePanel } from './components/PlatformResiliencePanel';
+import { AnalyticsEnginePanel } from './components/AnalyticsEnginePanel';
+import { CodeInterpreterPanel } from './components/CodeInterpreterPanel';
+import { ConversationMemoryPanel } from './components/ConversationMemoryPanel';
+import { RuntimeCoordinatorPanel } from './components/RuntimeCoordinatorPanel';
+import { RuntimeStorePanel } from './components/RuntimeStorePanel';
+import { StreamingHubPanel } from './components/StreamingHubPanel';
+import { ToolNetworkPanel } from './components/ToolNetworkPanel';
+import { WhiteboxMemoryPanel } from './components/WhiteboxMemoryPanel';
+import { PersonalMemoryPanel } from './components/PersonalMemoryPanel';
+import { VoiceInterfacePanel } from './components/VoiceInterfacePanel';
+import { DocumentIntelligencePanel } from './components/DocumentIntelligencePanel';
+import { NotificationHubPanel } from './components/NotificationHubPanel';
+import { PromptStudioPanel } from './components/PromptStudioPanel';
+import { TerminalInterfacePanel } from './components/TerminalInterfacePanel';
+import { ReasoningNetworkPanel } from './components/ReasoningNetworkPanel';
+import { SynthesisEnginePanel } from './components/SynthesisEnginePanel';
+import { ResearchEnginePanel } from './components/ResearchEnginePanel';
+import { MemoryGraphPanel } from './components/MemoryGraphPanel';
+import { UnderstandingEnginePanel } from './components/UnderstandingEnginePanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { CommandPalette } from './components/CommandPalette';
@@ -565,7 +584,6 @@ export default function App() {
         {activeTab === 'governance' && <GovernancePanel />}
         {activeTab === 'smartrouter' && <SmartRouterPanel />}
 {activeTab === 'agentmesh' && <AgentMeshPanel />}
-{activeTab === 'learningloop' && <LearningLoopPanel />}
 {activeTab === 'experience' && <ExperiencePanel />}
 {activeTab === 'collabspace' && <CollabSpacePanel />}
 {activeTab === 'contextengine' && <ContextEnginePanel />}
@@ -655,6 +673,38 @@ export default function App() {
 {activeTab === 'emergentBehavior' && <EmergentBehaviorPanel />}
 {activeTab === 'performanceAutotuner' && <PerformanceAutotunerPanel />}
 {activeTab === 'platformResilience' && <PlatformResiliencePanel />}
+{activeTab === 'analyticsEngine' && <AnalyticsEnginePanel />}
+{activeTab === 'codeInterpreter' && <CodeInterpreterPanel />}
+{activeTab === 'conversationMemory' && <ConversationMemoryPanel />}
+{activeTab === 'runtimeCoordinator' && <RuntimeCoordinatorPanel />}
+{activeTab === 'runtimeStore' && <RuntimeStorePanel />}
+{activeTab === 'streamingHub' && <StreamingHubPanel />}
+{activeTab === 'toolNetwork' && <ToolNetworkPanel />}
+{activeTab === 'whiteboxMemory' && <WhiteboxMemoryPanel />}
+{activeTab === 'costAnalytics' && <CostAnalyticsPanel />}
+{activeTab === 'personalMemory' && <PersonalMemoryPanel />}
+{activeTab === 'voiceInterface' && <VoiceInterfacePanel />}
+{activeTab === 'documentIntelligence' && <DocumentIntelligencePanel />}
+{activeTab === 'notificationHub' && <NotificationHubPanel />}
+{activeTab === 'promptStudio' && <PromptStudioPanel />}
+{activeTab === 'terminalInterface' && <TerminalInterfacePanel />}
+{activeTab === 'reasoningNetwork' && <ReasoningNetworkPanel />}
+{activeTab === 'synthesisEngine' && <SynthesisEnginePanel />}
+{activeTab === 'researchEngine' && <ResearchEnginePanel />}
+{activeTab === 'learningLoop' && <LearningLoopPanel />}
+{activeTab === 'memoryGraph' && <MemoryGraphPanel />}
+{activeTab === 'understandingEngine' && <UnderstandingEnginePanel />}
+{activeTab === 'experiments' && <ExperimentPanel />}
+{activeTab === 'issueBoard' && <IssueBoardPanel />}
+{activeTab === 'knowledgeBase' && <KnowledgeBasePanel agent={selectedAgent || { id: '', name: '', role: '', personality: '', instructions: '', avatar: '', is_active: false, created_at: '' }} />}
+{activeTab === 'knowledgeGraph' && <KnowledgeGraphPanel />}
+{activeTab === 'mcpServer' && <MCPServerPanel />}
+{activeTab === 'modelOrchestrator' && <ModelOrchestratorPanel />}
+{activeTab === 'platformHub' && <PlatformHubPanel />}
+{activeTab === 'plugins' && <PluginSystemPanel />}
+{activeTab === 'proactiveDiscovery' && <ProactiveDiscoveryPanel agent={{ id: selectedAgent?.id || '', name: selectedAgent?.name || '' }} />}
+{activeTab === 'runtimeHub' && <RuntimeHubPanel />}
+{activeTab === 'toolExecutor' && <ToolExecutorPanel />}
 
         {/* Agent-specific panels */}
         {selectedAgent && (
@@ -737,7 +787,7 @@ export default function App() {
     )}
 
         {/* Empty state — no agent and no global panel selected */}
-        {!selectedAgent && !['commandCenter', 'overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend', 'agentcore', 'synthesis', 'intelligence', 'runtimepanel', 'skillcompiler', 'conversationsearch', 'governance', 'smartrouter', 'agentmesh', 'learningloop', 'experience', 'collabspace', 'contextengine', 'automation', 'skillfabric', 'usermodel', 'evolvingskills', 'subagentmesh', 'protocol', 'sandbox', 'toolexec', 'modelorch', 'deployment', 'productcomposer', 'agentorchestrator', 'dreammode', 'reflection', 'intent', 'fleet', 'knowledgenetwork', 'reasoning', 'modelproxy', 'toolcomposer', 'contextmanager', 'unifiedconsole', 'experiments', 'unifiedbrain', 'platformcore', 'unifiedagent', 'agentflow', 'profile', 'mcptools', 'goalDecomposer', 'selfReflection', 'memoryConsolidator', 'contextCompressor', 'teamArchitect', 'evolutionLoop', 'proactiveEngine', 'executionCompiler', 'verificationPipeline', 'modelConductor', 'contextWeaver', 'autonomyFramework', 'intelligenceHub', 'adaptiveWorkflows', 'crossConnector'].includes(activeTab) && (
+        {!selectedAgent && !['commandCenter', 'overview', 'dashboard', 'agent-comparison', 'nexus', 'forge', 'board', 'kanban', 'compounding', 'whitememory', 'pipeline', 'capability', 'kgraph', 'memorysync', 'phub', 'guard', 'pulse', 'gateway', 'daemon', 'swarm', 'runtime', 'scheduler', 'studio', 'workflow', 'costs', 'workspaces', 'agentdashboard', 'activity', 'runtimemonitor', 'skillmanager', 'plugins', 'imhub', 'marketplace', 'taskqueue', 'runtimebackend', 'agentcore', 'synthesis', 'intelligence', 'runtimepanel', 'skillcompiler', 'conversationsearch', 'governance', 'smartrouter', 'agentmesh', 'learningloop', 'experience', 'collabspace', 'contextengine', 'automation', 'skillfabric', 'usermodel', 'evolvingskills', 'subagentmesh', 'protocol', 'sandbox', 'toolexec', 'modelorch', 'deployment', 'productcomposer', 'agentorchestrator', 'dreammode', 'reflection', 'intent', 'fleet', 'knowledgenetwork', 'reasoning', 'modelproxy', 'toolcomposer', 'contextmanager', 'unifiedconsole', 'experiments', 'unifiedbrain', 'platformcore', 'unifiedagent', 'agentflow', 'profile', 'mcptools', 'goalDecomposer', 'selfReflection', 'memoryConsolidator', 'contextCompressor', 'teamArchitect', 'evolutionLoop', 'proactiveEngine', 'executionCompiler', 'verificationPipeline', 'modelConductor', 'contextWeaver', 'autonomyFramework', 'intelligenceHub', 'adaptiveWorkflows', 'crossConnector', 'sentienceCore', 'capabilityMesh', 'presenceEngine', 'feedbackOrchestrator', 'sessionCommander', 'runtimeScheduler', 'workspaceNexus', 'chainOfThought', 'intentResolution', 'dynamicAdaptation', 'uncertaintyQuantifier', 'federatedKnowledge', 'emergentBehavior', 'performanceAutotuner', 'platformResilience', 'analyticsEngine', 'codeInterpreter', 'conversationMemory', 'runtimeCoordinator', 'runtimeStore', 'streamingHub', 'toolNetwork', 'whiteboxMemory', 'personalMemory', 'voiceInterface', 'documentIntelligence', 'notificationHub', 'promptStudio', 'terminalInterface', 'reasoningNetwork', 'synthesisEngine', 'researchEngine', 'learningLoop', 'memoryGraph', 'understandingEngine', 'unifiedSystem', 'knowledgeFabric', 'collaborativeIntelligence', 'knowledgeGraphViz', 'skillExplorer', 'codeReview', 'swarmConsole', 'platformConsole', 'costAnalytics', 'issueBoard', 'knowledgeBase', 'knowledgeGraph', 'mcpServer', 'modelOrchestrator', 'platformHub', 'proactiveDiscovery', 'runtimeHub', 'toolExecutor'].includes(activeTab) && (
           <div className="main-empty">
             <div className="main-empty-icon">B</div>
             <h2>Welcome to Buddy</h2>
