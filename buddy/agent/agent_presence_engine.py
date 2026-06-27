@@ -869,4 +869,24 @@ class PresenceEngine:
 # Global Instance
 # ═══════════════════════════════════════════════════════════════
 
+_presence_engine_instance: PresenceEngine | None = None
+
+
+def get_presence_engine() -> PresenceEngine:
+    """Get or create the global presence engine singleton."""
+    global _presence_engine_instance
+    if _presence_engine_instance is None:
+        _presence_engine_instance = PresenceEngine()
+    return _presence_engine_instance
+
+
+def reset_presence_engine():
+    """Reset the global presence engine singleton."""
+    global _presence_engine_instance
+    if _presence_engine_instance is not None:
+        _presence_engine_instance.reset()
+    else:
+        _presence_engine_instance = PresenceEngine()
+
+
 presence_engine = PresenceEngine()
