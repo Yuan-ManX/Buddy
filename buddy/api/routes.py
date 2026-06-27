@@ -37,6 +37,11 @@ from agent.shared import (
     terminal_agent, plan_executor, model_orchestrator,
     deployment_pipeline, telemetry_engine, mcp_connector,
     integration_hub, product_composer,
+    team_architect, evolution_loop, proactive_engine,
+    sentience_core, capability_mesh, presence_engine,
+    feedback_orchestrator, session_commander, runtime_scheduler, workspace_nexus,
+    runtime_store, conversation_memory, streaming_hub,
+    tool_network, code_interpreter, analytics_engine,
 )
 from agent.cost import cost_tracker as cost_tracker_legacy
 from agent.templates import template_registry
@@ -59,6 +64,20 @@ from agent.discovery import agent_discovery, AgentRegistration, AgentCapability
 from agent.resource import resource_manager, ResourceType as ResType, QuotaPeriod
 from agent.workflow import WorkflowPriority, TaskState, BlockerType
 from config.settings import settings
+
+# Evolution loop types for API routes
+from agent.agent_evolution_loop import (
+    SkillStatus as EvolutionSkillStatus,
+    SkillDefinition as EvolutionSkillDefinition,
+    LearningTrigger as EvolutionLearningTrigger,
+    LearningEvent as EvolutionLearningEvent,
+)
+
+# Proactive engine types for API routes
+from agent.agent_proactive_engine import (
+    DiscoverySource as ProactiveDiscoverySource,
+    MonitorConfig as ProactiveMonitorConfig,
+)
 
 logger = logging.getLogger("buddy.api")
 router = APIRouter(prefix="/api")
@@ -11627,7 +11646,8 @@ async def list_agent_mesh_nodes_alias():
 @router.get("/learning-loop/stats")
 async def get_learning_loop_stats_alias():
     """Get learning loop statistics (alias)."""
-    return learning_loop.get_status()
+    from agent.shared import learning_loop
+    return learning_loop.get_stats()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -17696,3 +17716,6473 @@ async def get_agent_fleet_status():
     return await platform_console.get_agent_fleet_status()
 
 
+# ── Team Architect API ───────────────────────────────────────────────
+
+class TeamGenerateRequest(BaseModel):
+    domain_description: str = Field(..., min_length=1, max_length=500)
+    team_name: str = Field(default="", max_length=100)
+    preferred_pattern: str | None = None
+    agent_count: int = Field(default=0, ge=0, le=20)
+    complexity: str = Field(default="medium")
+    scale: str = Field(default="small")
+
+
+class TeamEvolutionRequest(BaseModel):
+    team_id: str = Field(..., min_length=1)
+    changes: list[str] = Field(default_factory=list)
+    success_metrics: dict[str, float] = Field(default_factory=dict)
+    lessons_learned: list[str] = Field(default_factory=list)
+    agent_adjustments: dict[str, dict] = Field(default_factory=dict)
+
+
+@router.get("/team-architect/stats")
+async def get_team_architect_stats():
+    """Get team architect statistics."""
+    from agent.agent_team_architect import team_architect
+    return team_architect.get_stats()
+
+
+@router.get("/team-architect/patterns")
+async def list_team_patterns():
+    """List all available team architecture patterns."""
+    from agent.agent_team_architect import TeamPattern, team_architect
+    return {
+        "patterns": [
+            team_architect.get_pattern_info(p.value)
+            for p in TeamPattern
+        ]
+    }
+
+
+@router.get("/team-architect/pattern/{pattern_name}")
+async def get_pattern_info(pattern_name: str):
+    """Get detailed info about a specific pattern."""
+    from agent.agent_team_architect import team_architect
+    return team_architect.get_pattern_info(pattern_name)
+
+
+@router.post("/team-architect/analyze")
+async def analyze_domain(data: TeamGenerateRequest):
+    """Analyze a domain description to recommend team patterns."""
+    from agent.agent_team_architect import team_architect
+    return team_architect.analyze_domain(
+        domain_description=data.domain_description,
+        context={"complexity": data.complexity, "scale": data.scale},
+    )
+
+
+@router.post("/team-architect/generate")
+async def generate_team(data: TeamGenerateRequest):
+    """Generate a complete team architecture from a domain description."""
+    team = team_architect.generate_team(
+        domain_description=data.domain_description,
+        team_name=data.team_name,
+        preferred_pattern=data.preferred_pattern,
+        context={
+            "agent_count": data.agent_count,
+            "complexity": data.complexity,
+            "scale": data.scale,
+        },
+    )
+    return {
+        "team_id": team.team_id,
+        "name": team.name,
+        "pattern": team.pattern.value,
+        "domain": team.domain,
+        "description": team.description,
+        "agents": [
+            {
+                "agent_id": a.agent_id,
+                "name": a.name,
+                "role": a.role.value,
+                "description": a.description,
+                "capabilities": a.capabilities,
+                "required_skills": a.required_skills,
+                "model_preference": a.model_preference,
+                "priority": a.priority,
+            }
+            for a in team.agents
+        ],
+        "communication_protocol": team.communication_protocol.value,
+        "coordination_rules": team.coordination_rules,
+        "max_parallel_agents": team.max_parallel_agents,
+        "version": team.version,
+        "created_at": team.created_at,
+    }
+
+
+@router.get("/team-architect/teams")
+async def list_teams(pattern: str | None = None):
+    """List all generated teams, optionally filtered by pattern."""
+    teams = team_architect.list_teams(pattern=pattern)
+    return {
+        "teams": [
+            {
+                "team_id": t.team_id,
+                "name": t.name,
+                "pattern": t.pattern.value,
+                "domain": t.domain,
+                "agent_count": len(t.agents),
+                "version": t.version,
+                "created_at": t.created_at,
+            }
+            for t in teams
+        ]
+    }
+
+
+@router.get("/team-architect/teams/{team_id}")
+async def get_team(team_id: str):
+    """Get a specific team configuration."""
+    team = team_architect.get_team(team_id)
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    return {
+        "team_id": team.team_id,
+        "name": team.name,
+        "pattern": team.pattern.value,
+        "domain": team.domain,
+        "description": team.description,
+        "agents": [
+            {
+                "agent_id": a.agent_id,
+                "name": a.name,
+                "role": a.role.value,
+                "description": a.description,
+                "capabilities": a.capabilities,
+                "required_skills": a.required_skills,
+                "model_preference": a.model_preference,
+                "priority": a.priority,
+            }
+            for a in team.agents
+        ],
+        "communication_protocol": team.communication_protocol.value,
+        "coordination_rules": team.coordination_rules,
+        "max_parallel_agents": team.max_parallel_agents,
+        "timeout_seconds": team.timeout_seconds,
+        "version": team.version,
+        "created_at": team.created_at,
+    }
+
+
+@router.post("/team-architect/teams/{team_id}/validate")
+async def validate_team(team_id: str):
+    """Validate a team architecture."""
+    result = team_architect.validate_team(team_id)
+    return {
+        "valid": result.valid,
+        "pattern": result.pattern.value,
+        "issues": result.issues,
+        "warnings": result.warnings,
+        "suggestions": result.suggestions,
+        "coverage_score": result.coverage_score,
+        "efficiency_score": result.efficiency_score,
+        "robustness_score": result.robustness_score,
+    }
+
+
+@router.post("/team-architect/teams/{team_id}/clone")
+async def clone_team(team_id: str, new_name: str = Body(default="", embed=True)):
+    """Clone an existing team configuration."""
+    team = team_architect.clone_team(team_id, new_name)
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+    return {"team_id": team.team_id, "name": team.name, "pattern": team.pattern.value}
+
+
+@router.post("/team-architect/evolve")
+async def capture_evolution(data: TeamEvolutionRequest):
+    """Capture evolution delta from team execution."""
+    delta = team_architect.capture_evolution_delta(
+        team_id=data.team_id,
+        changes=data.changes,
+        success_metrics=data.success_metrics,
+        lessons_learned=data.lessons_learned,
+        agent_adjustments=data.agent_adjustments,
+    )
+    if not delta:
+        raise HTTPException(status_code=404, detail="Team not found")
+    return {
+        "delta_id": delta.delta_id,
+        "team_id": delta.team_id,
+        "changes": delta.changes,
+        "lessons_learned": delta.lessons_learned,
+    }
+
+
+@router.post("/team-architect/reset")
+async def reset_team_architect():
+    """Reset the team architect."""
+    team_architect.reset()
+    return {"status": "reset"}
+
+
+# ── Evolution Loop API ───────────────────────────────────────────────
+
+class LearningEventRequest(BaseModel):
+    trigger: str = Field(default="task_completion")
+    session_id: str = Field(default="")
+    agent_id: str = Field(default="")
+    description: str = Field(default="", max_length=500)
+    context: str = Field(default="", max_length=1000)
+    outcome: str = Field(default="success")
+    complexity_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    novel_patterns: list[str] = Field(default_factory=list)
+    skills_used: list[str] = Field(default_factory=list)
+    tokens_used: int = Field(default=0)
+    duration_ms: float = Field(default=0.0)
+    user_feedback: str = Field(default="")
+
+
+class SkillCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: str = Field(default="", max_length=500)
+    category: str = Field(default="general")
+    triggers: list[str] = Field(default_factory=list)
+    steps: list[str] = Field(default_factory=list)
+    status: str = Field(default="active")
+
+
+class NudgeActionRequest(BaseModel):
+    nudge_index: int = Field(default=0, ge=0)
+    action: str = Field(default="acknowledge")
+
+
+class UserPreferenceRequest(BaseModel):
+    key: str = Field(..., min_length=1)
+    value: str = Field(default="")
+
+
+@router.get("/evolution-loop/stats")
+async def get_evolution_stats():
+    """Get evolution loop statistics."""
+    return evolution_loop.get_stats()
+
+
+@router.get("/evolution-loop/skills")
+async def list_skills(category: str = "", status: str = ""):
+    """List all skills, optionally filtered."""
+    skills = evolution_loop.list_skills(category=category, status=status)
+    return {
+        "skills": [
+            {
+                "skill_id": s.skill_id,
+                "name": s.name,
+                "description": s.description,
+                "category": s.category,
+                "status": s.status.value,
+                "version": s.version,
+                "usage_count": s.usage_count,
+                "success_rate": s.success_rate,
+            }
+            for s in skills
+        ]
+    }
+
+
+@router.post("/evolution-loop/skills")
+async def create_skill(data: SkillCreateRequest):
+    """Register a new skill manually."""
+    try:
+        status = EvolutionSkillStatus(data.status)
+    except ValueError:
+        status = EvolutionSkillStatus.ACTIVE
+    skill = EvolutionSkillDefinition(
+        name=data.name,
+        description=data.description,
+        category=data.category,
+        triggers=data.triggers,
+        steps=data.steps,
+        status=status,
+    )
+    evolution_loop.register_skill(skill)
+    return {"skill_id": skill.skill_id, "name": skill.name, "status": skill.status.value}
+
+
+@router.post("/evolution-loop/events")
+async def capture_learning_event(data: LearningEventRequest):
+    """Capture a learning event from agent execution."""
+    try:
+        trigger = EvolutionLearningTrigger(data.trigger)
+    except ValueError:
+        trigger = EvolutionLearningTrigger.TASK_COMPLETION
+
+    event = EvolutionLearningEvent(
+        trigger=trigger,
+        session_id=data.session_id,
+        agent_id=data.agent_id,
+        description=data.description,
+        context=data.context,
+        outcome=data.outcome,
+        complexity_score=data.complexity_score,
+        novel_patterns=data.novel_patterns,
+        skills_used=data.skills_used,
+        tokens_used=data.tokens_used,
+        duration_ms=data.duration_ms,
+        user_feedback=data.user_feedback,
+    )
+    event_id = evolution_loop.capture_event(event)
+    return {"event_id": event_id, "trigger": event.trigger.value}
+
+
+@router.get("/evolution-loop/nudges")
+async def check_nudges():
+    """Check for pending memory nudges."""
+    nudges = evolution_loop.check_nudges()
+    return {"nudges": nudges, "count": len(nudges)}
+
+
+@router.post("/evolution-loop/nudges/process")
+async def process_nudge(data: NudgeActionRequest):
+    """Process a nudge response."""
+    return evolution_loop.process_nudge(data.nudge_index, data.action)
+
+
+@router.get("/evolution-loop/user-model")
+async def get_user_model(user_id: str = "default"):
+    """Get the accumulated user model."""
+    model = evolution_loop.get_user_model(user_id)
+    if not model:
+        return {"user_id": user_id, "message": "No model data yet"}
+    return model
+
+
+@router.post("/evolution-loop/user-model/preference")
+async def update_user_preference(data: UserPreferenceRequest):
+    """Update a user preference in the model."""
+    evolution_loop.update_user_preference(data.key, data.value)
+    return {"key": data.key, "updated": True}
+
+
+@router.post("/evolution-loop/compress")
+async def compress_trajectories(max_events: int = Body(default=100, embed=True)):
+    """Compress older learning events into summaries."""
+    return evolution_loop.compress_trajectories(max_events)
+
+
+@router.post("/evolution-loop/reset")
+async def reset_evolution_loop():
+    """Reset the evolution loop."""
+    evolution_loop.reset()
+    return {"status": "reset"}
+
+
+# ── Proactive Engine API ─────────────────────────────────────────────
+
+class ProactiveConfigRequest(BaseModel):
+    max_concurrent_tasks: int = Field(default=3, ge=1, le=20)
+    max_queue_size: int = Field(default=50, ge=1, le=200)
+    idle_threshold_seconds: int = Field(default=60, ge=10, le=3600)
+    discovery_interval_seconds: int = Field(default=300, ge=60, le=86400)
+    auto_deliver: bool = Field(default=True)
+    enable_monitors: bool = Field(default=True)
+
+
+class MonitorRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    source: str = Field(default="scheduled_check")
+    check_interval_seconds: int = Field(default=3600, ge=60, le=86400)
+    enabled: bool = Field(default=True)
+
+
+@router.get("/proactive-engine/stats")
+async def get_proactive_stats():
+    """Get proactive engine statistics."""
+    return proactive_engine.get_stats()
+
+
+@router.get("/proactive-engine/queue")
+async def get_task_queue():
+    """Get current task queue status."""
+    return {"queue": proactive_engine.get_queue(), "size": len(proactive_engine.get_queue())}
+
+
+@router.get("/proactive-engine/completed")
+async def get_completed_tasks(limit: int = Query(default=20, ge=1, le=100)):
+    """Get recently completed tasks."""
+    return {"completed": proactive_engine.get_completed_tasks(limit), "limit": limit}
+
+
+@router.post("/proactive-engine/discover")
+async def discover_tasks():
+    """Run task discovery now."""
+    tasks = await proactive_engine.discover_tasks()
+    return {
+        "discovered": len(tasks),
+        "tasks": [
+            {
+                "task_id": t.task_id,
+                "title": t.title,
+                "category": t.category.value,
+                "priority": t.priority.value,
+                "source": t.source.value,
+            }
+            for t in tasks
+        ],
+    }
+
+
+@router.post("/proactive-engine/execute")
+async def execute_next_task():
+    """Execute the next task in the queue."""
+    task = await proactive_engine.execute_next()
+    if not task:
+        return {"message": "No tasks in queue"}
+    return {
+        "task_id": task.task_id,
+        "title": task.title,
+        "status": task.status.value,
+        "result": task.result,
+    }
+
+
+@router.post("/proactive-engine/skip/{task_id}")
+async def skip_task(task_id: str):
+    """Skip a queued task."""
+    if proactive_engine.skip_task(task_id):
+        return {"task_id": task_id, "status": "skipped"}
+    raise HTTPException(status_code=404, detail="Task not found")
+
+
+@router.post("/proactive-engine/prioritize/{task_id}")
+async def prioritize_task(task_id: str, priority: str = Body(default="high", embed=True)):
+    """Change the priority of a queued task."""
+    if proactive_engine.prioritize_task(task_id, priority):
+        return {"task_id": task_id, "priority": priority}
+    raise HTTPException(status_code=404, detail="Task not found")
+
+
+@router.post("/proactive-engine/clear-completed")
+async def clear_completed_tasks():
+    """Clear completed task history."""
+    count = proactive_engine.clear_completed()
+    return {"cleared": count}
+
+
+@router.get("/proactive-engine/monitors")
+async def get_monitors():
+    """Get all monitor configurations."""
+    return {"monitors": proactive_engine.get_monitors()}
+
+
+@router.post("/proactive-engine/monitors")
+async def add_monitor(data: MonitorRequest):
+    """Add a new monitor."""
+    try:
+        source = ProactiveDiscoverySource(data.source)
+    except ValueError:
+        source = ProactiveDiscoverySource.SCHEDULED_CHECK
+    monitor = ProactiveMonitorConfig(
+        name=data.name,
+        source=source,
+        check_interval_seconds=data.check_interval_seconds,
+        enabled=data.enabled,
+    )
+    monitor_id = proactive_engine.add_monitor(monitor)
+    return {"monitor_id": monitor_id, "name": monitor.name}
+
+
+@router.post("/proactive-engine/monitors/{monitor_id}/toggle")
+async def toggle_monitor(monitor_id: str, enabled: bool = Body(default=True, embed=True)):
+    """Enable or disable a monitor."""
+    if proactive_engine.toggle_monitor(monitor_id, enabled):
+        return {"monitor_id": monitor_id, "enabled": enabled}
+    raise HTTPException(status_code=404, detail="Monitor not found")
+
+
+@router.post("/proactive-engine/start")
+async def start_proactive_engine():
+    """Start the proactive engine."""
+    await proactive_engine.start()
+    return {"status": "started"}
+
+
+@router.post("/proactive-engine/stop")
+async def stop_proactive_engine():
+    """Stop the proactive engine."""
+    await proactive_engine.stop()
+    return {"status": "stopped"}
+
+
+@router.get("/proactive-engine/idle")
+async def get_idle_status():
+    """Get idle status information."""
+    return {
+        "is_idle": proactive_engine.is_idle(),
+        "idle_duration_seconds": proactive_engine.get_idle_duration_seconds(),
+    }
+
+
+@router.post("/proactive-engine/reset")
+async def reset_proactive_engine():
+    """Reset the proactive engine."""
+    proactive_engine.reset()
+    return {"status": "reset"}
+
+
+# ── Sentience Core API ─────────────────────────────────────
+
+class SentienceIdentityUpdate(BaseModel):
+    name: str | None = None
+    role: str | None = None
+    traits: dict[str, Any] | None = None
+
+
+class SentienceCycleRequest(BaseModel):
+    channel: str = "text"
+    content: dict[str, Any] = Field(default_factory=dict)
+    intensity: float = Field(default=0.5, ge=0.0, le=1.0)
+    urgency: float = Field(default=0.0, ge=0.0, le=1.0)
+    source_id: str = ""
+    mode: str | None = None
+
+
+@router.get("/sentience/stats")
+async def get_sentience_stats():
+    """Get sentience core statistics."""
+    return sentience_core.stats.to_dict()
+
+
+@router.get("/sentience/state")
+async def get_sentience_state():
+    """Get full sentience core state."""
+    return sentience_core.get_full_state()
+
+
+@router.get("/sentience/identity")
+async def get_sentience_identity():
+    """Get agent identity."""
+    return sentience_core.identity
+
+
+@router.put("/sentience/identity")
+async def update_sentience_identity(data: SentienceIdentityUpdate):
+    """Update agent identity."""
+    sentience_core.set_identity(
+        name=data.name or "",
+        role=data.role or "",
+        traits=data.traits,
+    )
+    return sentience_core.identity
+
+
+@router.get("/sentience/cycles")
+async def get_sentience_cycles(limit: int = 20):
+    """Get recent sentience cycles."""
+    return sentience_core.get_cycle_history(limit=limit)
+
+
+@router.get("/sentience/insights")
+async def get_sentience_insights(limit: int = 20):
+    """Get recent reflection insights."""
+    return sentience_core.get_reflection_insights(limit=limit)
+
+
+@router.get("/sentience/goals")
+async def get_sentience_goals(status: str = "active"):
+    """Get goals by status."""
+    return sentience_core.get_goals(status=status)
+
+
+@router.post("/sentience/goals/{goal_id}/complete")
+async def complete_sentience_goal(goal_id: str):
+    """Mark a goal as completed."""
+    if sentience_core.complete_goal(goal_id):
+        return {"status": "completed", "goal_id": goal_id}
+    raise HTTPException(status_code=404, detail="Goal not found")
+
+
+@router.get("/sentience/perceptions")
+async def get_sentience_perceptions(limit: int = 10):
+    """Get recent perception frames."""
+    return sentience_core.get_perception_buffer(limit=limit)
+
+
+@router.post("/sentience/cycle")
+async def run_sentience_cycle(data: SentienceCycleRequest):
+    """Execute a complete sentience cycle."""
+    from agent.agent_sentience_core import PerceptionChannel, CognitiveMode
+    channel = PerceptionChannel(data.channel)
+    mode = CognitiveMode(data.mode) if data.mode else None
+    cycle = await sentience_core.run_cycle(
+        channel=channel,
+        content=data.content,
+        intensity=data.intensity,
+        urgency=data.urgency,
+        source_id=data.source_id,
+        mode=mode,
+    )
+    return cycle.to_dict()
+
+
+@router.post("/sentience/reset")
+async def reset_sentience():
+    """Reset the sentience core."""
+    sentience_core.reset()
+    return {"status": "reset"}
+
+
+# ── Capability Mesh API ────────────────────────────────────
+
+class CapabilityRegisterRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    description: str = ""
+    domain: str = "custom"
+    cap_type: str = "function"
+    maturity: str = "beta"
+    tags: list[str] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
+    estimated_cost_ms: float = 0.0
+    estimated_tokens: int = 0
+    provider_id: str = ""
+
+
+class CapabilityComposeRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    description: str = ""
+    capability_ids: list[str] = Field(..., min_length=1)
+    strategy: str = "sequential"
+
+
+class CapabilityAutoComposeRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    max_steps: int = Field(default=5, ge=1, le=20)
+    strategy: str = "sequential"
+
+
+class CapabilityExecuteRequest(BaseModel):
+    plan_id: str = Field(...)
+    initial_input: Any = None
+
+
+class MeshNodeRegisterRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    address: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/capability-mesh/stats")
+async def get_capability_mesh_stats():
+    """Get capability mesh statistics."""
+    return capability_mesh.get_stats().to_dict()
+
+
+@router.get("/capability-mesh/capabilities")
+async def list_capabilities(
+    domain: str | None = None,
+    cap_type: str | None = None,
+    maturity: str | None = None,
+    limit: int = 50,
+):
+    """List registered capabilities."""
+    capabilities = capability_mesh.list_capabilities(
+        domain=domain, cap_type=cap_type, maturity=maturity, limit=limit,
+    )
+    return {"capabilities": [c.to_dict() for c in capabilities]}
+
+
+@router.post("/capability-mesh/capabilities")
+async def register_capability(data: CapabilityRegisterRequest):
+    """Register a new capability."""
+    from agent.agent_capability_mesh import CapabilityDomain, CapabilityType, MaturityLevel
+    cap = capability_mesh.register(
+        name=data.name,
+        description=data.description,
+        domain=CapabilityDomain(data.domain),
+        cap_type=CapabilityType(data.cap_type),
+        maturity=MaturityLevel(data.maturity),
+        tags=data.tags,
+        dependencies=data.dependencies,
+        estimated_cost_ms=data.estimated_cost_ms,
+        estimated_tokens=data.estimated_tokens,
+        provider_id=data.provider_id,
+    )
+    return cap.to_dict()
+
+
+@router.delete("/capability-mesh/capabilities/{capability_id}")
+async def unregister_capability(capability_id: str):
+    """Unregister a capability."""
+    if capability_mesh.unregister(capability_id):
+        return {"status": "unregistered"}
+    raise HTTPException(status_code=404, detail="Capability not found")
+
+
+@router.get("/capability-mesh/discover")
+async def discover_capabilities(
+    q: str,
+    domain: str | None = None,
+    cap_type: str | None = None,
+    min_trust: float = 0.0,
+    limit: int = 10,
+):
+    """Discover capabilities by query."""
+    matches = capability_mesh.discover(
+        query=q, domain=domain, cap_type=cap_type,
+        min_trust=min_trust, limit=limit,
+    )
+    return {"matches": [m.to_dict() for m in matches]}
+
+
+@router.post("/capability-mesh/compose")
+async def compose_capabilities(data: CapabilityComposeRequest):
+    """Create a composition plan."""
+    from agent.agent_capability_mesh import CompositionStrategy
+    plan = capability_mesh.compose(
+        name=data.name,
+        description=data.description,
+        capability_ids=data.capability_ids,
+        strategy=CompositionStrategy(data.strategy),
+    )
+    return plan.to_dict()
+
+
+@router.post("/capability-mesh/auto-compose")
+async def auto_compose_capabilities(data: CapabilityAutoComposeRequest):
+    """Auto-compose capabilities from a query."""
+    from agent.agent_capability_mesh import CompositionStrategy
+    plan = capability_mesh.auto_compose(
+        query=data.query,
+        max_steps=data.max_steps,
+        strategy=CompositionStrategy(data.strategy),
+    )
+    if plan is None:
+        raise HTTPException(status_code=404, detail="No matching capabilities found")
+    return plan.to_dict()
+
+
+@router.post("/capability-mesh/execute")
+async def execute_composition(data: CapabilityExecuteRequest):
+    """Execute a composition plan."""
+    plan = None
+    for p in capability_mesh._compositions:
+        if p.plan_id == data.plan_id:
+            plan = p
+            break
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Composition plan not found")
+    result = await capability_mesh.execute(plan, initial_input=data.initial_input)
+    return result.to_dict()
+
+
+@router.get("/capability-mesh/plans")
+async def list_composition_plans():
+    """List all composition plans."""
+    return {"plans": [p.to_dict() for p in capability_mesh._compositions]}
+
+
+@router.get("/capability-mesh/domain-coverage")
+async def get_domain_coverage():
+    """Get domain coverage analysis."""
+    return capability_mesh.get_domain_coverage()
+
+
+@router.get("/capability-mesh/providers")
+async def get_providers():
+    """Get provider reputations."""
+    return {"providers": [p.to_dict() for p in capability_mesh.get_providers()]}
+
+
+@router.post("/capability-mesh/nodes")
+async def register_mesh_node(data: MeshNodeRegisterRequest):
+    """Register a peer mesh node."""
+    node = capability_mesh.register_node(
+        name=data.name, address=data.address, metadata=data.metadata,
+    )
+    return node.to_dict()
+
+
+@router.get("/capability-mesh/nodes")
+async def get_mesh_nodes(state: str | None = None):
+    """Get mesh nodes."""
+    return {"nodes": [n.to_dict() for n in capability_mesh.get_nodes(state=state)]}
+
+
+@router.post("/capability-mesh/nodes/{node_id}/heartbeat")
+async def update_node_heartbeat(node_id: str):
+    """Update node heartbeat."""
+    if capability_mesh.update_node_heartbeat(node_id):
+        return {"status": "heartbeat_updated"}
+    raise HTTPException(status_code=404, detail="Node not found")
+
+
+@router.post("/capability-mesh/reset")
+async def reset_capability_mesh():
+    """Reset the capability mesh."""
+    capability_mesh.reset()
+    return {"status": "reset"}
+
+
+# ── Presence Engine API ────────────────────────────────────
+
+class PresenceProfileCreate(BaseModel):
+    agent_id: str = Field(..., min_length=1)
+    display_name: str = ""
+    bio: str = ""
+    role: str = ""
+    expertise: list[str] = Field(default_factory=list)
+    traits: dict[str, Any] = Field(default_factory=dict)
+
+
+class PresenceSetRequest(BaseModel):
+    agent_id: str = Field(..., min_length=1)
+    state: str = "online"
+    status_message: str = ""
+    platforms: list[str] | None = None
+
+
+class PresenceScheduleRequest(BaseModel):
+    agent_id: str = Field(..., min_length=1)
+    mode: str = "always"
+    active_days: list[int] | None = None
+    active_hours_start: str = "00:00"
+    active_hours_end: str = "23:59"
+    max_concurrent_sessions: int = 10
+    auto_away_after_ms: int = 300000
+    auto_offline_after_ms: int = 1800000
+
+
+class PresenceContextSave(BaseModel):
+    agent_id: str = Field(..., min_length=1)
+    previous_session_id: str = ""
+    summary: str = ""
+    key_points: list[str] = Field(default_factory=list)
+    active_topics: list[str] = Field(default_factory=list)
+    pending_items: list[dict[str, Any]] = Field(default_factory=list)
+    user_preferences: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/presence/stats")
+async def get_presence_stats(agent_id: str | None = None):
+    """Get presence statistics."""
+    return presence_engine.get_stats(agent_id=agent_id)
+
+
+@router.post("/presence/profiles")
+async def create_presence_profile(data: PresenceProfileCreate):
+    """Create an agent presence profile."""
+    profile = presence_engine.create_profile(
+        agent_id=data.agent_id,
+        display_name=data.display_name,
+        bio=data.bio,
+        role=data.role,
+        expertise=data.expertise,
+        traits=data.traits,
+    )
+    return profile.to_dict()
+
+
+@router.get("/presence/profiles/{agent_id}")
+async def get_presence_profile(agent_id: str):
+    """Get an agent's presence profile."""
+    profile = presence_engine.get_profile(agent_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return profile.to_dict()
+
+
+@router.put("/presence/profiles/{agent_id}")
+async def update_presence_profile(agent_id: str, data: dict[str, Any]):
+    """Update an agent's presence profile."""
+    profile = presence_engine.update_profile(agent_id, **data)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return profile.to_dict()
+
+
+@router.post("/presence/set")
+async def set_presence(data: PresenceSetRequest):
+    """Set agent presence state."""
+    from agent.agent_presence_engine import PresenceState
+    status = presence_engine.set_presence(
+        agent_id=data.agent_id,
+        state=PresenceState(data.state),
+        status_message=data.status_message,
+        platforms=data.platforms,
+    )
+    if status is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return status.to_dict()
+
+
+@router.get("/presence/{agent_id}")
+async def get_presence(agent_id: str):
+    """Get current presence status."""
+    status = presence_engine.get_presence(agent_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return status.to_dict()
+
+
+@router.get("/presence")
+async def get_all_presence():
+    """Get all agent presence states."""
+    return {"presence": [p.to_dict() for p in presence_engine.get_all_presence()]}
+
+
+@router.post("/presence/{agent_id}/connect")
+async def connect_presence(agent_id: str, platform: str = "web"):
+    """Mark agent as connected."""
+    status = presence_engine.connect(agent_id, platform=platform)
+    if status is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return status.to_dict()
+
+
+@router.post("/presence/{agent_id}/disconnect")
+async def disconnect_presence(agent_id: str, platform: str = "web"):
+    """Mark agent as disconnected."""
+    status = presence_engine.disconnect(agent_id, platform=platform)
+    if status is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return status.to_dict()
+
+
+@router.post("/presence/{agent_id}/heartbeat")
+async def heartbeat_presence(agent_id: str):
+    """Send heartbeat for an agent."""
+    if presence_engine.heartbeat(agent_id):
+        return {"status": "heartbeat_received"}
+    raise HTTPException(status_code=404, detail="Agent not found")
+
+
+@router.get("/presence/{agent_id}/available")
+async def check_availability(agent_id: str):
+    """Check if agent is available."""
+    return {"agent_id": agent_id, "available": presence_engine.is_available(agent_id)}
+
+
+@router.get("/presence/{agent_id}/activity")
+async def get_current_activity(agent_id: str):
+    """Get current activity."""
+    activity = presence_engine.get_current_activity(agent_id)
+    if activity is None:
+        return {"activity": None}
+    return {"activity": activity.to_dict()}
+
+
+@router.get("/presence/{agent_id}/timeline")
+async def get_activity_timeline(agent_id: str, limit: int = 50, activity_type: str | None = None):
+    """Get activity timeline."""
+    activities = presence_engine.get_activity_timeline(
+        agent_id=agent_id, limit=limit, activity_type=activity_type,
+    )
+    return {"activities": [a.to_dict() for a in activities]}
+
+
+@router.post("/presence/schedule")
+async def set_availability_schedule(data: PresenceScheduleRequest):
+    """Set availability schedule."""
+    from agent.agent_presence_engine import AvailabilityMode
+    schedule = presence_engine.set_schedule(
+        agent_id=data.agent_id,
+        mode=AvailabilityMode(data.mode),
+        active_days=data.active_days,
+        active_hours_start=data.active_hours_start,
+        active_hours_end=data.active_hours_end,
+        max_concurrent_sessions=data.max_concurrent_sessions,
+        auto_away_after_ms=data.auto_away_after_ms,
+        auto_offline_after_ms=data.auto_offline_after_ms,
+    )
+    return schedule.to_dict()
+
+
+@router.get("/presence/schedule/{agent_id}")
+async def get_availability_schedule(agent_id: str):
+    """Get availability schedule."""
+    schedule = presence_engine.get_schedule(agent_id)
+    if schedule is None:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return schedule.to_dict()
+
+
+@router.post("/presence/context/save")
+async def save_session_context(data: PresenceContextSave):
+    """Save session context for continuity."""
+    context = presence_engine.save_session_context(
+        agent_id=data.agent_id,
+        previous_session_id=data.previous_session_id,
+        summary=data.summary,
+        key_points=data.key_points,
+        active_topics=data.active_topics,
+        pending_items=data.pending_items,
+        user_preferences=data.user_preferences,
+    )
+    return context.to_dict()
+
+
+@router.get("/presence/context/{agent_id}")
+async def get_session_context(agent_id: str):
+    """Get session context."""
+    context = presence_engine.get_session_context(agent_id)
+    if context is None:
+        raise HTTPException(status_code=404, detail="Context not found")
+    return context.to_dict()
+
+
+@router.get("/presence/context/{agent_id}/prompt")
+async def get_continuity_prompt(agent_id: str):
+    """Get continuity prompt from saved context."""
+    prompt = presence_engine.build_continuity_prompt(agent_id)
+    return {"prompt": prompt, "agent_id": agent_id}
+
+
+@router.get("/presence/events")
+async def get_presence_events(agent_id: str | None = None, limit: int = 50):
+    """Get presence events."""
+    events = presence_engine.get_events(agent_id=agent_id, limit=limit)
+    return {"events": [e.to_dict() for e in events]}
+
+
+@router.post("/presence/reset")
+async def reset_presence(agent_id: str | None = None):
+    """Reset presence data."""
+    presence_engine.reset(agent_id=agent_id)
+    return {"status": "reset"}
+
+
+# ── Feedback Orchestrator API ──────────────────────────────
+
+class FeedbackCollectRequest(BaseModel):
+    source: str = Field(..., description="Feedback source: user_explicit, user_implicit, execution, self_reflection, system")
+    severity: str = Field(default="medium")
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    target_module: str = "general"
+    payload: dict[str, Any] = Field(default_factory=dict)
+    session_id: str = ""
+    agent_id: str = ""
+
+
+class FeedbackRouteRuleRequest(BaseModel):
+    rule_type: str = Field(default="exact_source")
+    source_filter: str = ""
+    target_filter: str = ""
+    severity_threshold: str = "low"
+    action_type: str = "flag_for_review"
+    target_module: str = "general"
+    action_params: dict[str, Any] = Field(default_factory=dict)
+    priority: int = Field(default=5, ge=1, le=10)
+
+
+@router.get("/feedback-orchestrator/stats")
+async def get_feedback_stats():
+    """Get feedback orchestrator statistics."""
+    return feedback_orchestrator.get_stats().to_dict()
+
+@router.get("/feedback-orchestrator/channels")
+async def list_feedback_channels():
+    """List available feedback channels."""
+    from agent.agent_feedback_orchestrator import FeedbackSource
+    return [{"id": s.value, "name": s.name} for s in FeedbackSource]
+
+
+@router.post("/feedback-orchestrator/collect")
+async def collect_feedback(data: FeedbackCollectRequest):
+    """Collect feedback from any source."""
+    from agent.agent_feedback_orchestrator import FeedbackSource, FeedbackSeverity
+    signal = feedback_orchestrator.collect_feedback(
+        source=FeedbackSource(data.source),
+        signal_data={
+            "severity": FeedbackSeverity(data.severity),
+            "confidence": data.confidence,
+            "target_module": data.target_module,
+            "payload": data.payload,
+            "session_id": data.session_id,
+            "agent_id": data.agent_id,
+        },
+    )
+    return signal.to_dict()
+
+
+@router.post("/feedback-orchestrator/route")
+async def route_feedback(data: FeedbackCollectRequest):
+    """Collect and route feedback to get actions."""
+    from agent.agent_feedback_orchestrator import FeedbackSource, FeedbackSeverity
+    signal = feedback_orchestrator.collect_feedback(
+        source=FeedbackSource(data.source),
+        signal_data={
+            "severity": FeedbackSeverity(data.severity),
+            "confidence": data.confidence,
+            "target_module": data.target_module,
+            "payload": data.payload,
+            "session_id": data.session_id,
+            "agent_id": data.agent_id,
+        },
+    )
+    actions = feedback_orchestrator.route_feedback(signal)
+    return {"signal": signal.to_dict(), "actions": [a.to_dict() for a in actions]}
+
+
+@router.post("/feedback-orchestrator/execute")
+async def execute_feedback_actions(data: FeedbackCollectRequest):
+    """Collect, route, and execute feedback actions."""
+    from agent.agent_feedback_orchestrator import FeedbackSource, FeedbackSeverity
+    signal = feedback_orchestrator.collect_feedback(
+        source=FeedbackSource(data.source),
+        signal_data={
+            "severity": FeedbackSeverity(data.severity),
+            "confidence": data.confidence,
+            "target_module": data.target_module,
+            "payload": data.payload,
+            "session_id": data.session_id,
+            "agent_id": data.agent_id,
+        },
+    )
+    actions = feedback_orchestrator.route_feedback(signal)
+    results = feedback_orchestrator.execute_actions(actions)
+    return {
+        "signal": signal.to_dict(),
+        "actions": [a.to_dict() for a in actions],
+        "results": [r.to_dict() for r in results],
+    }
+
+
+@router.get("/feedback-orchestrator/analytics")
+async def get_feedback_analytics(window_hours: int = 24):
+    """Get feedback analytics for a time window."""
+    analytics = feedback_orchestrator.get_analytics(window_hours=window_hours)
+    return analytics.to_dict()
+
+
+@router.post("/feedback-orchestrator/routing-rules")
+async def add_feedback_routing_rule(data: FeedbackRouteRuleRequest):
+    """Add a routing rule."""
+    from agent.agent_feedback_orchestrator import RoutingRule, ActionType, RoutingRuleType, TargetModule
+    # Safely convert target_module to enum, falling back to GENERAL
+    target_str = data.target_module if data.target_module in (
+        t.value for t in TargetModule
+    ) else "general"
+    rule = RoutingRule(
+        rule_type=RoutingRuleType(data.rule_type),
+        match_value=data.source_filter or data.target_filter or "",
+        action_type=ActionType(data.action_type),
+        priority=data.priority,
+    )
+    feedback_orchestrator.add_routing_rule(rule)
+    return {"status": "rule_added", "rule_id": rule.rule_id}
+
+
+@router.delete("/feedback-orchestrator/routing-rules/{rule_id}")
+async def remove_feedback_routing_rule(rule_id: str):
+    """Remove a routing rule by ID."""
+    if feedback_orchestrator.remove_routing_rule(rule_id):
+        return {"status": "rule_removed"}
+    raise HTTPException(status_code=404, detail="Rule not found")
+
+
+@router.post("/feedback-orchestrator/reset")
+async def reset_feedback_orchestrator():
+    """Reset the feedback orchestrator."""
+    feedback_orchestrator.reset()
+    return {"status": "reset"}
+
+
+# ── Session Commander API ──────────────────────────────────
+
+class SessionGroupCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    description: str = ""
+    session_ids: list[str] = Field(default_factory=list)
+    parent_id: str = ""
+
+
+class SessionBatchRequest(BaseModel):
+    session_ids: list[str] = Field(..., min_length=1)
+
+
+class SessionSnapshotCreate(BaseModel):
+    session_id: str = Field(..., min_length=1)
+    description: str = ""
+    state: dict[str, Any] = Field(default_factory=dict)
+
+
+class SessionBranchCreate(BaseModel):
+    session_id: str = Field(..., min_length=1)
+    branch_point: str = ""
+    state: dict[str, Any] = Field(default_factory=dict)
+
+
+class SessionMergeRequest(BaseModel):
+    session_ids: list[str] = Field(..., min_length=2)
+
+
+class SessionTemplateCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    system_prompt: str = ""
+    tools: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+class SessionSearchRequest(BaseModel):
+    query: str = ""
+    date_from: str = ""
+    date_to: str = ""
+    agent_id: str = ""
+    user_id: str = ""
+    state: str = ""
+    tags: list[str] = Field(default_factory=list)
+    sort_by: str = "recency"
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+@router.get("/session-commander/stats")
+async def get_session_commander_stats():
+    """Get session commander statistics."""
+    return session_commander.get_stats().to_dict()
+
+@router.get("/session-commander/sessions")
+async def list_session_commander_sessions(
+    group_id: str = "",
+    state: str = "",
+    limit: int = 50,
+):
+    """List sessions managed by the session commander."""
+    from agent.agent_session_commander import SessionState
+    st = SessionState(state) if state else None
+    sessions = session_commander.get_sessions(group_id=group_id, state=st, limit=limit)
+    return [s.to_dict() for s in sessions]
+
+
+@router.post("/session-commander/groups")
+async def create_session_group(data: SessionGroupCreate):
+    """Create a session group."""
+    group = session_commander.create_group(
+        name=data.name,
+        description=data.description,
+        session_ids=data.session_ids,
+        parent_id=data.parent_id,
+    )
+    return group.to_dict()
+
+
+@router.get("/session-commander/groups")
+async def get_session_groups():
+    """Get all session groups."""
+    groups = session_commander.get_groups()
+    return {"groups": [g.to_dict() for g in groups]}
+
+
+@router.get("/session-commander/groups/{group_id}")
+async def get_session_group(group_id: str):
+    """Get a specific session group."""
+    group = session_commander.get_group(group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return group.to_dict()
+
+
+@router.delete("/session-commander/groups/{group_id}")
+async def delete_session_group(group_id: str):
+    """Delete a session group."""
+    if session_commander.delete_group(group_id):
+        return {"status": "deleted"}
+    raise HTTPException(status_code=404, detail="Group not found")
+
+
+@router.post("/session-commander/batch/summarize")
+async def batch_summarize(data: SessionBatchRequest):
+    """Batch summarize sessions."""
+    op = session_commander.batch_summarize(data.session_ids)
+    return op.to_dict()
+
+
+@router.post("/session-commander/batch/archive")
+async def batch_archive(data: SessionBatchRequest):
+    """Batch archive sessions."""
+    op = session_commander.batch_archive(data.session_ids)
+    return op.to_dict()
+
+
+@router.post("/session-commander/batch/merge")
+async def batch_merge(data: SessionBatchRequest):
+    """Batch merge sessions."""
+    op = session_commander.batch_merge(data.session_ids)
+    return op.to_dict()
+
+
+@router.post("/session-commander/batch/export")
+async def batch_export(data: SessionBatchRequest):
+    """Batch export sessions."""
+    op = session_commander.batch_export(data.session_ids)
+    return op.to_dict()
+
+
+@router.post("/session-commander/batch/delete")
+async def batch_delete(data: SessionBatchRequest):
+    """Batch delete sessions."""
+    op = session_commander.batch_delete(data.session_ids)
+    return op.to_dict()
+
+
+@router.get("/session-commander/batch/{op_id}")
+async def get_batch_operation(op_id: str):
+    """Get batch operation status."""
+    op = session_commander.get_batch(op_id)
+    if op is None:
+        raise HTTPException(status_code=404, detail="Batch operation not found")
+    return op.to_dict()
+
+
+@router.post("/session-commander/{session_id}/pause")
+async def pause_session(session_id: str):
+    """Pause a session."""
+    if session_commander.pause_session(session_id):
+        return {"status": "paused"}
+    raise HTTPException(status_code=404, detail="Session not found")
+
+
+@router.post("/session-commander/{session_id}/resume")
+async def resume_session(session_id: str):
+    """Resume a session."""
+    if session_commander.resume_session(session_id):
+        return {"status": "resumed"}
+    raise HTTPException(status_code=404, detail="Session not found")
+
+
+@router.post("/session-commander/snapshots")
+async def create_session_snapshot(data: SessionSnapshotCreate):
+    """Create a session snapshot."""
+    snapshot = session_commander.create_snapshot(
+        session_id=data.session_id,
+        description=data.description,
+        state=data.state,
+    )
+    return snapshot.to_dict()
+
+
+@router.post("/session-commander/{session_id}/restore")
+async def restore_session_snapshot(session_id: str, snapshot_id: str = ""):
+    """Restore a session from snapshot."""
+    if session_commander.restore_snapshot(session_id, snapshot_id):
+        return {"status": "restored"}
+    raise HTTPException(status_code=404, detail="Snapshot not found")
+
+
+@router.get("/session-commander/{session_id}/snapshots")
+async def get_session_snapshots(session_id: str):
+    """Get snapshots for a session."""
+    snapshots = session_commander.get_snapshots(session_id)
+    return {"snapshots": [s.to_dict() for s in snapshots]}
+
+
+@router.post("/session-commander/branches")
+async def branch_session(data: SessionBranchCreate):
+    """Branch a session."""
+    branch = session_commander.branch_session(
+        session_id=data.session_id,
+        branch_point=data.branch_point,
+        state=data.state,
+    )
+    return branch.to_dict()
+
+
+@router.get("/session-commander/{session_id}/branches")
+async def get_session_branches(session_id: str):
+    """Get branches for a session."""
+    branches = session_commander.get_branches(session_id)
+    return {"branches": [b.to_dict() for b in branches]}
+
+
+@router.post("/session-commander/merge")
+async def merge_sessions(data: SessionMergeRequest):
+    """Merge multiple sessions."""
+    new_session_id = session_commander.merge_sessions(data.session_ids)
+    return {"session_id": new_session_id, "status": "merged"}
+
+
+@router.post("/session-commander/search")
+async def search_sessions(data: SessionSearchRequest):
+    """Search sessions."""
+    results = session_commander.search_sessions(
+        query=data.query,
+        filters={
+            "date_from": data.date_from,
+            "date_to": data.date_to,
+            "agent_id": data.agent_id,
+            "user_id": data.user_id,
+            "state": data.state,
+            "tags": data.tags,
+            "sort_by": data.sort_by,
+            "limit": data.limit,
+        },
+    )
+    return {"results": results}
+
+
+@router.post("/session-commander/templates")
+async def create_session_template(data: SessionTemplateCreate):
+    """Create a session template."""
+    template = session_commander.create_template({
+        "name": data.name,
+        "system_prompt": data.system_prompt,
+        "tools": data.tools,
+        "skills": data.skills,
+        "settings": data.settings,
+    })
+    return template.to_dict()
+
+
+@router.get("/session-commander/templates")
+async def list_session_templates():
+    """List all session templates."""
+    templates = session_commander.list_templates()
+    return {"templates": [t.to_dict() for t in templates]}
+
+
+@router.post("/session-commander/reset")
+async def reset_session_commander():
+    """Reset the session commander."""
+    session_commander.reset()
+    return {"status": "reset"}
+
+
+# ── Runtime Scheduler API ──────────────────────────────────
+
+class SchedulerEnqueueRequest(BaseModel):
+    priority: str = Field(default="medium")
+    agent_id: str = ""
+    payload: dict[str, Any] = Field(default_factory=dict)
+    estimated_cost: float = 0.0
+    deadline: str = ""
+
+
+class SchedulerDependencyRequest(BaseModel):
+    task_id: str = Field(..., min_length=1)
+    depends_on: str = Field(..., min_length=1)
+    dependency_type: str = "hard"
+
+
+class SchedulerQuotaRequest(BaseModel):
+    agent_id: str = Field(..., min_length=1)
+    max_tokens_per_minute: int = 100000
+    max_concurrent: int = 5
+    max_memory_mb: int = 4096
+
+
+@router.get("/runtime-scheduler/stats")
+async def get_scheduler_stats():
+    """Get runtime scheduler statistics."""
+    return runtime_scheduler.get_stats().to_dict()
+
+
+@router.post("/runtime-scheduler/enqueue")
+async def enqueue_task(data: SchedulerEnqueueRequest):
+    """Enqueue a task."""
+    task = runtime_scheduler.enqueue({
+        "priority": data.priority,
+        "agent_id": data.agent_id,
+        "payload": data.payload,
+        "estimated_cost": data.estimated_cost,
+        "deadline": data.deadline,
+    })
+    return task.to_dict()
+
+
+@router.post("/runtime-scheduler/dequeue")
+async def dequeue_task(task_id: str = ""):
+    """Dequeue a task."""
+    if runtime_scheduler.dequeue(task_id):
+        return {"status": "dequeued"}
+    raise HTTPException(status_code=404, detail="Task not found")
+
+
+@router.get("/runtime-scheduler/next")
+async def get_next_task(agent_id: str = ""):
+    """Get next task for an agent."""
+    if not agent_id:
+        return {"task": None, "message": "agent_id is required"}
+    task = runtime_scheduler.get_next(agent_id=agent_id)
+    if task is None:
+        return {"task": None, "message": "No tasks available"}
+    return {"task": task.to_dict()}
+
+
+@router.post("/runtime-scheduler/complete")
+async def complete_task(task_id: str = ""):
+    """Mark a task as completed."""
+    if runtime_scheduler.complete_task(task_id):
+        return {"status": "completed"}
+    raise HTTPException(status_code=404, detail="Task not found")
+
+
+@router.post("/runtime-scheduler/fail")
+async def fail_task(task_id: str = "", error: str = ""):
+    """Mark a task as failed."""
+    if runtime_scheduler.fail_task(task_id, error):
+        return {"status": "failed"}
+    raise HTTPException(status_code=404, detail="Task not found")
+
+
+@router.post("/runtime-scheduler/dependencies")
+async def add_dependency(data: SchedulerDependencyRequest):
+    """Add a task dependency."""
+    dep = runtime_scheduler.add_dependency(
+        task_id=data.task_id,
+        depends_on=data.depends_on,
+        dep_type=data.dependency_type,
+    )
+    if dep is None:
+        raise HTTPException(status_code=400, detail="Dependency would create a cycle or tasks not found")
+    return dep.to_dict()
+
+
+@router.get("/runtime-scheduler/dependencies/{task_id}")
+async def resolve_dependencies(task_id: str):
+    """Resolve dependencies for a task."""
+    ready = runtime_scheduler.resolve_dependencies(task_id)
+    return {"task_id": task_id, "ready": ready}
+
+
+@router.post("/runtime-scheduler/quota")
+async def set_scheduler_quota(data: SchedulerQuotaRequest):
+    """Set resource quota for an agent."""
+    from agent.agent_runtime_scheduler import ResourceQuota
+    quota = runtime_scheduler.set_quota(
+        agent_id=data.agent_id,
+        quota=ResourceQuota(
+            agent_id=data.agent_id,
+            max_tokens_per_minute=data.max_tokens_per_minute,
+            max_concurrent=data.max_concurrent,
+            max_memory_mb=data.max_memory_mb,
+        ),
+    )
+    return quota.to_dict()
+
+
+@router.get("/runtime-scheduler/quota/{agent_id}")
+async def check_quota(agent_id: str):
+    """Check if agent has available quota."""
+    available = runtime_scheduler.check_quota(agent_id)
+    return {"agent_id": agent_id, "available": available}
+
+
+@router.get("/runtime-scheduler/schedule")
+async def get_schedule(agent_id: str = ""):
+    """Get schedule plan for an agent."""
+    if not agent_id:
+        from agent.agent_runtime_scheduler import SchedulePlan
+        return SchedulePlan().to_dict()
+    plan = runtime_scheduler.get_schedule(agent_id=agent_id)
+    return plan.to_dict()
+
+
+@router.post("/runtime-scheduler/optimize")
+async def optimize_schedule(agent_id: str = ""):
+    """Optimize schedule for an agent."""
+    if not agent_id:
+        from agent.agent_runtime_scheduler import SchedulePlan
+        return SchedulePlan().to_dict()
+    plan = runtime_scheduler.optimize_schedule(agent_id=agent_id)
+    return plan.to_dict()
+
+
+@router.get("/runtime-scheduler/tasks")
+async def list_scheduler_tasks(status: str = ""):
+    """List all scheduled tasks."""
+    from agent.agent_runtime_scheduler import TaskStatus
+    status_filter = TaskStatus(status) if status else None
+    tasks = runtime_scheduler.list_tasks(status=status_filter)
+    return {"tasks": [t.to_dict() for t in tasks]}
+
+
+@router.post("/runtime-scheduler/reset")
+async def reset_scheduler():
+    """Reset the runtime scheduler."""
+    runtime_scheduler.reset()
+    return {"status": "reset"}
+
+
+# ── Workspace Nexus API ────────────────────────────────────
+
+class WorkspaceCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    description: str = ""
+    template_id: str = ""
+
+
+class WorkspaceConnectRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1)
+    subsystem_type: str = Field(..., min_length=1)
+    subsystem_id: str = Field(..., min_length=1)
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkspaceContextFlowRequest(BaseModel):
+    workspace_id: str = Field(..., min_length=1)
+    source_subsystem: str = ""
+    target_subsystem: str = ""
+    content: dict[str, Any] = Field(default_factory=dict)
+    priority: str = "medium"
+
+
+class WorkspaceTemplateCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    default_tools: list[str] = Field(default_factory=list)
+    default_skills: list[str] = Field(default_factory=list)
+    default_prompt: str = ""
+    settings: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/workspace-nexus/stats")
+async def get_workspace_nexus_stats():
+    """Get workspace nexus statistics."""
+    return workspace_nexus.get_stats().to_dict()
+
+
+@router.post("/workspace-nexus/workspaces")
+async def create_workspace(data: WorkspaceCreateRequest):
+    """Create a workspace."""
+    workspace = workspace_nexus.create_workspace(
+        name=data.name,
+        description=data.description,
+        template_id=data.template_id,
+    )
+    return workspace.to_dict()
+
+
+@router.get("/workspace-nexus/workspaces")
+async def list_workspaces(status: str = ""):
+    """List workspaces."""
+    from agent.agent_workspace_nexus import WorkspaceStatus
+    status_filter = WorkspaceStatus(status) if status else None
+    workspaces = workspace_nexus.list_workspaces(status_filter=status_filter)
+    return {"workspaces": [w.to_dict() for w in workspaces]}
+
+
+@router.get("/workspace-nexus/workspaces/{workspace_id}")
+async def get_workspace(workspace_id: str):
+    """Get a workspace."""
+    ws = workspace_nexus.get_workspace(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return ws.to_dict()
+
+
+@router.post("/workspace-nexus/workspaces/{workspace_id}/activate")
+async def activate_workspace(workspace_id: str):
+    """Activate a workspace."""
+    if workspace_nexus.activate_workspace(workspace_id):
+        return {"status": "activated"}
+    raise HTTPException(status_code=404, detail="Workspace not found")
+
+
+@router.post("/workspace-nexus/workspaces/{workspace_id}/archive")
+async def archive_workspace(workspace_id: str):
+    """Archive a workspace."""
+    if workspace_nexus.archive_workspace(workspace_id):
+        return {"status": "archived"}
+    raise HTTPException(status_code=404, detail="Workspace not found")
+
+
+@router.post("/workspace-nexus/connections")
+async def connect_subsystem(data: WorkspaceConnectRequest):
+    """Connect a subsystem to a workspace."""
+    from agent.agent_workspace_nexus import SubsystemType
+    conn = workspace_nexus.connect_subsystem(
+        workspace_id=data.workspace_id,
+        subsystem_type=SubsystemType(data.subsystem_type),
+        subsystem_id=data.subsystem_id,
+        config=data.config,
+    )
+    if conn is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return conn.to_dict()
+
+
+@router.delete("/workspace-nexus/connections/{connection_id}")
+async def disconnect_subsystem(connection_id: str):
+    """Disconnect a subsystem."""
+    if workspace_nexus.disconnect_subsystem(connection_id):
+        return {"status": "disconnected"}
+    raise HTTPException(status_code=404, detail="Connection not found")
+
+
+@router.get("/workspace-nexus/workspaces/{workspace_id}/connections")
+async def get_workspace_connections(workspace_id: str):
+    """Get connections for a workspace."""
+    connections = workspace_nexus.get_connections(workspace_id)
+    return {"connections": [c.to_dict() for c in connections]}
+
+
+@router.post("/workspace-nexus/context-flows")
+async def create_context_flow(data: WorkspaceContextFlowRequest):
+    """Create a context flow."""
+    from agent.agent_workspace_nexus import SubsystemType, ContextPriority
+    flow = workspace_nexus.create_context_flow(
+        workspace_id=data.workspace_id,
+        source=SubsystemType(data.source_subsystem) if data.source_subsystem else SubsystemType.MEMORY,
+        target=SubsystemType(data.target_subsystem) if data.target_subsystem else SubsystemType.SKILLS,
+        content=data.content,
+        priority=ContextPriority(data.priority),
+    )
+    if flow is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return flow.to_dict()
+
+
+@router.get("/workspace-nexus/workspaces/{workspace_id}/context-flows")
+async def get_context_flows(workspace_id: str, limit: int = 50):
+    """Get context flows for a workspace."""
+    flows = workspace_nexus.get_context_flows(workspace_id, limit=limit)
+    return {"flows": [f.to_dict() for f in flows]}
+
+
+@router.post("/workspace-nexus/workspaces/{workspace_id}/sync")
+async def sync_workspace_context(workspace_id: str):
+    """Sync context across all subsystems."""
+    if workspace_nexus.sync_context(workspace_id):
+        return {"status": "synced"}
+    raise HTTPException(status_code=404, detail="Workspace not found")
+
+
+@router.get("/workspace-nexus/workspaces/{workspace_id}/analytics")
+async def get_workspace_analytics(workspace_id: str):
+    """Get analytics for a workspace."""
+    analytics = workspace_nexus.get_analytics(workspace_id)
+    if analytics is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return analytics.to_dict()
+
+
+@router.post("/workspace-nexus/templates")
+async def register_workspace_template(data: WorkspaceTemplateCreate):
+    """Register a workspace template."""
+    from agent.agent_workspace_nexus import WorkspaceTemplate
+    import uuid
+    template = WorkspaceTemplate(
+        template_id=str(uuid.uuid4())[:12],
+        name=data.name,
+        default_tools=data.default_tools,
+        default_skills=data.default_skills,
+        default_prompt=data.default_prompt,
+        settings=data.settings,
+    )
+    workspace_nexus.register_template(template)
+    return template.to_dict()
+
+
+@router.get("/workspace-nexus/templates")
+async def list_workspace_templates():
+    """List all workspace templates."""
+    templates = workspace_nexus.list_templates()
+    return {"templates": [t.to_dict() for t in templates]}
+
+
+@router.get("/workspace-nexus/summary")
+async def get_workspace_nexus_summary():
+    """Get a summary of the workspace nexus."""
+    return workspace_nexus.get_summary()
+
+
+@router.post("/workspace-nexus/reset")
+async def reset_workspace_nexus():
+    """Reset the workspace nexus."""
+    workspace_nexus.reset()
+    return {"status": "reset"}
+
+
+# ── Cognitive Engine API ─────────────────────────────────────
+
+from agent.agent_cognitive_engine import (
+    get_cognitive_engine, reset_cognitive_engine,
+    CognitiveStrategy, CognitivePhase,
+)
+
+
+class CognitiveRunRequest(BaseModel):
+    user_input: str = Field(..., min_length=1)
+    strategy: str = "fast"
+    session_id: str = ""
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/cognitive-engine/stats")
+async def get_cognitive_engine_stats():
+    """Get cognitive engine statistics."""
+    engine = get_cognitive_engine()
+    return engine.get_metrics_report()
+
+
+@router.get("/cognitive-engine/state")
+async def get_cognitive_engine_state():
+    """Get the current cognitive engine state."""
+    engine = get_cognitive_engine()
+    return {
+        "agent_id": engine.agent_id,
+        "agent_name": engine.agent_name,
+        "config": engine.config.to_dict(),
+        "cycle_count": engine.cycle_count,
+        "success_rate": engine.success_rate,
+        "metrics": engine.metrics.to_dict(),
+    }
+
+
+@router.post("/cognitive-engine/run")
+async def run_cognitive_cycle(data: CognitiveRunRequest):
+    """Run a cognitive cycle."""
+    import asyncio
+    engine = get_cognitive_engine()
+    result = await engine.run_cycle(
+        user_input=data.user_input,
+        strategy=CognitiveStrategy(data.strategy),
+        session_id=data.session_id,
+        conversation_history=data.context.get("history", []),
+        external_context=data.context.get("external", {}),
+    )
+    return result.to_dict()
+
+
+@router.get("/cognitive-engine/cycles")
+async def list_cognitive_cycles(limit: int = 10):
+    """List recent cognitive cycles."""
+    engine = get_cognitive_engine()
+    cycles = engine.get_recent_cycles(limit=limit)
+    return {"cycles": cycles}
+
+
+@router.post("/cognitive-engine/reset")
+async def reset_cognitive_engine_route():
+    """Reset the cognitive engine."""
+    reset_cognitive_engine()
+    return {"status": "reset"}
+
+
+# ── Platform Orchestrator API ─────────────────────────────────
+
+from agent.agent_platform_orchestrator import (
+    get_platform_orchestrator, reset_platform_orchestrator,
+    ServiceType, ServiceHealth, WorkflowState, TriggerType,
+    IntegrationStatus, PublishingState, MetricType,
+)
+
+
+class PlatformServiceRegisterRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    service_type: str = "agent"
+    version: str = "1.0.0"
+    endpoint: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class PlatformWorkflowRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    description: str = ""
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+    trigger_type: str = "manual"
+    trigger_config: dict[str, Any] = Field(default_factory=dict)
+
+
+class PlatformIntegrationRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    service_type: str = "external_api"
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class PlatformContentRequest(BaseModel):
+    title: str = Field(..., min_length=1)
+    body: str = ""
+    channel: str = "api"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class PlatformMetricRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    metric_type: str = "counter"
+    value: float = 0.0
+    tags: dict[str, str] = Field(default_factory=dict)
+
+
+class PlatformWorkspaceRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    description: str = ""
+    owner_id: str = ""
+
+
+@router.get("/platform-orchestrator/stats")
+async def get_platform_stats():
+    """Get platform orchestrator statistics."""
+    orchestrator = get_platform_orchestrator()
+    return orchestrator.get_platform_status()
+
+
+@router.get("/platform-orchestrator/status")
+async def get_platform_status():
+    """Get detailed platform status."""
+    orchestrator = get_platform_orchestrator()
+    return orchestrator.get_platform_status()
+
+
+@router.post("/platform-orchestrator/services")
+async def register_platform_service(data: PlatformServiceRegisterRequest):
+    """Register a platform service."""
+    orchestrator = get_platform_orchestrator()
+    service = orchestrator.register_service(
+        name=data.name,
+        service_type=ServiceType(data.service_type),
+        version=data.version,
+        endpoint=data.endpoint,
+        metadata=data.metadata,
+    )
+    return service.to_dict()
+
+
+@router.get("/platform-orchestrator/services")
+async def list_platform_services(service_type: str = ""):
+    """List platform services."""
+    orchestrator = get_platform_orchestrator()
+    st = ServiceType(service_type) if service_type else None
+    services = orchestrator.discover_services(service_type=st)
+    return {"services": [s.to_dict() for s in services]}
+
+
+@router.post("/platform-orchestrator/workflows")
+async def define_platform_workflow(data: PlatformWorkflowRequest):
+    """Define a workflow."""
+    orchestrator = get_platform_orchestrator()
+    steps = []
+    for s in data.steps:
+        from agent.agent_platform_orchestrator import WorkflowStep
+        steps.append(WorkflowStep(
+            name=s.get("name", ""),
+            description=s.get("description", ""),
+            action=s.get("action", ""),
+            config=s.get("config", {}),
+        ))
+    workflow = orchestrator.define_workflow(
+        name=data.name,
+        description=data.description,
+        steps=steps,
+        trigger_type=TriggerType(data.trigger_type),
+        trigger_config=data.trigger_config,
+    )
+    return workflow.to_dict()
+
+
+@router.get("/platform-orchestrator/workflows")
+async def list_platform_workflows():
+    """List all workflows."""
+    orchestrator = get_platform_orchestrator()
+    workflows = orchestrator.list_workflows()
+    return {"workflows": [w.to_dict() for w in workflows]}
+
+
+@router.post("/platform-orchestrator/integrations")
+async def register_platform_integration(data: PlatformIntegrationRequest):
+    """Register an integration."""
+    orchestrator = get_platform_orchestrator()
+    integration = orchestrator.register_integration(
+        name=data.name,
+        service_type=data.service_type,
+        config=data.config,
+    )
+    return integration.to_dict()
+
+
+@router.get("/platform-orchestrator/integrations")
+async def list_platform_integrations():
+    """List integrations."""
+    orchestrator = get_platform_orchestrator()
+    integrations = orchestrator.get_integrations()
+    return {"integrations": [i.to_dict() for i in integrations]}
+
+
+@router.post("/platform-orchestrator/content")
+async def create_platform_content(data: PlatformContentRequest):
+    """Create publishing content."""
+    orchestrator = get_platform_orchestrator()
+    content = orchestrator.create_content(
+        title=data.title,
+        body=data.body,
+        channel=DistributionChannel(data.channel),
+        metadata=data.metadata,
+    )
+    return content.to_dict()
+
+
+@router.get("/platform-orchestrator/content")
+async def list_platform_content(state: str = ""):
+    """List content."""
+    orchestrator = get_platform_orchestrator()
+    ps = PublishingState(state) if state else None
+    content_list = orchestrator.list_content(state=ps)
+    return {"content": [c.to_dict() for c in content_list]}
+
+
+@router.post("/platform-orchestrator/metrics")
+async def record_platform_metric(data: PlatformMetricRequest):
+    """Record a platform metric."""
+    orchestrator = get_platform_orchestrator()
+    metric = orchestrator.record_metric(
+        name=data.name,
+        metric_type=MetricType(data.metric_type),
+        value=data.value,
+        tags=data.tags,
+    )
+    return metric.to_dict()
+
+
+@router.get("/platform-orchestrator/metrics")
+async def get_platform_metrics(metric_type: str = "", hours: int = 24):
+    """Get platform metrics."""
+    orchestrator = get_platform_orchestrator()
+    mt = MetricType(metric_type) if metric_type else None
+    metrics = orchestrator.get_metrics(metric_type=mt)
+    return {"metrics": [m.to_dict() for m in metrics]}
+
+
+@router.get("/platform-orchestrator/analytics")
+async def get_platform_analytics():
+    """Get platform analytics summary."""
+    orchestrator = get_platform_orchestrator()
+    return orchestrator.get_platform_analytics_summary().to_dict()
+
+
+@router.post("/platform-orchestrator/workspaces")
+async def create_platform_workspace(data: PlatformWorkspaceRequest):
+    """Create a workspace."""
+    orchestrator = get_platform_orchestrator()
+    workspace = orchestrator.create_workspace(
+        name=data.name,
+        description=data.description,
+        owner_id=data.owner_id,
+    )
+    return workspace.to_dict()
+
+
+@router.get("/platform-orchestrator/workspaces")
+async def list_platform_workspaces():
+    """List workspaces."""
+    orchestrator = get_platform_orchestrator()
+    workspaces = orchestrator.list_workspaces()
+    return {"workspaces": [w.to_dict() for w in workspaces]}
+
+
+@router.post("/platform-orchestrator/reset")
+async def reset_platform_orchestrator():
+    """Reset the platform orchestrator."""
+    reset_platform_orchestrator()
+    return {"status": "reset"}
+
+
+# ── Skill Compiler Pro API ───────────────────────────────────
+
+from agent.agent_skill_compiler_pro import (
+    skill_compiler_pro, SkillType, SkillStatus, CompositionStrategy,
+    SkillParameter, SkillSchema, SkillMetadata, SkillInstruction,
+)
+
+
+class SkillDefineRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    description: str = ""
+    skill_type: str = "utility"
+    instructions: list[dict[str, Any]] = Field(default_factory=list)
+    parameters: list[dict[str, Any]] = Field(default_factory=list)
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    output_schema: dict[str, Any] = Field(default_factory=dict)
+    tags: list[str] = Field(default_factory=list)
+    version: str = "1.0.0"
+
+
+class SkillExecuteRequest(BaseModel):
+    skill_id: str = Field(..., min_length=1)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    execution_strategy: str = "sequential"
+
+
+class SkillComposeRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    skill_ids: list[str] = Field(..., min_length=1)
+    strategy: str = "sequential"
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class SkillTestRequest(BaseModel):
+    skill_id: str = Field(..., min_length=1)
+    test_cases: list[dict[str, Any]] = Field(default_factory=list)
+
+
+@router.get("/skill-compiler/stats")
+async def get_skill_compiler_stats():
+    """Get skill compiler statistics."""
+    return skill_compiler_pro.get_stats()
+
+
+@router.post("/skill-compiler/skills")
+async def define_skill(data: SkillDefineRequest):
+    """Define a new skill."""
+    parameters = [
+        SkillParameter(
+            name=p.get("name", ""),
+            param_type=p.get("param_type", "string"),
+            description=p.get("description", ""),
+            required=p.get("required", False),
+            default_value=p.get("default_value"),
+        )
+        for p in data.parameters
+    ]
+
+    input_schema = SkillSchema(
+        parameters=parameters,
+        schema_type="object",
+        properties=data.input_schema.get("properties", {}),
+    )
+    output_schema = SkillSchema(
+        parameters=[],
+        schema_type="object",
+        properties=data.output_schema.get("properties", {}),
+    )
+
+    metadata = SkillMetadata(
+        name=data.name,
+        version=data.version,
+        description=data.description,
+        skill_type=SkillType(data.skill_type),
+        tags=data.tags,
+        author="buddy",
+    )
+
+    instructions = [
+        SkillInstruction(
+            step=i.get("step", idx),
+            action=i.get("action", ""),
+            description=i.get("description", ""),
+        )
+        for idx, i in enumerate(data.instructions, 1)
+    ]
+
+    definition = SkillDefinition(
+        metadata=metadata,
+        input_schema=input_schema,
+        output_schema=output_schema,
+        instructions=instructions,
+    )
+
+    skill = skill_compiler_pro.define_skill(definition)
+    return skill.to_dict()
+
+
+@router.get("/skill-compiler/skills")
+async def list_skills(skill_type: str = "", status: str = ""):
+    """List compiled skills."""
+    skills = skill_compiler_pro.list_skills(
+        skill_type=SkillType(skill_type) if skill_type else None,
+        status=SkillStatus(status) if status else None,
+    )
+    return {"skills": [s.to_dict() for s in skills]}
+
+
+@router.get("/skill-compiler/skills/{skill_id}")
+async def get_skill(skill_id: str):
+    """Get a skill by ID."""
+    skill = skill_compiler_pro.get_skill(skill_id)
+    if skill is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return skill.to_dict()
+
+
+@router.post("/skill-compiler/skills/{skill_id}/compile")
+async def compile_skill(skill_id: str):
+    """Compile a skill."""
+    result = skill_compiler_pro.compile_skill(skill_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return result.to_dict()
+
+
+@router.post("/skill-compiler/skills/{skill_id}/execute")
+async def execute_skill(skill_id: str, data: SkillExecuteRequest):
+    """Execute a skill."""
+    result = skill_compiler_pro.execute_skill(
+        skill_id=data.skill_id,
+        parameters=data.parameters,
+        execution_strategy=data.execution_strategy,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return result.to_dict()
+
+
+@router.post("/skill-compiler/compose")
+async def compose_skills(data: SkillComposeRequest):
+    """Compose multiple skills into a workflow."""
+    plan = skill_compiler_pro.compose_skills(
+        name=data.name,
+        skill_ids=data.skill_ids,
+        strategy=CompositionStrategy(data.strategy),
+        context=data.context,
+    )
+    return plan.to_dict()
+
+
+@router.get("/skill-compiler/marketplace")
+async def list_marketplace_skills(category: str = "", page: int = 1, page_size: int = 20):
+    """List marketplace skills."""
+    listings = skill_compiler_pro.list_marketplace(
+        category=category,
+        page=page,
+        page_size=page_size,
+    )
+    return {
+        "skills": [l.to_dict() for l in listings],
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.post("/skill-compiler/skills/{skill_id}/test")
+async def test_skill(skill_id: str, data: SkillTestRequest):
+    """Run tests for a skill."""
+    result = skill_compiler_pro.test_skill(
+        skill_id=skill_id,
+        test_cases=data.test_cases,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return result.to_dict()
+
+
+@router.post("/skill-compiler/reset")
+async def reset_skill_compiler():
+    """Reset the skill compiler."""
+    skill_compiler_pro.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Runtime Store API
+# ═══════════════════════════════════════════════════════════
+
+class RuntimeStoreRegisterAgentRequest(BaseModel):
+    agent_id: str = Field(..., min_length=1)
+    agent_name: str = ""
+    agent_role: str = ""
+    initial_state: dict[str, Any] = Field(default_factory=dict)
+
+
+class RuntimeStoreSnapshotRequest(BaseModel):
+    agent_id: str = Field(..., min_length=1)
+    state_data: dict[str, Any] = Field(default_factory=dict)
+    snapshot_type: str = "auto"
+    tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RuntimeStoreDiffRequest(BaseModel):
+    agent_id: str = Field(..., min_length=1)
+    from_version: int = 0
+    to_version: int = 0
+
+
+@router.get("/runtime-store/stats")
+async def get_runtime_store_stats():
+    """Get runtime store statistics."""
+    from agent.shared import runtime_store
+    return runtime_store.get_stats().to_dict()
+
+@router.get("/runtime-store/snapshots")
+async def list_runtime_store_snapshots(agent_id: str = "", limit: int = 50):
+    """List all snapshots in the runtime store."""
+    from agent.shared import runtime_store
+    snapshots = runtime_store.list_snapshots(agent_id=agent_id, limit=limit)
+    return [s.to_dict() for s in snapshots]
+
+
+@router.get("/runtime-store/agents")
+async def list_runtime_store_agents():
+    """List all agents in the runtime store."""
+    from agent.shared import runtime_store
+    return [a.to_dict() for a in runtime_store.list_agents()]
+
+
+@router.post("/runtime-store/agents")
+async def register_runtime_store_agent(data: RuntimeStoreRegisterAgentRequest):
+    """Register a new agent in the runtime store."""
+    from agent.shared import runtime_store
+    record = runtime_store.register_agent(
+        agent_id=data.agent_id,
+        agent_name=data.agent_name,
+        agent_role=data.agent_role,
+        initial_state=data.initial_state if data.initial_state else None,
+    )
+    return record.to_dict()
+
+
+@router.get("/runtime-store/agents/{agent_id}")
+async def get_runtime_store_agent(agent_id: str):
+    """Get agent record from runtime store."""
+    from agent.shared import runtime_store
+    record = runtime_store.get_agent_record(agent_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return record.to_dict()
+
+
+@router.delete("/runtime-store/agents/{agent_id}")
+async def delete_runtime_store_agent(agent_id: str):
+    """Delete agent from runtime store."""
+    from agent.shared import runtime_store
+    if not runtime_store.delete_agent(agent_id):
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return {"status": "deleted"}
+
+
+@router.get("/runtime-store/agents/{agent_id}/state")
+async def get_runtime_store_state(agent_id: str):
+    """Get current agent state."""
+    from agent.shared import runtime_store
+    state = runtime_store.get_state(agent_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="State not found")
+    return {"agent_id": agent_id, "state": state}
+
+
+@router.post("/runtime-store/snapshots")
+async def create_runtime_store_snapshot(data: RuntimeStoreSnapshotRequest):
+    """Create a state snapshot."""
+    from agent.shared import runtime_store, SnapshotType
+    snapshot_type = SnapshotType(data.snapshot_type)
+    snapshot = runtime_store.create_snapshot(
+        agent_id=data.agent_id,
+        state_data=data.state_data,
+        snapshot_type=snapshot_type,
+        tags=data.tags,
+        metadata=data.metadata,
+    )
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return snapshot.to_dict()
+
+
+@router.get("/runtime-store/agents/{agent_id}/snapshots")
+async def list_runtime_store_snapshots(
+    agent_id: str,
+    snapshot_type: str = "",
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List snapshots for an agent."""
+    from agent.shared import runtime_store, SnapshotType
+    st = SnapshotType(snapshot_type) if snapshot_type else None
+    return [s.to_dict() for s in runtime_store.list_snapshots(agent_id, st, limit, offset)]
+
+
+@router.get("/runtime-store/snapshots/{snapshot_id}")
+async def get_runtime_store_snapshot(snapshot_id: str):
+    """Get a snapshot by ID."""
+    from agent.shared import runtime_store
+    snapshot = runtime_store.get_snapshot(snapshot_id)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return snapshot.to_dict()
+
+
+@router.post("/runtime-store/snapshots/{snapshot_id}/restore")
+async def restore_runtime_store_snapshot(snapshot_id: str, agent_id: str = Query(...)):
+    """Restore agent state to a snapshot."""
+    from agent.shared import runtime_store
+    state = runtime_store.restore_snapshot(agent_id, snapshot_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return {"agent_id": agent_id, "state": state}
+
+
+@router.delete("/runtime-store/snapshots/{snapshot_id}")
+async def delete_runtime_store_snapshot(snapshot_id: str):
+    """Delete a snapshot."""
+    from agent.shared import runtime_store
+    if not runtime_store.delete_snapshot(snapshot_id):
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return {"status": "deleted"}
+
+
+@router.post("/runtime-store/agents/{agent_id}/checkpoint")
+async def create_runtime_store_checkpoint(
+    agent_id: str,
+    state_data: dict[str, Any] = Body(...),
+    label: str = "",
+):
+    """Create a checkpoint snapshot."""
+    from agent.shared import runtime_store
+    snapshot = runtime_store.create_checkpoint(agent_id, state_data, label)
+    if not snapshot:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return snapshot.to_dict()
+
+
+@router.get("/runtime-store/agents/{agent_id}/checkpoints")
+async def list_runtime_store_checkpoints(agent_id: str):
+    """List checkpoints for an agent."""
+    from agent.shared import runtime_store
+    return [c.to_dict() for c in runtime_store.list_checkpoints(agent_id)]
+
+
+@router.post("/runtime-store/agents/{agent_id}/diff")
+async def compute_runtime_store_diff(data: RuntimeStoreDiffRequest):
+    """Compute diff between two state versions."""
+    from agent.shared import runtime_store
+    diff = runtime_store.compute_diff(data.agent_id, data.from_version, data.to_version)
+    if not diff:
+        raise HTTPException(status_code=404, detail="Snapshots not found")
+    return diff.to_dict()
+
+
+@router.get("/runtime-store/agents/{agent_id}/diffs")
+async def list_runtime_store_diffs(agent_id: str, limit: int = 50):
+    """List diffs for an agent."""
+    from agent.shared import runtime_store
+    return [d.to_dict() for d in runtime_store.get_diffs(agent_id, limit)]
+
+
+@router.post("/runtime-store/gc")
+async def run_runtime_store_gc():
+    """Run garbage collection."""
+    from agent.shared import runtime_store
+    return runtime_store.run_garbage_collection()
+
+
+@router.post("/runtime-store/reset")
+async def reset_runtime_store():
+    """Reset the runtime store."""
+    from agent.shared import runtime_store
+    runtime_store.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Conversation Memory API
+# ═══════════════════════════════════════════════════════════
+
+class ConvMemoryCreateRequest(BaseModel):
+    agent_id: str = Field(..., min_length=1)
+    title: str = ""
+    tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConvMemoryMessageRequest(BaseModel):
+    conversation_id: str = Field(..., min_length=1)
+    role: str = "user"
+    content: str = Field(..., min_length=1)
+    importance: str = "medium"
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    tool_results: list[dict[str, Any]] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConvMemorySearchRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    mode: str = "hybrid"
+    agent_id: str = ""
+    limit: int = 10
+    min_relevance: float = 0.3
+
+
+class ConvMemoryUpdateRequest(BaseModel):
+    title: str | None = None
+    status: str | None = None
+    importance: str | None = None
+    tags: list[str] | None = None
+
+
+@router.get("/conversation-memory/stats")
+async def get_conversation_memory_stats():
+    """Get conversation memory statistics."""
+    from agent.shared import conversation_memory
+    return conversation_memory.get_stats().to_dict()
+
+
+@router.get("/conversation-memory/conversations")
+async def list_conversation_memories(
+    agent_id: str = "",
+    status: str = "",
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List conversations."""
+    from agent.shared import conversation_memory, ConversationStatus
+    st = ConversationStatus(status) if status else None
+    return [c.to_dict() for c in conversation_memory.list_conversations(agent_id, st, limit, offset)]
+
+
+@router.post("/conversation-memory/conversations")
+async def create_conversation_memory(data: ConvMemoryCreateRequest):
+    """Create a conversation."""
+    from agent.shared import conversation_memory
+    conv = conversation_memory.create_conversation(
+        agent_id=data.agent_id,
+        title=data.title,
+        tags=data.tags,
+        metadata=data.metadata,
+    )
+    return conv.to_dict()
+
+
+@router.get("/conversation-memory/conversations/{conversation_id}")
+async def get_conversation_memory(conversation_id: str):
+    """Get a conversation by ID."""
+    from agent.shared import conversation_memory
+    conv = conversation_memory.get_conversation(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conv.to_dict()
+
+
+@router.put("/conversation-memory/conversations/{conversation_id}")
+async def update_conversation_memory(conversation_id: str, data: ConvMemoryUpdateRequest):
+    """Update conversation metadata."""
+    from agent.shared import conversation_memory, ConversationStatus, MemoryImportance
+    conv = conversation_memory.update_conversation(
+        conversation_id=conversation_id,
+        title=data.title,
+        status=ConversationStatus(data.status) if data.status else None,
+        importance=MemoryImportance(data.importance) if data.importance else None,
+        tags=data.tags,
+    )
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conv.to_dict()
+
+
+@router.delete("/conversation-memory/conversations/{conversation_id}")
+async def delete_conversation_memory(conversation_id: str):
+    """Delete a conversation."""
+    from agent.shared import conversation_memory
+    if not conversation_memory.delete_conversation(conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"status": "deleted"}
+
+
+@router.post("/conversation-memory/messages")
+async def add_conversation_message(data: ConvMemoryMessageRequest):
+    """Add a message to a conversation."""
+    from agent.shared import conversation_memory, MessageRole, MemoryImportance
+    msg = conversation_memory.add_message(
+        conversation_id=data.conversation_id,
+        role=MessageRole(data.role),
+        content=data.content,
+        importance=MemoryImportance(data.importance),
+        tool_calls=data.tool_calls,
+        tool_results=data.tool_results,
+        metadata=data.metadata,
+    )
+    if not msg:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return msg.to_dict()
+
+
+@router.get("/conversation-memory/conversations/{conversation_id}/messages")
+async def list_conversation_messages(
+    conversation_id: str,
+    limit: int = 50,
+    offset: int = 0,
+    role: str = "",
+):
+    """List messages in a conversation."""
+    from agent.shared import conversation_memory, MessageRole
+    r = MessageRole(role) if role else None
+    return [m.to_dict() for m in conversation_memory.get_messages(conversation_id, limit, offset, r)]
+
+
+@router.get("/conversation-memory/messages/{message_id}")
+async def get_conversation_message(message_id: str):
+    """Get a message by ID."""
+    from agent.shared import conversation_memory
+    msg = conversation_memory.get_message(message_id)
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return msg.to_dict()
+
+
+@router.post("/conversation-memory/search")
+async def search_conversation_memory(data: ConvMemorySearchRequest):
+    """Search conversations."""
+    from agent.shared import conversation_memory, SearchMode
+    results = conversation_memory.search(
+        query=data.query,
+        mode=SearchMode(data.mode),
+        agent_id=data.agent_id,
+        limit=data.limit,
+        min_relevance=data.min_relevance,
+    )
+    return [r.to_dict() for r in results]
+
+
+@router.get("/conversation-memory/conversations/{conversation_id}/context")
+async def get_conversation_context(
+    conversation_id: str,
+    around_message_id: str = "",
+    window_size: int = 0,
+):
+    """Get context window around a message."""
+    from agent.shared import conversation_memory
+    messages = conversation_memory.get_context_window(
+        conversation_id, around_message_id, window_size,
+    )
+    return [m.to_dict() for m in messages]
+
+
+@router.get("/conversation-memory/conversations/{conversation_id}/topics")
+async def get_conversation_topics(conversation_id: str):
+    """Get topics for a conversation."""
+    from agent.shared import conversation_memory
+    return [t.to_dict() for t in conversation_memory.get_topics(conversation_id)]
+
+
+@router.post("/conversation-memory/conversations/{conversation_id}/topics/extract")
+async def extract_conversation_topics(conversation_id: str):
+    """Extract topics from a conversation."""
+    from agent.shared import conversation_memory
+    topics = conversation_memory.extract_topics(conversation_id)
+    return [t.to_dict() for t in topics]
+
+
+@router.post("/conversation-memory/conversations/{conversation_id}/consolidate")
+async def consolidate_conversation(conversation_id: str):
+    """Consolidate a conversation into a summary."""
+    from agent.shared import conversation_memory
+    summary = conversation_memory.consolidate_conversation(conversation_id)
+    if not summary:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return summary.to_dict()
+
+
+@router.get("/conversation-memory/conversations/{conversation_id}/summaries")
+async def get_conversation_summaries(conversation_id: str):
+    """Get summaries for a conversation."""
+    from agent.shared import conversation_memory
+    return [s.to_dict() for s in conversation_memory.get_summaries(conversation_id)]
+
+
+@router.get("/conversation-memory/conversations/{conversation_id}/related")
+async def get_related_conversations(conversation_id: str, limit: int = 5):
+    """Get related conversations."""
+    from agent.shared import conversation_memory
+    related = conversation_memory.find_related_conversations(conversation_id, limit)
+    return [{"conversation": c.to_dict(), "score": s} for c, s in related]
+
+
+@router.post("/conversation-memory/reset")
+async def reset_conversation_memory():
+    """Reset conversation memory."""
+    from agent.shared import conversation_memory
+    conversation_memory.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Streaming Hub API
+# ═══════════════════════════════════════════════════════════
+
+class StreamingCreateRequest(BaseModel):
+    agent_id: str = ""
+    conversation_id: str = ""
+    protocol: str = "sse"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class StreamingEmitRequest(BaseModel):
+    session_id: str = Field(..., min_length=1)
+    event_type: str = "text_delta"
+    data: Any = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/streaming-hub/stats")
+async def get_streaming_hub_stats():
+    """Get streaming hub statistics."""
+    from agent.shared import streaming_hub
+    return streaming_hub.get_stats().to_dict()
+
+@router.get("/streaming-hub/streams")
+async def list_streaming_hub_streams(
+    agent_id: str = "",
+    state: str = "",
+    limit: int = 50,
+):
+    """List all active streaming sessions (alias for /sessions)."""
+    from agent.shared import streaming_hub, StreamState
+    st = StreamState(state) if state else None
+    sessions = streaming_hub.list_sessions(agent_id=agent_id, state=st)
+    return [s.to_dict() for s in sessions[:limit]]
+
+
+@router.get("/streaming-hub/sessions")
+async def list_streaming_sessions(
+    agent_id: str = "",
+    state: str = "",
+):
+    """List streaming sessions."""
+    from agent.shared import streaming_hub, StreamState
+    st = StreamState(state) if state else None
+    return [s.to_dict() for s in streaming_hub.list_sessions(agent_id, st)]
+
+
+@router.post("/streaming-hub/sessions")
+async def create_streaming_session(data: StreamingCreateRequest):
+    """Create a streaming session."""
+    from agent.shared import streaming_hub, StreamProtocol
+    protocol = StreamProtocol(data.protocol)
+    session = streaming_hub.create_stream(
+        agent_id=data.agent_id,
+        conversation_id=data.conversation_id,
+        protocol=protocol,
+        metadata=data.metadata,
+    )
+    return session.to_dict()
+
+
+@router.get("/streaming-hub/sessions/{session_id}")
+async def get_streaming_session(session_id: str):
+    """Get a streaming session."""
+    from agent.shared import streaming_hub
+    session = streaming_hub.get_stream(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session.to_dict()
+
+
+@router.post("/streaming-hub/sessions/{session_id}/emit")
+async def emit_streaming_event(data: StreamingEmitRequest):
+    """Emit an event to a stream."""
+    from agent.shared import streaming_hub, StreamEventType
+    event = await streaming_hub.emit_event(
+        session_id=data.session_id,
+        event_type=StreamEventType(data.event_type),
+        data=data.data,
+        metadata=data.metadata,
+    )
+    if not event:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return event.to_dict()
+
+
+@router.post("/streaming-hub/sessions/{session_id}/done")
+async def emit_streaming_done(session_id: str):
+    """Emit done event and close stream."""
+    from agent.shared import streaming_hub
+    event = await streaming_hub.emit_done(session_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return event.to_dict()
+
+
+@router.post("/streaming-hub/sessions/{session_id}/error")
+async def emit_streaming_error(session_id: str, error: str = Body(..., embed=True)):
+    """Emit error event."""
+    from agent.shared import streaming_hub
+    event = await streaming_hub.emit_error(session_id, error)
+    if not event:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return event.to_dict()
+
+
+@router.post("/streaming-hub/sessions/{session_id}/close")
+async def close_streaming_session(session_id: str):
+    """Close a streaming session."""
+    from agent.shared import streaming_hub
+    if not streaming_hub.close_stream(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": "closed"}
+
+
+@router.post("/streaming-hub/sessions/{session_id}/pause")
+async def pause_streaming_session(session_id: str):
+    """Pause a streaming session."""
+    from agent.shared import streaming_hub
+    if not streaming_hub.pause_stream(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": "paused"}
+
+
+@router.post("/streaming-hub/sessions/{session_id}/resume")
+async def resume_streaming_session(session_id: str):
+    """Resume a streaming session."""
+    from agent.shared import streaming_hub
+    if not streaming_hub.resume_stream(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": "resumed"}
+
+
+@router.get("/streaming-hub/sessions/{session_id}/replay")
+async def replay_streaming_events(
+    session_id: str,
+    from_sequence: int = 0,
+    limit: int = 0,
+):
+    """Get replay events."""
+    from agent.shared import streaming_hub
+    events = streaming_hub.get_replay_events(session_id, from_sequence, limit)
+    return [e.to_dict() for e in events]
+
+
+@router.get("/streaming-hub/pipelines")
+async def list_streaming_pipelines():
+    """List stream pipelines."""
+    from agent.shared import streaming_hub
+    return [{"pipeline_id": p.pipeline_id, "name": p.name, "enabled": p.enabled}
+            for p in streaming_hub.list_pipelines()]
+
+
+@router.post("/streaming-hub/reset")
+async def reset_streaming_hub():
+    """Reset streaming hub."""
+    from agent.shared import streaming_hub
+    streaming_hub.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Tool Network API
+# ═══════════════════════════════════════════════════════════
+
+class ToolNetworkRegisterRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    description: str = ""
+    category: str = "custom"
+    risk: str = "safe"
+    status: str = "active"
+    version: str = "1.0.0"
+    parameters: list[dict[str, Any]] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    timeout_seconds: int = 30
+    requires_approval: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ToolNetworkExecuteRequest(BaseModel):
+    tool_id: str = Field(..., min_length=1)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    agent_id: str = ""
+    timeout_seconds: int | None = None
+    skip_cache: bool = False
+
+
+class ToolNetworkChainRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    tools: list[str] = Field(default_factory=list)
+    strategy: str = "sequential"
+    dependencies: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class ToolNetworkChainExecuteRequest(BaseModel):
+    chain_id: str = Field(..., min_length=1)
+    agent_id: str = ""
+    parameters_map: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+@router.get("/tool-network/stats")
+async def get_tool_network_stats():
+    """Get tool network statistics."""
+    from agent.shared import tool_network
+    return tool_network.get_stats().to_dict()
+
+
+@router.get("/tool-network/tools")
+async def list_tool_network_tools(
+    limit: int = 50,
+    offset: int = 0,
+    status: str = "",
+    category: str = "",
+    query: str = "",
+    tags: str = "",
+):
+    """List tools in the network."""
+    from agent.shared import tool_network, ToolStatus, ToolCategory
+    if query or category or tags:
+        cat = ToolCategory(category) if category else None
+        tag_list = [t.strip() for t in tags.split(",")] if tags else None
+        results = tool_network.search_tools(
+            query=query,
+            category=cat,
+            tags=tag_list,
+            status=ToolStatus(status) if status else None,
+        )
+        return [t.to_dict() for t in results]
+    st = ToolStatus(status) if status else None
+    return [t.to_dict() for t in tool_network.list_tools(limit, offset, st)]
+
+
+@router.post("/tool-network/tools")
+async def register_tool_network_tool(data: ToolNetworkRegisterRequest):
+    """Register a new tool."""
+    from agent.shared import tool_network, ToolCategory, ToolRisk, ToolStatus, ToolParameter, ToolDefinition
+    parameters = [
+        ToolParameter(
+            name=p.get("name", ""),
+            param_type=p.get("type", "string"),
+            description=p.get("description", ""),
+            required=p.get("required", False),
+            default_value=p.get("default"),
+        )
+        for p in data.parameters
+    ]
+    definition = ToolDefinition(
+        name=data.name,
+        description=data.description,
+        category=ToolCategory(data.category),
+        risk=ToolRisk(data.risk),
+        status=ToolStatus(data.status),
+        version=data.version,
+        parameters=parameters,
+        tags=data.tags,
+        timeout_seconds=data.timeout_seconds,
+        requires_approval=data.requires_approval,
+        metadata=data.metadata,
+    )
+    tool = tool_network.register_tool(definition)
+    return tool.to_dict()
+
+
+@router.get("/tool-network/tools/{tool_id}")
+async def get_tool_network_tool(tool_id: str):
+    """Get a tool by ID."""
+    from agent.shared import tool_network
+    tool = tool_network.get_tool(tool_id)
+    if not tool:
+        raise HTTPException(status_code=404, detail="Tool not found")
+    return tool.to_dict()
+
+
+@router.delete("/tool-network/tools/{tool_id}")
+async def unregister_tool_network_tool(tool_id: str):
+    """Unregister a tool."""
+    from agent.shared import tool_network
+    if not tool_network.unregister_tool(tool_id):
+        raise HTTPException(status_code=404, detail="Tool not found")
+    return {"status": "deleted"}
+
+
+@router.post("/tool-network/execute")
+async def execute_tool_network_tool(data: ToolNetworkExecuteRequest):
+    """Execute a tool."""
+    from agent.shared import tool_network
+    execution = await tool_network.execute_tool(
+        tool_id=data.tool_id,
+        parameters=data.parameters,
+        agent_id=data.agent_id,
+        timeout_seconds=data.timeout_seconds,
+        skip_cache=data.skip_cache,
+    )
+    return execution.to_dict()
+
+
+@router.get("/tool-network/executions")
+async def list_tool_network_executions(
+    tool_id: str = "",
+    agent_id: str = "",
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List execution records."""
+    from agent.shared import tool_network
+    return [e.to_dict() for e in tool_network.list_executions(tool_id, agent_id, limit, offset)]
+
+
+@router.get("/tool-network/executions/{execution_id}")
+async def get_tool_network_execution(execution_id: str):
+    """Get an execution record."""
+    from agent.shared import tool_network
+    execution = tool_network.get_execution(execution_id)
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return execution.to_dict()
+
+
+@router.get("/tool-network/chains")
+async def list_tool_network_chains():
+    """List tool chains."""
+    from agent.shared import tool_network
+    return [c.to_dict() for c in tool_network.list_chains()]
+
+
+@router.post("/tool-network/chains")
+async def create_tool_network_chain(data: ToolNetworkChainRequest):
+    """Create a tool chain."""
+    from agent.shared import tool_network, ExecutionStrategy
+    chain = tool_network.create_chain(
+        name=data.name,
+        tools=data.tools,
+        strategy=ExecutionStrategy(data.strategy),
+        dependencies=data.dependencies,
+    )
+    return chain.to_dict()
+
+
+@router.get("/tool-network/chains/{chain_id}")
+async def get_tool_network_chain(chain_id: str):
+    """Get a tool chain."""
+    from agent.shared import tool_network
+    chain = tool_network.get_chain(chain_id)
+    if not chain:
+        raise HTTPException(status_code=404, detail="Chain not found")
+    return chain.to_dict()
+
+
+@router.post("/tool-network/chains/{chain_id}/execute")
+async def execute_tool_network_chain(data: ToolNetworkChainExecuteRequest):
+    """Execute a tool chain."""
+    from agent.shared import tool_network
+    results = await tool_network.execute_tool_chain(
+        chain_id=data.chain_id,
+        agent_id=data.agent_id,
+        parameters_map=data.parameters_map,
+    )
+    return {k: v.to_dict() for k, v in results.items()}
+
+
+@router.delete("/tool-network/chains/{chain_id}")
+async def delete_tool_network_chain(chain_id: str):
+    """Delete a tool chain."""
+    from agent.shared import tool_network
+    if not tool_network.delete_chain(chain_id):
+        raise HTTPException(status_code=404, detail="Chain not found")
+    return {"status": "deleted"}
+
+
+@router.post("/tool-network/cache/invalidate")
+async def invalidate_tool_network_cache(tool_id: str = ""):
+    """Invalidate cache."""
+    from agent.shared import tool_network
+    count = tool_network.invalidate_cache(tool_id)
+    return {"invalidated": count}
+
+
+@router.get("/tool-network/cache/stats")
+async def get_tool_network_cache_stats():
+    """Get cache statistics."""
+    from agent.shared import tool_network
+    return tool_network.get_cache_stats()
+
+
+@router.post("/tool-network/reset")
+async def reset_tool_network():
+    """Reset tool network."""
+    from agent.shared import tool_network
+    tool_network.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Code Interpreter API
+# ═══════════════════════════════════════════════════════════
+
+class CodeInterpreterExecuteRequest(BaseModel):
+    code: str = Field(..., min_length=1)
+    language: str = "python"
+    session_id: str = ""
+    agent_id: str = ""
+    timeout_seconds: int | None = None
+
+
+class CodeInterpreterSessionRequest(BaseModel):
+    agent_id: str = ""
+    language: str = "python"
+    mode: str = "ephemeral"
+
+
+class CodeInterpreterFileRequest(BaseModel):
+    session_id: str = Field(..., min_length=1)
+    filename: str = Field(..., min_length=1)
+    content: str = ""
+
+
+@router.get("/code-interpreter/stats")
+async def get_code_interpreter_stats():
+    """Get code interpreter statistics."""
+    from agent.shared import code_interpreter
+    return code_interpreter.get_stats().to_dict()
+
+
+@router.get("/code-interpreter/sessions")
+async def list_code_interpreter_sessions(agent_id: str = ""):
+    """List code sessions."""
+    from agent.shared import code_interpreter
+    return [s.to_dict() for s in code_interpreter.list_sessions(agent_id)]
+
+
+@router.post("/code-interpreter/sessions")
+async def create_code_interpreter_session(data: CodeInterpreterSessionRequest):
+    """Create a code execution session."""
+    from agent.shared import code_interpreter, Language, SessionMode
+    session = code_interpreter.create_session(
+        agent_id=data.agent_id,
+        language=Language(data.language),
+        mode=SessionMode(data.mode),
+    )
+    return session.to_dict()
+
+
+@router.get("/code-interpreter/sessions/{session_id}")
+async def get_code_interpreter_session(session_id: str):
+    """Get a code session."""
+    from agent.shared import code_interpreter
+    session = code_interpreter.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session.to_dict()
+
+
+@router.delete("/code-interpreter/sessions/{session_id}")
+async def close_code_interpreter_session(session_id: str):
+    """Close a code session."""
+    from agent.shared import code_interpreter
+    if not code_interpreter.close_session(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": "closed"}
+
+
+@router.post("/code-interpreter/execute")
+async def execute_code(data: CodeInterpreterExecuteRequest):
+    """Execute code."""
+    from agent.shared import code_interpreter, Language
+    execution = await code_interpreter.execute(
+        code=data.code,
+        language=Language(data.language),
+        session_id=data.session_id,
+        agent_id=data.agent_id,
+        timeout_seconds=data.timeout_seconds,
+    )
+    return execution.to_dict()
+
+
+@router.get("/code-interpreter/executions")
+async def list_code_interpreter_executions(
+    session_id: str = "",
+    agent_id: str = "",
+    language: str = "",
+    status: str = "",
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List execution records."""
+    from agent.shared import code_interpreter, Language, ExecutionStatus
+    lang = Language(language) if language else None
+    st = ExecutionStatus(status) if status else None
+    return [e.to_dict() for e in code_interpreter.list_executions(
+        session_id, agent_id, lang, st, limit, offset,
+    )]
+
+
+@router.get("/code-interpreter/executions/{execution_id}")
+async def get_code_interpreter_execution(execution_id: str):
+    """Get an execution record."""
+    from agent.shared import code_interpreter
+    execution = code_interpreter.get_execution(execution_id)
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return execution.to_dict()
+
+
+@router.post("/code-interpreter/files")
+async def write_code_interpreter_file(data: CodeInterpreterFileRequest):
+    """Write a file to a session."""
+    from agent.shared import code_interpreter
+    if not code_interpreter.write_file(data.session_id, data.filename, data.content):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": "written"}
+
+
+@router.get("/code-interpreter/sessions/{session_id}/files")
+async def list_code_interpreter_files(session_id: str):
+    """List files in a session."""
+    from agent.shared import code_interpreter
+    return code_interpreter.list_files(session_id)
+
+
+@router.get("/code-interpreter/sessions/{session_id}/files/{filename}")
+async def read_code_interpreter_file(session_id: str, filename: str):
+    """Read a file from a session."""
+    from agent.shared import code_interpreter
+    content = code_interpreter.read_file(session_id, filename)
+    if content is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    return {"filename": filename, "content": content}
+
+
+@router.post("/code-interpreter/reset")
+async def reset_code_interpreter():
+    """Reset code interpreter."""
+    from agent.shared import code_interpreter
+    code_interpreter.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Analytics Engine API
+# ═══════════════════════════════════════════════════════════
+
+class AnalyticsRecordRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    value: float = 0.0
+    metric_type: str = "counter"
+    category: str = "performance"
+    labels: dict[str, str] = Field(default_factory=dict)
+
+
+class AnalyticsRequestRecord(BaseModel):
+    agent_id: str = Field(..., min_length=1)
+    agent_name: str = ""
+    latency_ms: float = 0.0
+    tokens: int = 0
+    success: bool = True
+    tools_used: int = 0
+
+
+@router.get("/analytics-engine/stats")
+async def get_analytics_engine_stats():
+    """Get analytics engine statistics."""
+    from agent.shared import analytics_engine
+    return analytics_engine.get_stats()
+
+
+@router.get("/analytics-engine/summary")
+async def get_analytics_summary():
+    """Get analytics summary."""
+    from agent.shared import analytics_engine
+    return analytics_engine.get_summary().to_dict()
+
+
+@router.get("/analytics-engine/dashboard")
+async def get_analytics_dashboard():
+    """Get dashboard data."""
+    from agent.shared import analytics_engine
+    return analytics_engine.get_dashboard_data()
+
+
+@router.get("/analytics-engine/metrics")
+async def list_analytics_metrics(category: str = ""):
+    """List all metrics."""
+    from agent.shared import analytics_engine, MetricCategory
+    cat = MetricCategory(category) if category else None
+    metrics = analytics_engine.get_all_metrics(cat)
+    return {k: v.to_dict() for k, v in metrics.items()}
+
+
+@router.get("/analytics-engine/metrics/names")
+async def get_analytics_metric_names():
+    """Get metric names."""
+    from agent.shared import analytics_engine
+    return analytics_engine.get_metric_names()
+
+
+@router.get("/analytics-engine/metrics/{name}")
+async def get_analytics_metric(name: str, time_range: str = "1h"):
+    """Get a metric series."""
+    from agent.shared import analytics_engine, TimeRange
+    series = analytics_engine.get_metric(name, TimeRange(time_range))
+    return series.to_dict()
+
+
+@router.get("/analytics-engine/metrics/{name}/latest")
+async def get_analytics_metric_latest(name: str):
+    """Get latest metric value."""
+    from agent.shared import analytics_engine
+    value = analytics_engine.get_latest_value(name)
+    if value is None:
+        raise HTTPException(status_code=404, detail="Metric not found")
+    return {"name": name, "value": value}
+
+
+@router.post("/analytics-engine/metrics")
+async def record_analytics_metric(data: AnalyticsRecordRequest):
+    """Record a metric."""
+    from agent.shared import analytics_engine, MetricType, MetricCategory
+    point = analytics_engine.record_metric(
+        name=data.name,
+        value=data.value,
+        metric_type=MetricType(data.metric_type),
+        category=MetricCategory(data.category),
+        labels=data.labels,
+    )
+    return point.to_dict()
+
+
+@router.post("/analytics-engine/requests")
+async def record_analytics_request(data: AnalyticsRequestRecord):
+    """Record a request."""
+    from agent.shared import analytics_engine
+    analytics_engine.record_request(
+        agent_id=data.agent_id,
+        agent_name=data.agent_name,
+        latency_ms=data.latency_ms,
+        tokens=data.tokens,
+        success=data.success,
+        tools_used=data.tools_used,
+    )
+    return {"status": "recorded"}
+
+
+@router.get("/analytics-engine/agents")
+async def list_analytics_agent_performance():
+    """Get all agent performance data."""
+    from agent.shared import analytics_engine
+    return [a.to_dict() for a in analytics_engine.get_all_agent_performance()]
+
+
+@router.get("/analytics-engine/agents/{agent_id}")
+async def get_analytics_agent_performance(agent_id: str):
+    """Get agent performance."""
+    from agent.shared import analytics_engine
+    perf = analytics_engine.get_agent_performance(agent_id)
+    if not perf:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return perf.to_dict()
+
+
+@router.get("/analytics-engine/agents/top")
+async def get_top_agents(limit: int = 10, sort_by: str = "total_requests"):
+    """Get top agents."""
+    from agent.shared import analytics_engine
+    return [a.to_dict() for a in analytics_engine.get_top_agents(limit, sort_by)]
+
+
+@router.get("/analytics-engine/insights")
+async def list_analytics_insights(
+    insight_type: str = "",
+    severity: str = "",
+    limit: int = 50,
+):
+    """Get insights."""
+    from agent.shared import analytics_engine, InsightType, InsightSeverity
+    it = InsightType(insight_type) if insight_type else None
+    sev = InsightSeverity(severity) if severity else None
+    return [i.to_dict() for i in analytics_engine.get_insights(it, sev, limit)]
+
+
+@router.post("/analytics-engine/insights/generate")
+async def generate_analytics_insights():
+    """Generate insights."""
+    from agent.shared import analytics_engine
+    insights = analytics_engine.generate_insights()
+    return [i.to_dict() for i in insights]
+
+
+@router.post("/analytics-engine/reset")
+async def reset_analytics_engine():
+    """Reset analytics engine."""
+    from agent.shared import analytics_engine
+    analytics_engine.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Execution Compiler API
+# ═══════════════════════════════════════════════════════════
+
+class CompilePlanRequest(BaseModel):
+    plan: list[dict[str, Any]]
+    strategy: str = "adaptive"
+    optimizations: list[str] = []
+    name: str = ""
+
+class ExecuteGraphRequest(BaseModel):
+    graph_id: str
+    context: dict[str, Any] = Field(default_factory=dict)
+
+@router.post("/execution-compiler/compile")
+async def compile_execution_plan(data: CompilePlanRequest):
+    """Compile a plan into an optimized execution graph."""
+    from agent.shared import execution_compiler, ExecutionStrategy, CompileOptimization
+    strategy = ExecutionStrategy(data.strategy) if data.strategy else ExecutionStrategy.ADAPTIVE
+    optimizations = [CompileOptimization(o) for o in data.optimizations] if data.optimizations else None
+    result = execution_compiler.compile_plan(
+        plan=data.plan,
+        strategy=strategy,
+        optimizations=optimizations,
+        name=data.name,
+    )
+    return {
+        "graph": result.graph.to_dict(),
+        "optimizations": [o.value for o in result.optimizations],
+        "warnings": result.warnings,
+        "estimated_parallelism": result.estimated_parallelism,
+        "compile_time_ms": result.compile_time_ms,
+        "node_count": result.node_count,
+        "depth": result.depth,
+    }
+
+@router.post("/execution-compiler/execute")
+async def execute_compiled_graph(data: ExecuteGraphRequest):
+    """Execute a compiled execution graph."""
+    from agent.shared import execution_compiler
+    results = execution_compiler.execute_graph(
+        graph_id=data.graph_id,
+        context=data.context,
+    )
+    return results
+
+@router.get("/execution-compiler/graphs")
+async def list_execution_graphs():
+    """List all compiled execution graphs."""
+    from agent.shared import execution_compiler
+    return [g.to_dict() for g in execution_compiler.list_graphs()]
+
+@router.get("/execution-compiler/graphs/{graph_id}")
+async def get_execution_graph(graph_id: str):
+    """Get a compiled execution graph by ID."""
+    from agent.shared import execution_compiler
+    graph = execution_compiler.get_graph(graph_id)
+    if not graph:
+        raise HTTPException(status_code=404, detail="Graph not found")
+    return graph.to_dict()
+
+@router.get("/execution-compiler/stats")
+async def get_execution_compiler_stats():
+    """Get execution compiler statistics."""
+    from agent.shared import execution_compiler
+    return execution_compiler.get_stats().to_dict()
+
+@router.post("/execution-compiler/cache/clear")
+async def clear_execution_cache():
+    """Clear execution compiler cache."""
+    from agent.shared import execution_compiler
+    execution_compiler.clear_cache()
+    return {"status": "cache_cleared"}
+
+@router.post("/execution-compiler/reset")
+async def reset_execution_compiler():
+    """Reset execution compiler."""
+    from agent.shared import execution_compiler
+    execution_compiler.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Verification Pipeline API
+# ═══════════════════════════════════════════════════════════
+
+class VerifyOutputRequest(BaseModel):
+    output: str
+    context: dict[str, Any] = Field(default_factory=dict)
+    profile_id: str = "standard"
+    output_id: str = ""
+    apply_corrections: bool = True
+
+@router.post("/verification-pipeline/verify")
+async def verify_agent_output(data: VerifyOutputRequest):
+    """Verify an agent output through the verification pipeline."""
+    from agent.shared import verification_pipeline
+    result = verification_pipeline.verify(
+        output=data.output,
+        context=data.context,
+        profile_id=data.profile_id,
+        output_id=data.output_id,
+        apply_corrections=data.apply_corrections,
+    )
+    return result.to_dict()
+
+@router.get("/verification-pipeline/results")
+async def list_verification_results(limit: int = 50):
+    """List recent verification results."""
+    from agent.shared import verification_pipeline
+    return [r.to_dict() for r in verification_pipeline.list_results(limit)]
+
+@router.get("/verification-pipeline/results/{result_id}")
+async def get_verification_result(result_id: str):
+    """Get a verification result by ID."""
+    from agent.shared import verification_pipeline
+    result = verification_pipeline.get_result(result_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Result not found")
+    return result.to_dict()
+
+@router.get("/verification-pipeline/stats")
+async def get_verification_stats():
+    """Get verification pipeline statistics."""
+    from agent.shared import verification_pipeline
+    return verification_pipeline.get_stats().to_dict()
+
+@router.get("/verification-pipeline/profiles")
+async def list_verification_profiles():
+    """List verification profiles."""
+    from agent.shared import verification_pipeline
+    return {
+        pid: {
+            "profile_id": p.profile_id,
+            "name": p.name,
+            "enabled_stages": [s.value for s in p.enabled_stages],
+            "min_pass_score": p.min_pass_score,
+        }
+        for pid, p in verification_pipeline._profiles.items()
+    }
+
+@router.post("/verification-pipeline/reset")
+async def reset_verification_pipeline():
+    """Reset verification pipeline."""
+    from agent.shared import verification_pipeline
+    verification_pipeline.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Multi-Model Conductor API
+# ═══════════════════════════════════════════════════════════
+
+class RouteModelRequest(BaseModel):
+    prompt: str
+    strategy: str = "balanced"
+    required_capabilities: list[str] = Field(default_factory=list)
+    max_cost: float | None = None
+    preferred_tier: str = ""
+
+class RecordExecutionRequest(BaseModel):
+    decision_id: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: float
+    success: bool = True
+    error: str = ""
+
+class EnsembleRouteRequest(BaseModel):
+    prompt: str
+    method: str = "majority_vote"
+    num_models: int = 3
+    required_capabilities: list[str] = Field(default_factory=list)
+
+class RegisterEndpointRequest(BaseModel):
+    endpoint_id: str
+    provider: str
+    model_name: str
+    tier: str
+    api_base: str = ""
+    cost_per_1k_input: float = 0.0
+    cost_per_1k_output: float = 0.0
+    capabilities: list[str] = Field(default_factory=list)
+    rate_limit_rpm: int = 60
+
+@router.post("/model-conductor/route")
+async def route_model_request(data: RouteModelRequest):
+    """Route a request to the optimal model."""
+    from agent.shared import multi_model_conductor, RoutingStrategy, ModelTier
+    strategy = RoutingStrategy(data.strategy)
+    preferred_tier = ModelTier(data.preferred_tier) if data.preferred_tier else None
+    decision = multi_model_conductor.route(
+        prompt=data.prompt,
+        strategy=strategy,
+        required_capabilities=data.required_capabilities or None,
+        max_cost=data.max_cost,
+        preferred_tier=preferred_tier,
+    )
+    return decision.to_dict()
+
+@router.post("/model-conductor/ensemble")
+async def ensemble_route_request(data: EnsembleRouteRequest):
+    """Route to multiple models for ensemble execution."""
+    from agent.shared import multi_model_conductor, EnsembleMethod
+    method = EnsembleMethod(data.method)
+    decisions = multi_model_conductor.ensemble_route(
+        prompt=data.prompt,
+        method=method,
+        num_models=data.num_models,
+        required_capabilities=data.required_capabilities or None,
+    )
+    return [d.to_dict() for d in decisions]
+
+@router.post("/model-conductor/executions")
+async def record_model_execution(data: RecordExecutionRequest):
+    """Record a model execution result."""
+    from agent.shared import multi_model_conductor
+    execution = multi_model_conductor.record_execution(
+        decision_id=data.decision_id,
+        input_tokens=data.input_tokens,
+        output_tokens=data.output_tokens,
+        latency_ms=data.latency_ms,
+        success=data.success,
+        error=data.error,
+    )
+    return execution.to_dict()
+
+@router.get("/model-conductor/endpoints")
+async def list_model_endpoints():
+    """List all registered model endpoints."""
+    from agent.shared import multi_model_conductor
+    return [e.to_dict() for e in multi_model_conductor.get_endpoints()]
+
+@router.post("/model-conductor/endpoints")
+async def register_model_endpoint(data: RegisterEndpointRequest):
+    """Register a new model endpoint."""
+    from agent.shared import multi_model_conductor, ModelTier, ModelEndpoint
+    endpoint = ModelEndpoint(
+        endpoint_id=data.endpoint_id,
+        provider=data.provider,
+        model_name=data.model_name,
+        tier=ModelTier(data.tier),
+        api_base=data.api_base,
+        cost_per_1k_input=data.cost_per_1k_input,
+        cost_per_1k_output=data.cost_per_1k_output,
+        capabilities=data.capabilities,
+        rate_limit_rpm=data.rate_limit_rpm,
+    )
+    multi_model_conductor.register_endpoint(endpoint)
+    return endpoint.to_dict()
+
+@router.delete("/model-conductor/endpoints/{endpoint_id}")
+async def remove_model_endpoint(endpoint_id: str):
+    """Remove a model endpoint."""
+    from agent.shared import multi_model_conductor
+    if multi_model_conductor.remove_endpoint(endpoint_id):
+        return {"status": "removed"}
+    raise HTTPException(status_code=404, detail="Endpoint not found")
+
+@router.get("/model-conductor/health")
+async def check_model_health():
+    """Check health of all model endpoints."""
+    from agent.shared import multi_model_conductor
+    health = multi_model_conductor.check_health()
+    return {k: v.value for k, v in health.items()}
+
+@router.get("/model-conductor/executions")
+async def list_model_executions(limit: int = 100):
+    """List recent model executions."""
+    from agent.shared import multi_model_conductor
+    return [e.to_dict() for e in multi_model_conductor.get_executions(limit)]
+
+@router.get("/model-conductor/stats")
+async def get_conductor_stats():
+    """Get multi-model conductor statistics."""
+    from agent.shared import multi_model_conductor
+    return multi_model_conductor.get_stats().to_dict()
+
+@router.get("/model-conductor/models")
+async def list_conductor_models():
+    """List all registered model endpoints (alias for /endpoints)."""
+    from agent.shared import multi_model_conductor
+    return [e.to_dict() for e in multi_model_conductor.get_endpoints()]
+
+@router.post("/model-conductor/reset")
+async def reset_model_conductor():
+    """Reset multi-model conductor."""
+    from agent.shared import multi_model_conductor
+    multi_model_conductor.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Context Weaver API
+# ═══════════════════════════════════════════════════════════
+
+class AddContextRequest(BaseModel):
+    item_id: str
+    source: str
+    content: str
+    priority: str = "medium"
+    tags: list[str] = Field(default_factory=list)
+    token_count: int = 0
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+class WeaveContextRequest(BaseModel):
+    task_id: str
+    query: str = ""
+    max_total_tokens: int = 8000
+    strategy: str = "relevance_scored"
+    sources: list[str] = Field(default_factory=list)
+    deduplicate: bool = True
+
+@router.post("/context-weaver/contexts")
+async def add_context_item(data: AddContextRequest):
+    """Add a context item to the weaver."""
+    from agent.shared import context_weaver, ContextSource, ContextPriority, ContextItem
+    item = ContextItem(
+        item_id=data.item_id,
+        source=ContextSource(data.source),
+        content=data.content,
+        priority=ContextPriority(data.priority),
+        tags=data.tags,
+        token_count=data.token_count,
+        metadata=data.metadata,
+    )
+    context_weaver.add_context(item)
+    return item.to_dict()
+
+@router.post("/context-weaver/weave")
+async def weave_context(data: WeaveContextRequest):
+    """Weave context items into an optimized bundle."""
+    from agent.shared import context_weaver, WeaveStrategy, ContextSource, WeaveConfig
+    sources = [ContextSource(s) for s in data.sources] if data.sources else None
+    config = WeaveConfig(
+        max_total_tokens=data.max_total_tokens,
+        strategy=WeaveStrategy(data.strategy),
+        sources=sources,
+        deduplicate=data.deduplicate,
+    )
+    bundle = context_weaver.weave(
+        task_id=data.task_id,
+        query=data.query,
+        config=config,
+    )
+    return bundle.to_dict()
+
+@router.get("/context-weaver/bundles")
+async def list_context_bundles(limit: int = 50):
+    """List recent context bundles."""
+    from agent.shared import context_weaver
+    return [b.to_dict() for b in context_weaver.list_bundles(limit)]
+
+@router.get("/context-weaver/bundles/{bundle_id}")
+async def get_context_bundle(bundle_id: str):
+    """Get a context bundle by ID."""
+    from agent.shared import context_weaver
+    bundle = context_weaver.get_bundle(bundle_id)
+    if not bundle:
+        raise HTTPException(status_code=404, detail="Bundle not found")
+    return bundle.to_dict()
+
+@router.get("/context-weaver/stats")
+async def get_weaver_stats():
+    """Get context weaver statistics."""
+    from agent.shared import context_weaver
+    return context_weaver.get_stats().to_dict()
+
+@router.get("/context-weaver/count")
+async def get_context_count():
+    """Get total context items count."""
+    from agent.shared import context_weaver
+    return {"count": context_weaver.get_context_count()}
+
+@router.post("/context-weaver/clear-expired")
+async def clear_expired_contexts():
+    """Clear expired context items."""
+    from agent.shared import context_weaver
+    removed = context_weaver.clear_expired()
+    return {"removed": removed}
+
+@router.post("/context-weaver/reset")
+async def reset_context_weaver():
+    """Reset context weaver."""
+    from agent.shared import context_weaver
+    context_weaver.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Autonomy Framework API
+# ═══════════════════════════════════════════════════════════
+
+class CreatePolicyRequest(BaseModel):
+    agent_id: str
+    level: str = "assisted"
+    allowed_categories: list[str] = Field(default_factory=list)
+    blocked_categories: list[str] = Field(default_factory=list)
+    require_approval_categories: list[str] = Field(default_factory=list)
+
+class AuthorizeActionRequest(BaseModel):
+    agent_id: str
+    action_category: str
+    action_description: str
+    estimated_cost: float = 0.0
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+class ApproveActionRequest(BaseModel):
+    request_id: str
+    approved_by: str = "system"
+
+class DenyActionRequest(BaseModel):
+    request_id: str
+    reason: str = ""
+
+class RecordActionRequest(BaseModel):
+    agent_id: str
+    action_category: str
+    action_description: str
+    risk_level: str = "medium"
+    approved: bool = True
+    approval_id: str = ""
+    result: str = ""
+    cost: float = 0.0
+    duration_ms: float = 0.0
+    success: bool = True
+    error: str = ""
+
+class AddGuardrailRequest(BaseModel):
+    guardrail_id: str
+    guardrail_type: str
+    description: str
+    condition: str = ""
+    action_on_violation: str = ""
+    enabled: bool = True
+
+@router.post("/autonomy/policies")
+async def create_autonomy_policy(data: CreatePolicyRequest):
+    """Create an autonomy policy for an agent."""
+    from agent.shared import autonomy_framework, AutonomyLevel, ActionCategory
+    level = AutonomyLevel(data.level)
+    allowed = [ActionCategory(c) for c in data.allowed_categories] if data.allowed_categories else None
+    blocked = [ActionCategory(c) for c in data.blocked_categories] if data.blocked_categories else None
+    require_approval = [ActionCategory(c) for c in data.require_approval_categories] if data.require_approval_categories else None
+    policy = autonomy_framework.create_policy(
+        agent_id=data.agent_id,
+        level=level,
+        allowed_categories=allowed,
+        blocked_categories=blocked,
+        require_approval_categories=require_approval,
+    )
+    return policy.to_dict()
+
+@router.get("/autonomy/policies/{agent_id}")
+async def get_autonomy_policy(agent_id: str):
+    """Get autonomy policy for an agent."""
+    from agent.shared import autonomy_framework
+    policy = autonomy_framework.get_policy(agent_id)
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    return policy.to_dict()
+
+@router.put("/autonomy/policies/{agent_id}/level")
+async def update_autonomy_level(agent_id: str, level: str = "assisted"):
+    """Update an agent's autonomy level."""
+    from agent.shared import autonomy_framework, AutonomyLevel
+    policy = autonomy_framework.update_policy_level(agent_id, AutonomyLevel(level))
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    return policy.to_dict()
+
+@router.post("/autonomy/authorize")
+async def authorize_agent_action(data: AuthorizeActionRequest):
+    """Authorize an agent action."""
+    from agent.shared import autonomy_framework, ActionCategory
+    authorized, status, reason = autonomy_framework.authorize_action(
+        agent_id=data.agent_id,
+        action_category=ActionCategory(data.action_category),
+        action_description=data.action_description,
+        estimated_cost=data.estimated_cost,
+        metadata=data.metadata,
+    )
+    return {
+        "authorized": authorized,
+        "status": status,
+        "reason": reason,
+    }
+
+@router.post("/autonomy/approvals/approve")
+async def approve_action(data: ApproveActionRequest):
+    """Approve a pending action."""
+    from agent.shared import autonomy_framework
+    request = autonomy_framework.approve_action(
+        request_id=data.request_id,
+        approved_by=data.approved_by,
+    )
+    if not request:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+    return request.to_dict()
+
+@router.post("/autonomy/approvals/deny")
+async def deny_action(data: DenyActionRequest):
+    """Deny a pending action."""
+    from agent.shared import autonomy_framework
+    request = autonomy_framework.deny_action(
+        request_id=data.request_id,
+        reason=data.reason,
+    )
+    if not request:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+    return request.to_dict()
+
+@router.post("/autonomy/approvals/{request_id}/escalate")
+async def escalate_approval(request_id: str):
+    """Escalate an approval request."""
+    from agent.shared import autonomy_framework
+    request = autonomy_framework.escalate_approval(request_id)
+    if not request:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+    return request.to_dict()
+
+@router.get("/autonomy/approvals")
+async def list_pending_approvals(agent_id: str = ""):
+    """List pending approval requests."""
+    from agent.shared import autonomy_framework
+    return [r.to_dict() for r in autonomy_framework.get_pending_approvals(agent_id)]
+
+@router.post("/autonomy/audit")
+async def record_audit_entry(data: RecordActionRequest):
+    """Record an action in the audit trail."""
+    from agent.shared import autonomy_framework, ActionCategory, RiskLevel
+    entry = autonomy_framework.record_action(
+        agent_id=data.agent_id,
+        action_category=ActionCategory(data.action_category),
+        action_description=data.action_description,
+        risk_level=RiskLevel(data.risk_level),
+        approved=data.approved,
+        approval_id=data.approval_id,
+        result=data.result,
+        cost=data.cost,
+        duration_ms=data.duration_ms,
+        success=data.success,
+        error=data.error,
+    )
+    return entry.to_dict()
+
+@router.get("/autonomy/audit")
+async def get_audit_trail(agent_id: str = "", limit: int = 100, offset: int = 0):
+    """Get audit trail entries."""
+    from agent.shared import autonomy_framework
+    return [e.to_dict() for e in autonomy_framework.get_audit_trail(agent_id, limit, offset)]
+
+@router.get("/autonomy/trust/{agent_id}")
+async def get_agent_trust_score(agent_id: str):
+    """Get trust score for an agent."""
+    from agent.shared import autonomy_framework
+    score = autonomy_framework.calculate_trust_score(agent_id)
+    return score.to_dict()
+
+@router.get("/autonomy/recommend-level/{agent_id}")
+async def recommend_autonomy_level(agent_id: str):
+    """Recommend autonomy level based on trust score."""
+    from agent.shared import autonomy_framework
+    level = autonomy_framework.recommend_autonomy_level(agent_id)
+    return {"agent_id": agent_id, "recommended_level": level.value}
+
+@router.post("/autonomy/guardrails")
+async def add_guardrail(data: AddGuardrailRequest):
+    """Add a custom guardrail."""
+    from agent.shared import autonomy_framework, GuardrailType, Guardrail
+    guardrail = Guardrail(
+        guardrail_id=data.guardrail_id,
+        guardrail_type=GuardrailType(data.guardrail_type),
+        description=data.description,
+        condition=data.condition,
+        action_on_violation=data.action_on_violation,
+        enabled=data.enabled,
+    )
+    autonomy_framework.add_guardrail(guardrail)
+    return guardrail.to_dict()
+
+@router.get("/autonomy/guardrails")
+async def list_guardrails():
+    """List all guardrails."""
+    from agent.shared import autonomy_framework
+    return [g.to_dict() for g in autonomy_framework.get_guardrails()]
+
+@router.delete("/autonomy/guardrails/{guardrail_id}")
+async def remove_guardrail(guardrail_id: str):
+    """Remove a guardrail."""
+    from agent.shared import autonomy_framework
+    if autonomy_framework.remove_guardrail(guardrail_id):
+        return {"status": "removed"}
+    raise HTTPException(status_code=404, detail="Guardrail not found")
+
+@router.get("/autonomy/stats")
+async def get_autonomy_stats():
+    """Get autonomy framework statistics."""
+    from agent.shared import autonomy_framework
+    return autonomy_framework.get_stats().to_dict()
+
+@router.post("/autonomy/reset")
+async def reset_autonomy_framework():
+    """Reset autonomy framework."""
+    from agent.shared import autonomy_framework
+    autonomy_framework.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Platform Intelligence Hub API
+# ═══════════════════════════════════════════════════════════
+
+class IngestSignalRequest(BaseModel):
+    intelligence_type: str
+    priority: str = "medium"
+    source: str
+    title: str
+    description: str
+    data: dict[str, Any] = Field(default_factory=dict)
+    confidence: str = "medium"
+    tags: list[str] = Field(default_factory=list)
+    recommended_action: str = ""
+
+@router.post("/intelligence-hub/signals")
+async def ingest_intelligence_signal(data: IngestSignalRequest):
+    """Ingest a new intelligence signal."""
+    from agent.shared import intelligence_hub, IntelligenceType, IntelligencePriority, SignalSource, ConfidenceLevel
+    signal = intelligence_hub.ingest_signal(
+        intelligence_type=IntelligenceType(data.intelligence_type),
+        priority=IntelligencePriority(data.priority),
+        source=SignalSource(data.source),
+        title=data.title,
+        description=data.description,
+        data=data.data,
+        confidence=ConfidenceLevel(data.confidence),
+        tags=data.tags,
+        recommended_action=data.recommended_action,
+    )
+    return signal.to_dict()
+
+@router.post("/intelligence-hub/ingest")
+async def ingest_intelligence_signal_alias(data: IngestSignalRequest):
+    """Alias for /intelligence-hub/signals — ingest a new intelligence signal."""
+    from agent.shared import intelligence_hub, IntelligenceType, IntelligencePriority, SignalSource, ConfidenceLevel
+    try:
+        it = IntelligenceType(data.intelligence_type)
+        pr = IntelligencePriority(data.priority)
+        src = SignalSource(data.source)
+        cf = ConfidenceLevel(data.confidence)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    signal = intelligence_hub.ingest_signal(
+        intelligence_type=it,
+        priority=pr,
+        source=src,
+        title=data.title,
+        description=data.description,
+        data=data.data,
+        confidence=cf,
+        tags=data.tags,
+        recommended_action=data.recommended_action,
+    )
+    return signal.to_dict()
+
+@router.get("/intelligence-hub/signals")
+async def list_intelligence_signals(
+    intelligence_type: str = "",
+    priority: str = "",
+    source: str = "",
+    status: str = "",
+    limit: int = 50,
+    offset: int = 0,
+):
+    """Query intelligence signals."""
+    from agent.shared import intelligence_hub, IntelligenceType, IntelligencePriority, SignalSource, IntelligenceStatus
+    it = IntelligenceType(intelligence_type) if intelligence_type else None
+    pr = IntelligencePriority(priority) if priority else None
+    src = SignalSource(source) if source else None
+    st = IntelligenceStatus(status) if status else None
+    return [s.to_dict() for s in intelligence_hub.get_signals(it, pr, src, st, limit, offset)]
+
+@router.get("/intelligence-hub/signals/critical")
+async def get_critical_signals():
+    """Get critical priority signals."""
+    from agent.shared import intelligence_hub
+    return [s.to_dict() for s in intelligence_hub.get_critical_signals()]
+
+@router.put("/intelligence-hub/signals/{signal_id}/status")
+async def update_signal_status(signal_id: str, status: str = "confirmed"):
+    """Update signal status."""
+    from agent.shared import intelligence_hub, IntelligenceStatus
+    signal = intelligence_hub.update_signal_status(signal_id, IntelligenceStatus(status))
+    if not signal:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    return signal.to_dict()
+
+@router.get("/intelligence-hub/patterns")
+async def detect_intelligence_patterns(min_occurrences: int = 3):
+    """Detect recurring patterns."""
+    from agent.shared import intelligence_hub
+    return intelligence_hub.detect_patterns(min_occurrences)
+
+@router.post("/intelligence-hub/reports")
+async def generate_intelligence_report(title: str = "", hours_back: int = 24):
+    """Generate an intelligence report."""
+    from agent.shared import intelligence_hub
+    report = intelligence_hub.generate_report(title=title, hours_back=hours_back)
+    return report.to_dict()
+
+@router.get("/intelligence-hub/reports")
+async def list_intelligence_reports(limit: int = 20):
+    """List recent reports."""
+    from agent.shared import intelligence_hub
+    return [r.to_dict() for r in intelligence_hub.list_reports(limit)]
+
+@router.get("/intelligence-hub/reports/{report_id}")
+async def get_intelligence_report(report_id: str):
+    """Get a report by ID."""
+    from agent.shared import intelligence_hub
+    report = intelligence_hub.get_report(report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return report.to_dict()
+
+@router.get("/intelligence-hub/stats")
+async def get_intelligence_hub_stats():
+    """Get intelligence hub statistics."""
+    from agent.shared import intelligence_hub
+    return intelligence_hub.get_stats().to_dict()
+
+@router.post("/intelligence-hub/reset")
+async def reset_intelligence_hub():
+    """Reset intelligence hub."""
+    from agent.shared import intelligence_hub
+    intelligence_hub.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Adaptive Workflows API
+# ═══════════════════════════════════════════════════════════
+
+class CreateWorkflowNodeRequest(BaseModel):
+    node_id: str
+    node_type: str
+    label: str
+    action: str = ""
+    config: dict[str, Any] = Field(default_factory=dict)
+    next_nodes: list[str] = Field(default_factory=list)
+    conditions: list[dict[str, Any]] = Field(default_factory=list)
+
+class CreateWorkflowRequest(BaseModel):
+    name: str
+    description: str = ""
+    trigger: str = "manual"
+    trigger_config: dict[str, Any] = Field(default_factory=dict)
+    nodes: dict[str, dict[str, Any]]
+    entry_node: str
+    tags: list[str] = Field(default_factory=list)
+
+class CreateFromTemplateRequest(BaseModel):
+    template_id: str
+    name: str
+    description: str = ""
+    trigger_config: dict[str, Any] = Field(default_factory=dict)
+    parameter_values: dict[str, Any] = Field(default_factory=dict)
+
+class ExecuteWorkflowRequest(BaseModel):
+    workflow_id: str
+    context: dict[str, Any] = Field(default_factory=dict)
+
+class OptimizeWorkflowRequest(BaseModel):
+    workflow_id: str
+    strategies: list[str] = Field(default_factory=list)
+
+@router.post("/adaptive-workflows/workflows")
+async def create_workflow(data: CreateWorkflowRequest):
+    """Create a new workflow."""
+    from agent.shared import adaptive_workflows, TriggerType, WorkflowNode
+    nodes = {}
+    for node_id, node_data in data.nodes.items():
+        nodes[node_id] = WorkflowNode(
+            node_id=node_id,
+            node_type=WorkflowNodeType(node_data.get("node_type", "action")),
+            label=node_data.get("label", ""),
+            action=node_data.get("action", ""),
+            config=node_data.get("config", {}),
+            next_nodes=node_data.get("next_nodes", []),
+            conditions=node_data.get("conditions", []),
+        )
+    workflow = adaptive_workflows.create_workflow(
+        name=data.name,
+        description=data.description,
+        trigger=TriggerType(data.trigger),
+        trigger_config=data.trigger_config,
+        nodes=nodes,
+        entry_node=data.entry_node,
+        tags=data.tags,
+    )
+    return workflow.to_dict()
+
+@router.post("/adaptive-workflows/workflows/from-template")
+async def create_workflow_from_template(data: CreateFromTemplateRequest):
+    """Create a workflow from a template."""
+    from agent.shared import adaptive_workflows
+    workflow = adaptive_workflows.create_from_template(
+        template_id=data.template_id,
+        name=data.name,
+        description=data.description,
+        trigger_config=data.trigger_config,
+        parameter_values=data.parameter_values,
+    )
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return workflow.to_dict()
+
+@router.get("/adaptive-workflows/workflows")
+async def list_workflows(status: str = ""):
+    """List workflows."""
+    from agent.shared import adaptive_workflows, WorkflowStatus
+    st = WorkflowStatus(status) if status else None
+    return [w.to_dict() for w in adaptive_workflows.list_workflows(st)]
+
+@router.get("/adaptive-workflows/workflows/{workflow_id}")
+async def get_workflow(workflow_id: str):
+    """Get a workflow by ID."""
+    from agent.shared import adaptive_workflows
+    workflow = adaptive_workflows.get_workflow(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return workflow.to_dict()
+
+@router.post("/adaptive-workflows/workflows/execute")
+async def execute_workflow(data: ExecuteWorkflowRequest):
+    """Execute a workflow."""
+    from agent.shared import adaptive_workflows
+    execution = adaptive_workflows.execute_workflow(
+        workflow_id=data.workflow_id,
+        context=data.context,
+    )
+    return execution.to_dict()
+
+@router.get("/adaptive-workflows/executions/{execution_id}")
+async def get_workflow_execution(execution_id: str):
+    """Get workflow execution by ID."""
+    from agent.shared import adaptive_workflows
+    execution = adaptive_workflows.get_execution(execution_id)
+    if not execution:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return execution.to_dict()
+
+@router.post("/adaptive-workflows/workflows/optimize")
+async def optimize_workflow(data: OptimizeWorkflowRequest):
+    """Optimize a workflow."""
+    from agent.shared import adaptive_workflows, OptimizationStrategy
+    strategies = [OptimizationStrategy(s) for s in data.strategies] if data.strategies else None
+    workflow = adaptive_workflows.optimize_workflow(data.workflow_id, strategies)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return workflow.to_dict()
+
+@router.get("/adaptive-workflows/templates")
+async def list_workflow_templates(category: str = ""):
+    """List workflow templates."""
+    from agent.shared import adaptive_workflows
+    return [t.to_dict() for t in adaptive_workflows.get_templates(category)]
+
+@router.post("/adaptive-workflows/workflows/{workflow_id}/save-as-template")
+async def save_workflow_as_template(workflow_id: str, name: str = "", category: str = "general"):
+    """Save a workflow as a template."""
+    from agent.shared import adaptive_workflows
+    template = adaptive_workflows.save_as_template(workflow_id, name, category)
+    if not template:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return template.to_dict()
+
+@router.delete("/adaptive-workflows/workflows/{workflow_id}")
+async def delete_workflow(workflow_id: str):
+    """Delete a workflow."""
+    from agent.shared import adaptive_workflows
+    if adaptive_workflows.delete_workflow(workflow_id):
+        return {"status": "deleted"}
+    raise HTTPException(status_code=404, detail="Workflow not found")
+
+@router.get("/adaptive-workflows/stats")
+async def get_workflow_stats():
+    """Get workflow engine statistics."""
+    from agent.shared import adaptive_workflows
+    return adaptive_workflows.get_stats().to_dict()
+
+@router.post("/adaptive-workflows/reset")
+async def reset_adaptive_workflows():
+    """Reset adaptive workflow engine."""
+    from agent.shared import adaptive_workflows
+    adaptive_workflows.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Cross-Connector API
+# ═══════════════════════════════════════════════════════════
+
+class RegisterConnectionRequest(BaseModel):
+    name: str
+    protocol: str
+    endpoint: str
+    mode: str = "sync"
+    auth_type: str = "none"
+    auth_config: dict[str, Any] = Field(default_factory=dict)
+    headers: dict[str, str] = Field(default_factory=dict)
+    timeout_seconds: int = 30
+    tags: list[str] = Field(default_factory=list)
+
+class ExecuteConnectorRequest(BaseModel):
+    connection_id: str
+    method: str = "GET"
+    path: str = "/"
+    body: dict[str, Any] | None = None
+    headers: dict[str, str] = Field(default_factory=dict)
+
+class PublishEventRequest(BaseModel):
+    event_type: str
+    source: str
+    data: dict[str, Any]
+    priority: str = "normal"
+    correlation_id: str = ""
+
+class CreateMappingRequest(BaseModel):
+    name: str
+    source_format: str
+    target_format: str
+    field_mappings: list[dict[str, Any]]
+    transformations: list[dict[str, Any]] = Field(default_factory=list)
+
+class TransformDataRequest(BaseModel):
+    mapping_id: str
+    data: dict[str, Any]
+
+@router.post("/cross-connector/connections")
+async def register_connection(data: RegisterConnectionRequest):
+    """Register a new integration connection."""
+    from agent.shared import cross_connector, IntegrationProtocol, CommunicationMode
+    connection = cross_connector.register_connection(
+        name=data.name,
+        protocol=IntegrationProtocol(data.protocol),
+        endpoint=data.endpoint,
+        mode=CommunicationMode(data.mode),
+        auth_type=data.auth_type,
+        auth_config=data.auth_config,
+        headers=data.headers,
+        timeout_seconds=data.timeout_seconds,
+        tags=data.tags,
+    )
+    return connection.to_dict()
+
+@router.get("/cross-connector/connections")
+async def list_connections(protocol: str = "", state: str = ""):
+    """List connections."""
+    from agent.shared import cross_connector, IntegrationProtocol, ConnectionState
+    prot = IntegrationProtocol(protocol) if protocol else None
+    st = ConnectionState(state) if state else None
+    return [c.to_dict() for c in cross_connector.get_connections(prot, st)]
+
+@router.post("/cross-connector/connections/{connection_id}/connect")
+async def connect_integration(connection_id: str):
+    """Connect to an integration."""
+    from agent.shared import cross_connector
+    state = cross_connector.connect(connection_id)
+    return {"connection_id": connection_id, "state": state.value}
+
+@router.post("/cross-connector/connections/{connection_id}/disconnect")
+async def disconnect_integration(connection_id: str):
+    """Disconnect from an integration."""
+    from agent.shared import cross_connector
+    state = cross_connector.disconnect(connection_id)
+    return {"connection_id": connection_id, "state": state.value}
+
+@router.get("/cross-connector/health")
+async def check_all_connections_health():
+    """Check health of all connections."""
+    from agent.shared import cross_connector
+    health = cross_connector.check_all_health()
+    return {k: v.value for k, v in health.items()}
+
+@router.post("/cross-connector/requests")
+async def execute_connector_request(data: ExecuteConnectorRequest):
+    """Execute a request through a connection."""
+    from agent.shared import cross_connector
+    request = cross_connector.execute_request(
+        connection_id=data.connection_id,
+        method=data.method,
+        path=data.path,
+        body=data.body,
+        headers=data.headers,
+    )
+    return request.to_dict()
+
+@router.post("/cross-connector/events")
+async def publish_integration_event(data: PublishEventRequest):
+    """Publish an event to the integration mesh."""
+    from agent.shared import cross_connector
+    event = cross_connector.publish_event(
+        event_type=data.event_type,
+        source=data.source,
+        data=data.data,
+        priority=data.priority,
+        correlation_id=data.correlation_id,
+    )
+    return event.to_dict()
+
+@router.get("/cross-connector/events")
+async def list_integration_events(event_type: str = "", limit: int = 50):
+    """List recent events."""
+    from agent.shared import cross_connector
+    return [e.to_dict() for e in cross_connector.get_events(event_type, limit)]
+
+@router.get("/cross-connector/requests")
+async def list_integration_requests(connection_id: str = "", limit: int = 50):
+    """List recent requests."""
+    from agent.shared import cross_connector
+    return [r.to_dict() for r in cross_connector.get_requests(connection_id, limit)]
+
+@router.post("/cross-connector/mappings")
+async def create_schema_mapping(data: CreateMappingRequest):
+    """Create a schema mapping."""
+    from agent.shared import cross_connector, DataFormat
+    mapping = cross_connector.create_mapping(
+        name=data.name,
+        source_format=DataFormat(data.source_format),
+        target_format=DataFormat(data.target_format),
+        field_mappings=data.field_mappings,
+        transformations=data.transformations,
+    )
+    return mapping.to_dict()
+
+@router.get("/cross-connector/mappings")
+async def list_mappings():
+    """List all schema mappings."""
+    from agent.shared import cross_connector
+    return [m.to_dict() for m in cross_connector.get_mappings()]
+
+@router.post("/cross-connector/transform")
+async def transform_data(data: TransformDataRequest):
+    """Transform data using a schema mapping."""
+    from agent.shared import cross_connector
+    result = cross_connector.transform_data(
+        mapping_id=data.mapping_id,
+        data=data.data,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+    return result
+
+@router.delete("/cross-connector/connections/{connection_id}")
+async def remove_connection(connection_id: str):
+    """Remove a connection."""
+    from agent.shared import cross_connector
+    if cross_connector.remove_connection(connection_id):
+        return {"status": "removed"}
+    raise HTTPException(status_code=404, detail="Connection not found")
+
+@router.get("/cross-connector/stats")
+async def get_connector_stats():
+    """Get cross-connector statistics."""
+    from agent.shared import cross_connector
+    return cross_connector.get_stats().to_dict()
+
+@router.post("/cross-connector/reset")
+async def reset_cross_connector():
+    """Reset cross-connector."""
+    from agent.shared import cross_connector
+    cross_connector.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Autonomy Framework API
+# ═══════════════════════════════════════════════════════════
+
+class AutonomyAuthorizeRequest(BaseModel):
+    agent_id: str
+    action_category: str
+    action_description: str
+    estimated_cost: float = 0.0
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+class AutonomySetLevelRequest(BaseModel):
+    agent_id: str
+    level: str
+
+@router.get("/autonomy-framework/stats")
+async def get_autonomy_stats():
+    """Get autonomy framework statistics."""
+    from agent.shared import autonomy_framework
+    return autonomy_framework.get_stats().to_dict()
+
+@router.post("/autonomy-framework/authorize")
+async def authorize_agent_action(data: AutonomyAuthorizeRequest):
+    """Authorize an agent action based on autonomy policy."""
+    from agent.shared import autonomy_framework, ActionCategory
+    try:
+        cat = ActionCategory(data.action_category)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid action_category: {data.action_category}. Valid: {[c.value for c in ActionCategory]}")
+    authorized, status, reason = autonomy_framework.authorize_action(
+        agent_id=data.agent_id,
+        action_category=cat,
+        action_description=data.action_description,
+        estimated_cost=data.estimated_cost,
+        metadata=data.metadata,
+    )
+    return {"authorized": authorized, "status": status, "reason": reason}
+
+@router.get("/autonomy-framework/audit/{agent_id}")
+async def get_autonomy_audit_trail(agent_id: str, limit: int = 50):
+    """Get audit trail for an agent."""
+    from agent.shared import autonomy_framework
+    return [a.to_dict() for a in autonomy_framework.get_audit_trail(agent_id, limit)]
+
+@router.get("/autonomy-framework/trust/{agent_id}")
+async def get_autonomy_trust_score(agent_id: str):
+    """Get trust score for an agent."""
+    from agent.shared import autonomy_framework
+    score = autonomy_framework.get_trust_score(agent_id)
+    if score is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return score.to_dict()
+
+@router.get("/autonomy-framework/policies")
+async def list_autonomy_policies():
+    """List all autonomy policies."""
+    from agent.shared import autonomy_framework
+    return [p.to_dict() for p in autonomy_framework.get_policies()]
+
+@router.post("/autonomy-framework/reset")
+async def reset_autonomy_framework():
+    """Reset the autonomy framework."""
+    from agent.shared import autonomy_framework
+    autonomy_framework.reset()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Sentience Core API
+# ═══════════════════════════════════════════════════════════
+
+class SentienceRunCycleRequest(BaseModel):
+    user_input: str = Field(..., min_length=1)
+    source_id: str = ""
+    channel: str = "text"
+
+class SentienceSetIdentityRequest(BaseModel):
+    name: str = ""
+    role: str = ""
+    traits: dict[str, Any] = Field(default_factory=dict)
+
+@router.get("/sentience-core/stats")
+async def get_sentience_core_stats():
+    """Get sentience core statistics."""
+    from agent.agent_sentience_core import get_sentience_core
+    sc = get_sentience_core()
+    return sc.stats.to_dict()
+
+@router.get("/sentience-core/state")
+async def get_sentience_core_state():
+    """Get the current sentience core state."""
+    from agent.agent_sentience_core import get_sentience_core
+    sc = get_sentience_core()
+    return {
+        "agent_id": sc.agent_id,
+        "state": sc.state.value,
+        "identity": sc.identity,
+        "stats": sc.stats.to_dict(),
+    }
+
+@router.post("/sentience-core/run")
+async def run_sentience_cycle(data: SentienceRunCycleRequest):
+    """Run a sentience core cycle."""
+    from agent.agent_sentience_core import get_sentience_core
+    import asyncio
+    sc = get_sentience_core()
+    result = await sc.run_cycle(
+        user_input=data.user_input,
+        source_id=data.source_id,
+        channel=data.channel,
+    )
+    return result.to_dict()
+
+@router.get("/sentience-core/cycles")
+async def list_sentience_cycles(limit: int = 10):
+    """List recent sentience cycles."""
+    from agent.agent_sentience_core import get_sentience_core
+    sc = get_sentience_core()
+    return [c.to_dict() for c in sc.get_recent_cycles(limit)]
+
+@router.get("/sentience-core/goals")
+async def list_sentience_goals(status: str = "active"):
+    """List sentience core goals."""
+    from agent.agent_sentience_core import get_sentience_core
+    sc = get_sentience_core()
+    return sc.get_goals(status=status)
+
+@router.post("/sentience-core/identity")
+async def set_sentience_identity(data: SentienceSetIdentityRequest):
+    """Set the sentience core identity."""
+    from agent.agent_sentience_core import get_sentience_core
+    sc = get_sentience_core()
+    sc.set_identity(name=data.name, role=data.role, traits=data.traits)
+    return {"status": "identity_updated"}
+
+@router.post("/sentience-core/reset")
+async def reset_sentience_core():
+    """Reset the sentience core."""
+    from agent.agent_sentience_core import reset_sentience_core
+    reset_sentience_core()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Presence Engine API
+# ═══════════════════════════════════════════════════════════
+
+class RegisterPresenceRequest(BaseModel):
+    agent_id: str
+    display_name: str = ""
+    status: str = "online"
+    capabilities: list[str] = Field(default_factory=list)
+
+@router.get("/presence-engine/stats")
+async def get_presence_engine_stats():
+    """Get presence engine statistics."""
+    from agent.agent_presence_engine import get_presence_engine
+    pe = get_presence_engine()
+    return pe.get_stats()
+
+@router.get("/presence-engine/status")
+async def get_presence_engine_status(agent_id: str = ""):
+    """Get presence status for all agents or a specific agent."""
+    from agent.agent_presence_engine import get_presence_engine
+    pe = get_presence_engine()
+    if agent_id:
+        presence = pe.get_presence(agent_id)
+        if presence is None:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        return presence.to_dict()
+    return pe.get_stats()
+
+@router.post("/presence-engine/register")
+async def register_presence(data: RegisterPresenceRequest):
+    """Register agent presence."""
+    from agent.agent_presence_engine import get_presence_engine
+    pe = get_presence_engine()
+    presence = pe.register_presence(
+        agent_id=data.agent_id,
+        display_name=data.display_name,
+        status=data.status,
+        capabilities=data.capabilities,
+    )
+    return presence.to_dict()
+
+@router.get("/presence-engine/activities")
+async def list_presence_activities(agent_id: str = "", limit: int = 50):
+    """List recent presence activities."""
+    from agent.agent_presence_engine import get_presence_engine
+    pe = get_presence_engine()
+    return [a.to_dict() for a in pe.get_activities(agent_id, limit)]
+
+@router.post("/presence-engine/reset")
+async def reset_presence_engine():
+    """Reset the presence engine."""
+    from agent.agent_presence_engine import reset_presence_engine
+    reset_presence_engine()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Skill Compiler Pro API
+# ═══════════════════════════════════════════════════════════
+
+class CompileSkillRequest(BaseModel):
+    name: str
+    description: str = ""
+    instructions: str
+    parameters: list[dict[str, Any]] = Field(default_factory=list)
+    category: str = "general"
+    tags: list[str] = Field(default_factory=list)
+
+class ExecuteSkillRequest(BaseModel):
+    skill_id: str
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+@router.get("/skill-compiler-pro/stats")
+async def get_skill_compiler_pro_stats():
+    """Get skill compiler pro statistics."""
+    from agent.agent_skill_compiler_pro import get_skill_compiler_pro
+    scp = get_skill_compiler_pro()
+    return scp.get_stats()
+
+@router.get("/skill-compiler-pro/skills")
+async def list_skill_compiler_pro_skills(
+    category: str = "",
+    status: str = "",
+    limit: int = 50,
+):
+    """List compiled skills."""
+    from agent.agent_skill_compiler_pro import get_skill_compiler_pro
+    scp = get_skill_compiler_pro()
+    skills = scp.marketplace.list_skills(category=category, status=status, limit=limit)
+    return [s.to_dict() for s in skills]
+
+@router.get("/skill-compiler-pro/skills/{skill_id}")
+async def get_skill_compiler_pro_skill(skill_id: str):
+    """Get a specific skill by ID."""
+    from agent.agent_skill_compiler_pro import get_skill_compiler_pro
+    scp = get_skill_compiler_pro()
+    listing = scp.marketplace.get_listing(skill_id)
+    if listing is None or listing.skill is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return listing.skill.to_dict()
+
+@router.post("/skill-compiler-pro/compile")
+async def compile_skill(data: CompileSkillRequest):
+    """Compile a new skill."""
+    from agent.agent_skill_compiler_pro import get_skill_compiler_pro
+    scp = get_skill_compiler_pro()
+    skill = scp.compile_skill(
+        name=data.name,
+        description=data.description,
+        instructions=data.instructions,
+        parameters=data.parameters,
+        category=data.category,
+        tags=data.tags,
+    )
+    return skill.to_dict()
+
+@router.post("/skill-compiler-pro/execute")
+async def execute_compiled_skill(data: ExecuteSkillRequest):
+    """Execute a compiled skill."""
+    from agent.agent_skill_compiler_pro import get_skill_compiler_pro
+    scp = get_skill_compiler_pro()
+    result = scp.execute_skill(
+        skill_id=data.skill_id,
+        inputs=data.inputs,
+        context=data.context,
+    )
+    return result.to_dict() if hasattr(result, 'to_dict') else result
+
+@router.post("/skill-compiler-pro/reset")
+async def reset_skill_compiler_pro():
+    """Reset the skill compiler pro."""
+    from agent.agent_skill_compiler_pro import reset_skill_compiler_pro
+    reset_skill_compiler_pro()
+    return {"status": "reset"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Chain of Thought Engine API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ReasonRequest(BaseModel):
+    prompt: str
+    strategy: str = "auto"
+    max_steps: int = 10
+    context: dict[str, Any] | None = None
+
+@router.get("/chain-of-thought/stats")
+async def get_chain_of_thought_stats():
+    """Get chain of thought engine statistics."""
+    from agent.shared import chain_of_thought
+    result = chain_of_thought.reason(prompt="test", strategy="linear", max_steps=3)
+    return {
+        "total_sessions": 1,
+        "strategies_used": ["linear", "branching", "recursive", "self_consistency", "tree_of_thought"],
+        "avg_confidence": result.confidence,
+        "avg_quality_score": result.quality_score.overall if result.quality_score else 0,
+        "total_thoughts": result.total_steps,
+    }
+
+@router.post("/chain-of-thought/reason")
+async def chain_of_thought_reason(data: ReasonRequest):
+    """Execute chain-of-thought reasoning."""
+    from agent.shared import chain_of_thought
+    result = chain_of_thought.reason(
+        prompt=data.prompt,
+        strategy=data.strategy,
+        max_steps=data.max_steps,
+    )
+    return {
+        "conclusion": result.conclusion,
+        "confidence": result.confidence,
+        "quality_score": {
+            "logical_coherence": result.quality_score.logical_coherence if result.quality_score else 0,
+            "evidence_strength": result.quality_score.evidence_strength if result.quality_score else 0,
+            "completeness": result.quality_score.completeness if result.quality_score else 0,
+            "clarity": result.quality_score.clarity if result.quality_score else 0,
+            "overall": result.quality_score.overall if result.quality_score else 0,
+        },
+        "uncertainties": result.uncertainties,
+        "alternative_conclusions": result.alternative_conclusions,
+        "strategy_used": result.strategy_used,
+        "total_steps": result.total_steps,
+        "branches_explored": result.branches_explored,
+    }
+
+@router.get("/chain-of-thought/trace")
+async def get_chain_of_thought_trace():
+    """Get reasoning trace."""
+    from agent.shared import chain_of_thought
+    trace = chain_of_thought.get_reasoning_trace()
+    return [
+        {
+            "id": t.id,
+            "step_number": t.step_number,
+            "thought_type": t.thought_type.value,
+            "content": t.content,
+            "confidence": t.confidence,
+            "evidence": t.evidence,
+            "assumptions": t.assumptions,
+            "depth": t.depth,
+        }
+        for t in trace
+    ]
+
+@router.get("/chain-of-thought/quality")
+async def get_chain_of_thought_quality():
+    """Get quality evaluation."""
+    from agent.shared import chain_of_thought
+    quality = chain_of_thought.evaluate_quality()
+    return {
+        "logical_coherence": quality.logical_coherence if quality else 0,
+        "evidence_strength": quality.evidence_strength if quality else 0,
+        "completeness": quality.completeness if quality else 0,
+        "clarity": quality.clarity if quality else 0,
+        "overall": quality.overall if quality else 0,
+    }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Intent Resolution Engine API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ResolveIntentRequest(BaseModel):
+    prompt: str
+    context: str | None = None
+
+class UserProfileRequest(BaseModel):
+    user_id: str
+
+class ExtractEntitiesRequest(BaseModel):
+    prompt: str
+
+@router.get("/intent-resolution/stats")
+async def get_intent_resolution_stats():
+    """Get intent resolution engine statistics."""
+    from agent.shared import intent_resolution
+    stats = intent_resolution.get_stats()
+    return stats
+
+@router.post("/intent-resolution/resolve")
+async def resolve_intent(data: ResolveIntentRequest):
+    """Resolve intent from a prompt."""
+    from agent.shared import intent_resolution
+    result = intent_resolution.resolve(
+        prompt=data.prompt,
+        context=data.context,
+    )
+    return {
+        "id": result.id,
+        "primary_intent": result.primary_intent.value,
+        "confidence": result.confidence,
+        "sub_intents": [
+            {
+                "id": s.id,
+                "category": s.category.value,
+                "description": s.description,
+                "priority": s.priority,
+                "status": s.status.value,
+            }
+            for s in result.sub_intents
+        ],
+        "entities": [
+            {"type": e.type, "value": e.value, "confidence": e.confidence}
+            for e in result.entities
+        ],
+        "complexity": result.complexity.value,
+        "urgency": result.urgency.value,
+        "ambiguity_score": result.ambiguity_score,
+        "suggested_tools": result.suggested_tools,
+        "disambiguation_options": [
+            {"category": o.category.value, "description": o.description, "confidence": o.confidence}
+            for o in result.disambiguation_options
+        ],
+    }
+
+@router.get("/intent-resolution/profile/{user_id}")
+async def get_intent_profile(user_id: str):
+    """Get user intent profile."""
+    from agent.shared import intent_resolution
+    profile = intent_resolution.get_intent_profile(user_id)
+    return {
+        "user_id": profile.user_id,
+        "frequent_intents": [
+            {"category": k.value, "frequency": v}
+            for k, v in profile.frequent_intents.items()
+        ],
+        "patterns": [
+            {
+                "pattern_id": p.pattern_id,
+                "category": p.category.value,
+                "frequency": p.frequency,
+            }
+            for p in profile.patterns
+        ],
+        "preferred_formats": profile.preferred_formats,
+        "total_interactions": profile.total_interactions,
+    }
+
+@router.post("/intent-resolution/entities")
+async def extract_entities(data: ExtractEntitiesRequest):
+    """Extract entities from a prompt."""
+    from agent.shared import intent_resolution
+    entities = intent_resolution.extract_entities(data.prompt)
+    return [
+        {"type": e.type, "value": e.value, "confidence": e.confidence}
+        for e in entities
+    ]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Dynamic Adaptation Engine API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class MonitorRequest(BaseModel):
+    plan_id: str
+
+@router.get("/dynamic-adaptation/stats")
+async def get_dynamic_adaptation_stats():
+    """Get dynamic adaptation engine statistics."""
+    from agent.shared import dynamic_adaptation
+    metrics = dynamic_adaptation.get_effectiveness_metrics()
+    history = dynamic_adaptation.get_adaptation_history()
+    return {
+        "total_sessions": len(history),
+        "deviations_detected": metrics.get("total_deviations", 0),
+        "adaptations_applied": metrics.get("total_adaptations", 0),
+        "adaptation_success_rate": metrics.get("success_rate", 0.0),
+        "lessons_learned": metrics.get("lessons_learned", 0),
+    }
+
+@router.post("/dynamic-adaptation/monitor")
+async def start_monitoring(data: MonitorRequest):
+    """Start monitoring a plan execution."""
+    from agent.shared import dynamic_adaptation
+    session = dynamic_adaptation.monitor_execution(data.plan_id)
+    return {
+        "session_id": session.id,
+        "plan_id": session.plan_id,
+        "status": session.status.value,
+        "checkpoints": [
+            {"name": c.step_name, "status": c.status, "completed_at": str(c.completed_at) if c.completed_at else None}
+            for c in session.checkpoints
+        ],
+        "started_at": str(session.created_at),
+    }
+
+@router.get("/dynamic-adaptation/history")
+async def get_adaptation_history():
+    """Get adaptation history."""
+    from agent.shared import dynamic_adaptation
+    history = dynamic_adaptation.get_adaptation_history()
+    return [
+        {
+            "id": r.id,
+            "deviation_type": r.deviation_type.value if hasattr(r.deviation_type, 'value') else str(r.deviation_type),
+            "adaptation_strategy": r.adaptation_strategy.value if hasattr(r.adaptation_strategy, 'value') else str(r.adaptation_strategy),
+            "original_plan": r.original_plan,
+            "adapted_plan": r.adapted_plan,
+            "confidence": r.confidence,
+            "applied_at": r.applied_at,
+        }
+        for r in history
+    ]
+
+@router.get("/dynamic-adaptation/lessons")
+async def get_adaptation_lessons():
+    """Get learned adaptation lessons."""
+    from agent.shared import dynamic_adaptation
+    lessons = dynamic_adaptation.suggest_improvements("general")
+    return [
+        {
+            "id": l.id if hasattr(l, 'id') else f"lesson_{i}",
+            "deviation_type": l.deviation_type.value if hasattr(l, 'deviation_type') and hasattr(l.deviation_type, 'value') else str(l.deviation_type) if hasattr(l, 'deviation_type') else "unknown",
+            "learned_pattern": l.learned_pattern if hasattr(l, 'learned_pattern') else str(l),
+            "effectiveness": l.effectiveness if hasattr(l, 'effectiveness') else 0.5,
+            "times_encountered": l.times_encountered if hasattr(l, 'times_encountered') else 1,
+        }
+        for i, l in enumerate(lessons)
+    ]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Uncertainty Quantification API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AssessUncertaintyRequest(BaseModel):
+    text: str
+    context: str | None = None
+
+class RiskProfileRequest(BaseModel):
+    query: str
+
+@router.get("/uncertainty-quantifier/stats")
+async def get_uncertainty_stats():
+    """Get uncertainty quantification statistics."""
+    from agent.shared import uncertainty_quantifier
+    metrics = uncertainty_quantifier.get_uncertainty_metrics()
+    return {
+        "total_assessments": metrics.total_assessments,
+        "avg_confidence": metrics.avg_confidence,
+        "high_uncertainty_rate": metrics.high_uncertainty_rate,
+        "calibration_effectiveness": metrics.calibration_effectiveness,
+    }
+
+@router.post("/uncertainty-quantifier/assess")
+async def assess_uncertainty(data: AssessUncertaintyRequest):
+    """Assess uncertainty in text."""
+    from agent.shared import uncertainty_quantifier
+    result = uncertainty_quantifier.assess(
+        text=data.text,
+        context=data.context,
+    )
+    return {
+        "id": result.id,
+        "overall_confidence": result.overall_confidence,
+        "sources": [s.value for s in result.sources],
+        "segments": [
+            {"text": s.text, "confidence": s.confidence}
+            for s in result.uncertainty_segments
+        ],
+        "factuality_score": result.factuality_score,
+        "precision_score": result.precision_score,
+        "requires_verification": result.requires_verification,
+        "hedging_phrases_detected": result.hedging_phrases_detected,
+        "suggested_caveats": result.suggested_caveats,
+    }
+
+@router.get("/uncertainty-quantifier/alternatives/{assessment_id}")
+async def get_alternatives(assessment_id: str):
+    """Get alternative interpretations."""
+    from agent.shared import uncertainty_quantifier
+    alternatives = uncertainty_quantifier.generate_alternatives(assessment_id)
+    return [
+        {
+            "id": a.id,
+            "text": a.text,
+            "confidence": a.confidence,
+            "probability": a.probability,
+            "rationale": a.rationale,
+        }
+        for a in alternatives
+    ]
+
+@router.post("/uncertainty-quantifier/risk-profile")
+async def create_risk_profile(data: RiskProfileRequest):
+    """Create a risk profile for a query."""
+    from agent.shared import uncertainty_quantifier
+    profile = uncertainty_quantifier.create_risk_profile(data.query)
+    return {
+        "risk_level": profile.risk_level.value,
+        "risk_factors": profile.risk_factors,
+        "mitigation_suggestions": profile.mitigation_suggestions,
+        "safe_handling_required": profile.safe_handling_required,
+        "content_warnings": profile.content_warnings,
+        "ethical_concerns": profile.ethical_concerns,
+        "bias_indicators": profile.bias_indicators,
+    }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Federated Knowledge Exchange API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ShareKnowledgeRequest(BaseModel):
+    agent_id: str
+    knowledge_type: str
+    content: str
+    confidence: float = 0.8
+    tags: list[str] = []
+
+class RequestKnowledgeRequest(BaseModel):
+    agent_id: str
+    query: str
+    knowledge_type: str | None = None
+
+class SubscribeRequest(BaseModel):
+    agent_id: str
+    topics: list[str]
+
+class MergeKnowledgeRequest(BaseModel):
+    share_ids: list[str]
+
+@router.get("/federated-knowledge/stats")
+async def get_federated_knowledge_stats():
+    """Get federated knowledge exchange statistics."""
+    from agent.shared import federated_knowledge
+    stats = federated_knowledge.get_federation_stats()
+    return {
+        "total_shares": stats.total_shares,
+        "total_subscriptions": stats.total_subscriptions,
+        "active_topics": stats.active_topics,
+        "knowledge_exchange_rate": stats.knowledge_exchange_rate,
+    }
+
+@router.post("/federated-knowledge/share")
+async def share_knowledge(data: ShareKnowledgeRequest):
+    """Share knowledge from an agent."""
+    from agent.shared import federated_knowledge
+    from agent.agent_federated_knowledge import KnowledgeType
+    share = federated_knowledge.share_knowledge(
+        agent_id=data.agent_id,
+        knowledge_type=KnowledgeType(data.knowledge_type),
+        content=data.content,
+        metadata={"confidence": data.confidence, "tags": data.tags},
+    )
+    return share.to_dict() if hasattr(share, 'to_dict') else {
+        "id": share.id,
+        "agent_id": share.agent_id,
+        "knowledge_type": share.knowledge_type.value if hasattr(share.knowledge_type, 'value') else str(share.knowledge_type),
+        "content": share.content,
+        "confidence": share.confidence,
+        "tags": share.tags,
+    }
+
+@router.post("/federated-knowledge/request")
+async def request_knowledge(data: RequestKnowledgeRequest):
+    """Request knowledge."""
+    from agent.shared import federated_knowledge
+    results = federated_knowledge.request_knowledge(
+        agent_id=data.agent_id,
+        query=data.query,
+        knowledge_type=data.knowledge_type,
+    )
+    return [
+        s.to_dict() if hasattr(s, 'to_dict') else {
+            "id": s.id,
+            "agent_id": s.agent_id,
+            "content": s.content,
+            "confidence": s.confidence,
+        }
+        for s in results
+    ]
+
+@router.post("/federated-knowledge/subscribe")
+async def subscribe_knowledge(data: SubscribeRequest):
+    """Subscribe to knowledge topics."""
+    from agent.shared import federated_knowledge
+    sub = federated_knowledge.subscribe(
+        agent_id=data.agent_id,
+        topics=data.topics,
+    )
+    return sub.to_dict() if hasattr(sub, 'to_dict') else {
+        "id": sub.id,
+        "agent_id": sub.agent_id,
+        "topics": sub.topics,
+    }
+
+@router.post("/federated-knowledge/merge")
+async def merge_knowledge(data: MergeKnowledgeRequest):
+    """Merge multiple knowledge shares."""
+    from agent.shared import federated_knowledge
+    merged = federated_knowledge.merge_knowledge(data.share_ids)
+    return merged.to_dict() if hasattr(merged, 'to_dict') else {
+        "sources": merged.sources,
+        "unified_content": merged.unified_content,
+        "confidence": merged.confidence,
+        "conflicts": merged.conflicts,
+    }
+
+@router.get("/federated-knowledge/shares")
+async def get_knowledge_shares():
+    """Get all knowledge shares."""
+    from agent.shared import federated_knowledge
+    shares = federated_knowledge.request_knowledge("all", "*")
+    return [
+        s.to_dict() if hasattr(s, 'to_dict') else {"id": s.id, "content": s.content}
+        for s in shares
+    ]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Emergent Behavior Detector API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ObserveRequest(BaseModel):
+    agent_id: str
+    action: str
+    context: str = ""
+    outcome: str = ""
+    success: bool = True
+
+@router.get("/emergent-behavior/stats")
+async def get_emergent_behavior_stats():
+    """Get emergent behavior detector statistics."""
+    from agent.shared import emergent_behavior
+    report = emergent_behavior.get_emergence_report()
+    return {
+        "total_observations": report.total_observations,
+        "patterns_detected": report.patterns_detected,
+        "promoted": report.promoted,
+        "suppressed": report.suppressed,
+        "observation_rate": report.observation_rate,
+    }
+
+@router.post("/emergent-behavior/observe")
+async def observe_behavior(data: ObserveRequest):
+    """Record an agent observation."""
+    from agent.shared import emergent_behavior
+    obs = emergent_behavior.observe(
+        agent_id=data.agent_id,
+        action=data.action,
+        context={"context": data.context, "success": data.success} if data.context else {"success": data.success},
+        outcome=data.outcome,
+    )
+    return obs.to_dict() if hasattr(obs, 'to_dict') else {
+        "id": obs.id,
+        "agent_id": obs.agent_id,
+        "action": obs.action,
+        "timestamp": obs.timestamp,
+    }
+
+@router.get("/emergent-behavior/patterns")
+async def get_emergent_patterns():
+    """Get all detected emergent patterns."""
+    from agent.shared import emergent_behavior
+    patterns = emergent_behavior.detect_patterns()
+    return [
+        p.to_dict() if hasattr(p, 'to_dict') else {
+            "id": p.id,
+            "name": p.name,
+            "pattern_type": p.pattern_type.value if hasattr(p.pattern_type, 'value') else str(p.pattern_type),
+            "status": p.status.value if hasattr(p.status, 'value') else str(p.status),
+            "frequency": p.frequency,
+            "confidence": p.confidence,
+        }
+        for p in patterns
+    ]
+
+@router.post("/emergent-behavior/promote/{pattern_id}")
+async def promote_pattern(pattern_id: str):
+    """Promote an emergent pattern."""
+    from agent.shared import emergent_behavior
+    result = emergent_behavior.promote_pattern(pattern_id)
+    return result.to_dict() if hasattr(result, 'to_dict') else {
+        "pattern_id": result.pattern_id,
+        "capability_name": result.capability_name,
+        "promoted_at": result.promoted_at,
+    }
+
+@router.post("/emergent-behavior/suppress/{pattern_id}")
+async def suppress_pattern(pattern_id: str):
+    """Suppress an emergent pattern."""
+    from agent.shared import emergent_behavior
+    result = emergent_behavior.suppress_pattern(pattern_id)
+    return result.to_dict() if hasattr(result, 'to_dict') else {
+        "pattern_id": result.pattern_id,
+    }
+
+@router.get("/emergent-behavior/report")
+async def get_emergence_report():
+    """Get emergence analysis report."""
+    from agent.shared import emergent_behavior
+    report = emergent_behavior.get_emergence_report()
+    return report.to_dict() if hasattr(report, 'to_dict') else {
+        "total_observations": report.total_observations,
+        "patterns_detected": report.patterns_detected,
+        "promoted": report.promoted,
+        "suppressed": report.suppressed,
+        "top_patterns": [],
+        "agent_contributions": {},
+    }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Performance Autotuner API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ProfileComponentRequest(BaseModel):
+    component_id: str
+    component_type: str
+
+class AutoTuneRequest(BaseModel):
+    component_id: str
+
+@router.get("/performance-autotuner/stats")
+async def get_autotuner_stats():
+    """Get performance autotuner statistics."""
+    from agent.shared import performance_autotuner
+    report = performance_autotuner.get_tuning_report()
+    return {
+        "total_components": report.total_components,
+        "bottlenecks_found": report.bottlenecks_found,
+        "optimizations_applied": report.optimizations_applied,
+        "overall_improvement": report.overall_improvement,
+    }
+
+@router.post("/performance-autotuner/profile")
+async def profile_component(data: ProfileComponentRequest):
+    """Profile a component's performance."""
+    from agent.shared import performance_autotuner
+    from agent.agent_performance_autotuner import ComponentType as ATComponentType
+    profile = performance_autotuner.profile(
+        component_id=data.component_id,
+        component_type=ATComponentType(data.component_type),
+    )
+    return profile.to_dict() if hasattr(profile, 'to_dict') else {
+        "id": profile.id,
+        "component_id": profile.component_id,
+        "avg_latency_ms": profile.avg_latency_ms,
+        "p95_latency_ms": profile.p95_latency_ms,
+        "p99_latency_ms": profile.p99_latency_ms,
+        "throughput_per_sec": profile.throughput_per_sec,
+        "error_rate": profile.error_rate,
+        "cache_hit_rate": profile.cache_hit_rate,
+    }
+
+@router.get("/performance-autotuner/bottlenecks")
+async def get_bottlenecks():
+    """Get all detected bottlenecks."""
+    from agent.shared import performance_autotuner
+    bottlenecks = performance_autotuner.detect_bottlenecks()
+    return [
+        b.to_dict() if hasattr(b, 'to_dict') else {
+            "id": b.id,
+            "component_id": b.component_id,
+            "bottleneck_type": b.bottleneck_type.value if hasattr(b.bottleneck_type, 'value') else str(b.bottleneck_type),
+            "severity": b.severity.value if hasattr(b.severity, 'value') else str(b.severity),
+            "current_value": b.current_value,
+            "threshold": b.threshold,
+            "impact_description": b.impact_description,
+        }
+        for b in bottlenecks
+    ]
+
+@router.post("/performance-autotuner/recommend")
+async def recommend_optimizations(data: dict[str, Any]):
+    """Recommend optimizations for a bottleneck."""
+    from agent.shared import performance_autotuner
+    recs = performance_autotuner.recommend_optimizations(data.get("bottleneck_id", ""))
+    return [
+        r.to_dict() if hasattr(r, 'to_dict') else {
+            "id": r.id,
+            "strategy": r.strategy.value if hasattr(r.strategy, 'value') else str(r.strategy),
+            "expected_improvement_pct": r.expected_improvement_pct,
+        }
+        for r in recs
+    ]
+
+@router.post("/performance-autotuner/auto-tune")
+async def auto_tune_component(data: AutoTuneRequest):
+    """Auto-tune a component."""
+    from agent.shared import performance_autotuner
+    result = performance_autotuner.auto_tune(data.component_id)
+    return result.to_dict() if hasattr(result, 'to_dict') else {
+        "component_id": result.component_id,
+        "optimizations_applied": result.optimizations_applied,
+        "overall_improvement_pct": result.overall_improvement_pct,
+    }
+
+@router.get("/performance-autotuner/report")
+async def get_tuning_report():
+    """Get comprehensive tuning report."""
+    from agent.shared import performance_autotuner
+    report = performance_autotuner.get_tuning_report()
+    return report.to_dict() if hasattr(report, 'to_dict') else {
+        "total_components": report.total_components,
+        "bottlenecks_found": report.bottlenecks_found,
+        "optimizations_applied": report.optimizations_applied,
+        "overall_improvement": report.overall_improvement,
+    }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Platform Resilience Engine API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class RegisterComponentRequest(BaseModel):
+    component_id: str
+    component_type: str
+    health_check_url: str | None = None
+
+class SimulateFailureRequest(BaseModel):
+    component_id: str
+    failure_type: str
+
+@router.get("/platform-resilience/report")
+async def get_resilience_report():
+    """Get platform resilience report."""
+    from agent.shared import platform_resilience
+    report = platform_resilience.get_resilience_report()
+    return {
+        "total_components": report.total_components,
+        "healthy_count": report.healthy_count,
+        "degraded_count": report.degraded_count,
+        "unhealthy_count": report.unhealthy_count,
+        "uptime_percentage": report.uptime_percentage,
+        "recent_failures": report.recent_failures,
+        "recovery_success_rate": report.recovery_success_rate,
+    }
+
+@router.post("/platform-resilience/register")
+async def register_resilience_component(data: RegisterComponentRequest):
+    """Register a component for resilience monitoring."""
+    from agent.shared import platform_resilience
+    from agent.agent_platform_resilience import ComponentType as PRComponentType
+    component = platform_resilience.register_component(
+        component_id=data.component_id,
+        component_type=PRComponentType(data.component_type),
+        health_check_url=data.health_check_url,
+    )
+    return component.to_dict() if hasattr(component, 'to_dict') else {
+        "component_id": component.component_id,
+        "component_type": component.component_type,
+    }
+
+@router.get("/platform-resilience/health/{component_id}")
+async def check_component_health(component_id: str):
+    """Check component health."""
+    from agent.shared import platform_resilience
+    health = platform_resilience.health_check(component_id)
+    return {
+        "component_id": health.component_id,
+        "status": health.status.value if hasattr(health.status, 'value') else str(health.status),
+        "response_time_ms": health.response_time_ms,
+        "error_count": health.error_count,
+        "uptime_percentage": health.uptime_percentage,
+        "consecutive_failures": health.consecutive_failures,
+    }
+
+@router.get("/platform-resilience/failures")
+async def get_failure_reports():
+    """Get all failure reports."""
+    from agent.shared import platform_resilience
+    report = platform_resilience.get_resilience_report()
+    return report.recent_failures if hasattr(report, 'recent_failures') else []
+
+@router.post("/platform-resilience/recover/{failure_id}")
+async def recover_component(failure_id: str):
+    """Auto-recover a failed component."""
+    from agent.shared import platform_resilience
+    result = platform_resilience.auto_recover(failure_id)
+    return result.to_dict() if hasattr(result, 'to_dict') else {
+        "id": result.id,
+        "success": result.success,
+        "recovery_time_ms": result.recovery_time_ms,
+    }
+
+@router.post("/platform-resilience/simulate")
+async def simulate_failure(data: SimulateFailureRequest):
+    """Simulate a component failure."""
+    from agent.shared import platform_resilience
+    from agent.agent_platform_resilience import FailureType as PRFailureType
+    result = platform_resilience.simulate_failure(
+        component_id=data.component_id,
+        failure_type=PRFailureType(data.failure_type),
+    )
+    return result.to_dict() if hasattr(result, 'to_dict') else {
+        "simulation_id": result.simulation_id,
+        "component_id": result.component_id,
+        "detected": result.detected,
+        "recovery_triggered": result.recovery_triggered,
+        "recovery_success": result.recovery_success,
+        "time_to_detect_ms": result.time_to_detect_ms,
+        "time_to_recover_ms": result.time_to_recover_ms,
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# Personal Memory Engine API
+# ═══════════════════════════════════════════════════════════
+
+class MemoryCaptureRequest(BaseModel):
+    content: str
+    dimension: str = "fact"
+    confidence: float = 1.0
+    access_level: str = "private"
+    tags: list[str] = []
+    source: str = ""
+
+
+@router.post("/personal-memory/capture")
+async def capture_memory(data: MemoryCaptureRequest):
+    """Capture a new personal memory."""
+    from agent.shared import personal_memory
+    from agent.agent_personal_memory import MemoryDimension, AccessLevel
+    entry = personal_memory.capture(
+        content=data.content,
+        dimension=MemoryDimension(data.dimension),
+        confidence=data.confidence,
+        access_level=AccessLevel(data.access_level),
+        tags=data.tags,
+        source=data.source,
+    )
+    return entry.__dict__
+
+
+@router.get("/personal-memory/retrieve")
+async def retrieve_memories(
+    query: str = "",
+    dimension: str | None = None,
+    tags: str | None = None,
+    min_strength: str = "ephemeral",
+    limit: int = 20,
+):
+    """Retrieve memories matching criteria."""
+    from agent.shared import personal_memory
+    from agent.agent_personal_memory import MemoryDimension, MemoryStrength
+    tag_list = tags.split(",") if tags else None
+    memories = personal_memory.retrieve(
+        query=query,
+        dimension=MemoryDimension(dimension) if dimension else None,
+        tags=tag_list,
+        min_strength=MemoryStrength(min_strength),
+        limit=limit,
+    )
+    return [m.__dict__ for m in memories]
+
+
+@router.get("/personal-memory/profile")
+async def get_personal_profile():
+    """Get the current personal profile."""
+    from agent.shared import personal_memory
+    return personal_memory.get_profile().__dict__
+
+
+@router.post("/personal-memory/consolidate")
+async def consolidate_memories():
+    """Run memory consolidation cycle."""
+    from agent.shared import personal_memory
+    report = personal_memory.consolidate()
+    return report.__dict__
+
+
+@router.get("/personal-memory/stats")
+async def get_personal_memory_stats():
+    """Get personal memory statistics."""
+    from agent.shared import personal_memory
+    return personal_memory.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Voice Interface Engine API
+# ═══════════════════════════════════════════════════════════
+
+class VoiceTranscribeRequest(BaseModel):
+    session_id: str = ""
+    audio_text: str = ""
+    language: str = "auto"
+
+
+class VoiceSynthesizeRequest(BaseModel):
+    text: str
+    voice_profile: str = "default"
+    language: str = "en"
+    speed: float = 1.0
+    pitch: float = 1.0
+    format: str = "mp3"
+
+
+class VoiceToneRequest(BaseModel):
+    session_id: str = ""
+    text: str = ""
+    energy_level: float = 0.5
+    speaking_rate: float = 150.0
+
+
+@router.post("/voice-interface/session")
+async def create_voice_session():
+    """Create a new voice session."""
+    from agent.shared import voice_interface
+    session = voice_interface.create_session()
+    return session.__dict__
+
+
+@router.post("/voice-interface/transcribe")
+async def transcribe_voice(data: VoiceTranscribeRequest):
+    """Transcribe speech to text."""
+    from agent.shared import voice_interface
+    from agent.agent_voice_interface import SpeechLanguage
+    session_id = data.session_id or voice_interface.create_session().id
+    result = voice_interface.transcribe(
+        session_id=session_id,
+        audio_text=data.audio_text,
+        language=SpeechLanguage(data.language) if data.language != "auto" else SpeechLanguage.AUTO,
+    )
+    return result.__dict__
+
+
+@router.post("/voice-interface/synthesize")
+async def synthesize_voice(data: VoiceSynthesizeRequest):
+    """Synthesize speech from text."""
+    from agent.shared import voice_interface
+    from agent.agent_voice_interface import SynthesisRequest, VoiceProfile, SpeechLanguage, AudioFormat
+    request = SynthesisRequest(
+        text=data.text,
+        voice_profile=VoiceProfile(data.voice_profile),
+        language=SpeechLanguage(data.language),
+        speed=data.speed,
+        pitch=data.pitch,
+        format=AudioFormat(data.format),
+    )
+    result = voice_interface.synthesize(request)
+    return result.__dict__
+
+
+@router.post("/voice-interface/analyze-tone")
+async def analyze_voice_tone(data: VoiceToneRequest):
+    """Analyze emotional tone from voice or text."""
+    from agent.shared import voice_interface
+    session_id = data.session_id or voice_interface.create_session().id
+    result = voice_interface.analyze_tone(
+        session_id=session_id,
+        text=data.text,
+        energy_level=data.energy_level,
+        speaking_rate=data.speaking_rate,
+    )
+    return result.__dict__
+
+
+@router.get("/voice-interface/profiles")
+async def get_voice_profiles():
+    """Get available voice profiles."""
+    from agent.shared import voice_interface
+    return voice_interface.get_voice_profiles()
+
+
+@router.get("/voice-interface/stats")
+async def get_voice_stats():
+    """Get voice interface statistics."""
+    from agent.shared import voice_interface
+    return voice_interface.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Document Intelligence Engine API
+# ═══════════════════════════════════════════════════════════
+
+class DocumentUploadRequest(BaseModel):
+    filename: str
+    format: str = "txt"
+    content: str = ""
+    tags: list[str] = []
+
+
+class DocumentExtractRequest(BaseModel):
+    doc_id: str
+    extraction_type: str = "entities"
+
+
+class DocumentSummarizeRequest(BaseModel):
+    doc_id: str
+    max_length: int = 200
+
+
+class DocumentSearchRequest(BaseModel):
+    query: str
+    doc_ids: list[str] = []
+    limit: int = 10
+
+
+class DocumentCompareRequest(BaseModel):
+    doc_a_id: str
+    doc_b_id: str
+
+
+@router.post("/document-intelligence/upload")
+async def upload_document(data: DocumentUploadRequest):
+    """Upload and register a new document."""
+    from agent.shared import document_intelligence
+    from agent.agent_document_intelligence import DocumentFormat
+    doc = document_intelligence.upload_document(
+        filename=data.filename,
+        format=DocumentFormat(data.format),
+        content=data.content,
+        tags=data.tags,
+    )
+    return doc.__dict__
+
+
+@router.get("/document-intelligence/list")
+async def list_documents():
+    """List all documents."""
+    from agent.shared import document_intelligence
+    docs = document_intelligence.list_documents()
+    return [d.__dict__ for d in docs]
+
+
+@router.post("/document-intelligence/extract")
+async def extract_from_document(data: DocumentExtractRequest):
+    """Extract structured information from a document."""
+    from agent.shared import document_intelligence
+    from agent.agent_document_intelligence import ExtractionType
+    result = document_intelligence.extract(
+        doc_id=data.doc_id,
+        extraction_type=ExtractionType(data.extraction_type),
+    )
+    return result.__dict__
+
+
+@router.post("/document-intelligence/summarize")
+async def summarize_document(data: DocumentSummarizeRequest):
+    """Generate a summary of a document."""
+    from agent.shared import document_intelligence
+    result = document_intelligence.summarize(
+        doc_id=data.doc_id,
+        max_length=data.max_length,
+    )
+    return result.__dict__
+
+
+@router.post("/document-intelligence/search")
+async def search_documents(data: DocumentSearchRequest):
+    """Search for content within documents."""
+    from agent.shared import document_intelligence
+    results = document_intelligence.search(
+        query=data.query,
+        doc_ids=data.doc_ids if data.doc_ids else None,
+        limit=data.limit,
+    )
+    return [r.__dict__ for r in results]
+
+
+@router.post("/document-intelligence/compare")
+async def compare_documents(data: DocumentCompareRequest):
+    """Compare two documents."""
+    from agent.shared import document_intelligence
+    result = document_intelligence.compare(
+        doc_a_id=data.doc_a_id,
+        doc_b_id=data.doc_b_id,
+    )
+    return result.__dict__
+
+
+@router.get("/document-intelligence/stats")
+async def get_document_stats():
+    """Get document intelligence statistics."""
+    from agent.shared import document_intelligence
+    return document_intelligence.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Notification Hub API
+# ═══════════════════════════════════════════════════════════
+
+class NotificationSendRequest(BaseModel):
+    title: str
+    body: str
+    recipient_id: str = ""
+    priority: str = "normal"
+    channel: str = "in_app"
+    topic: str = "system"
+    sender_id: str = ""
+    action_url: str = ""
+    data: dict | None = None
+
+
+class NotificationSubscribeRequest(BaseModel):
+    subscriber_id: str
+    topics: list[str] = []
+    channels: list[str] = ["in_app"]
+
+
+class NotificationTemplateRequest(BaseModel):
+    name: str
+    title_template: str
+    body_template: str
+    default_priority: str = "normal"
+    default_channel: str = "in_app"
+    variables: list[str] = []
+
+
+class NotificationSendFromTemplateRequest(BaseModel):
+    template_name: str
+    recipient_id: str = ""
+    variables: dict[str, str] | None = None
+    channel: str | None = None
+    priority: str | None = None
+
+
+@router.post("/notification-hub/send")
+async def send_notification(data: NotificationSendRequest):
+    """Send a notification to a recipient."""
+    from agent.shared import notification_hub
+    from agent.agent_notification_hub import NotificationPriority, NotificationChannel, NotificationTopic
+    notification = notification_hub.send(
+        title=data.title,
+        body=data.body,
+        recipient_id=data.recipient_id,
+        priority=NotificationPriority(data.priority),
+        channel=NotificationChannel(data.channel),
+        topic=NotificationTopic(data.topic),
+        sender_id=data.sender_id,
+        action_url=data.action_url,
+        data=data.data,
+    )
+    return notification.__dict__
+
+
+@router.post("/notification-hub/subscribe")
+async def subscribe_notifications(data: NotificationSubscribeRequest):
+    """Subscribe to notification topics."""
+    from agent.shared import notification_hub
+    from agent.agent_notification_hub import NotificationTopic, NotificationChannel
+    subscription = notification_hub.subscribe(
+        subscriber_id=data.subscriber_id,
+        topics=[NotificationTopic(t) for t in data.topics] if data.topics else None,
+        channels=[NotificationChannel(c) for c in data.channels] if data.channels else None,
+    )
+    return subscription.__dict__
+
+
+@router.get("/notification-hub/notifications")
+async def get_notifications(recipient_id: str = "", limit: int = 50):
+    """Get notifications for a recipient."""
+    from agent.shared import notification_hub
+    notifications = notification_hub.get_notifications(
+        recipient_id=recipient_id,
+        limit=limit,
+    )
+    return [n.__dict__ for n in notifications]
+
+
+@router.get("/notification-hub/unread-count")
+async def get_unread_count(recipient_id: str = ""):
+    """Get unread notification count."""
+    from agent.shared import notification_hub
+    return {"count": notification_hub.get_unread_count(recipient_id)}
+
+
+@router.post("/notification-hub/mark-read/{notification_id}")
+async def mark_notification_read(notification_id: str):
+    """Mark a notification as read."""
+    from agent.shared import notification_hub
+    notification_hub.mark_read(notification_id)
+    return {"status": "ok"}
+
+
+@router.post("/notification-hub/template")
+async def create_notification_template(data: NotificationTemplateRequest):
+    """Create a notification template."""
+    from agent.shared import notification_hub
+    from agent.agent_notification_hub import NotificationPriority, NotificationChannel
+    template = notification_hub.create_template(
+        name=data.name,
+        title_template=data.title_template,
+        body_template=data.body_template,
+        default_priority=NotificationPriority(data.default_priority),
+        default_channel=NotificationChannel(data.default_channel),
+        variables=data.variables,
+    )
+    return template.__dict__
+
+
+@router.post("/notification-hub/send-from-template")
+async def send_from_template(data: NotificationSendFromTemplateRequest):
+    """Send a notification using a template."""
+    from agent.shared import notification_hub
+    from agent.agent_notification_hub import NotificationChannel, NotificationPriority
+    notification = notification_hub.send_from_template(
+        template_name=data.template_name,
+        recipient_id=data.recipient_id,
+        variables=data.variables,
+        channel=NotificationChannel(data.channel) if data.channel else None,
+        priority=NotificationPriority(data.priority) if data.priority else None,
+    )
+    return notification.__dict__
+
+
+@router.get("/notification-hub/stats")
+async def get_notification_stats():
+    """Get notification hub statistics."""
+    from agent.shared import notification_hub
+    return notification_hub.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Prompt Studio API
+# ═══════════════════════════════════════════════════════════
+
+class PromptCreateRequest(BaseModel):
+    name: str
+    content: str
+    type: str = "user"
+    category: str = "general"
+    tags: list[str] = []
+    description: str = ""
+
+
+class PromptUpdateRequest(BaseModel):
+    content: str
+    changelog: str = ""
+
+
+class PromptABTestRequest(BaseModel):
+    name: str
+    prompt_a_id: str
+    prompt_b_id: str
+    metric: str = "quality"
+
+
+class PromptOptimizeRequest(BaseModel):
+    prompt_id: str
+    strategy: str = "simplify"
+
+
+class PromptChainRequest(BaseModel):
+    name: str
+    steps: list[str]
+    description: str = ""
+
+
+class PromptExecuteChainRequest(BaseModel):
+    chain_id: str
+    variables: dict[str, str] = {}
+
+
+@router.post("/prompt-studio/create")
+async def create_prompt(data: PromptCreateRequest):
+    """Create a new prompt."""
+    from agent.shared import prompt_studio
+    from agent.agent_prompt_studio import PromptType, PromptCategory
+    prompt = prompt_studio.create_prompt(
+        name=data.name,
+        content=data.content,
+        type=PromptType(data.type),
+        category=PromptCategory(data.category),
+        tags=data.tags,
+        description=data.description,
+    )
+    return prompt.__dict__
+
+
+@router.put("/prompt-studio/update/{prompt_id}")
+async def update_prompt(prompt_id: str, data: PromptUpdateRequest):
+    """Update an existing prompt."""
+    from agent.shared import prompt_studio
+    prompt = prompt_studio.update_prompt(
+        prompt_id=prompt_id,
+        content=data.content,
+        changelog=data.changelog,
+    )
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    return prompt.__dict__
+
+
+@router.get("/prompt-studio/list")
+async def list_prompts():
+    """List all prompts."""
+    from agent.shared import prompt_studio
+    prompts = prompt_studio.list_prompts()
+    return [p.__dict__ for p in prompts]
+
+
+@router.get("/prompt-studio/{prompt_id}")
+async def get_prompt(prompt_id: str):
+    """Get a prompt by ID."""
+    from agent.shared import prompt_studio
+    prompt = prompt_studio.get_prompt(prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    return prompt.__dict__
+
+
+@router.get("/prompt-studio/{prompt_id}/versions")
+async def get_prompt_versions(prompt_id: str):
+    """Get all versions of a prompt."""
+    from agent.shared import prompt_studio
+    versions = prompt_studio.get_versions(prompt_id)
+    return [v.__dict__ for v in versions]
+
+
+@router.post("/prompt-studio/ab-test")
+async def create_ab_test(data: PromptABTestRequest):
+    """Create an A/B test between two prompts."""
+    from agent.shared import prompt_studio
+    test = prompt_studio.create_ab_test(
+        name=data.name,
+        prompt_a_id=data.prompt_a_id,
+        prompt_b_id=data.prompt_b_id,
+        metric=data.metric,
+    )
+    return test.__dict__
+
+
+@router.post("/prompt-studio/optimize")
+async def optimize_prompt(data: PromptOptimizeRequest):
+    """Optimize a prompt."""
+    from agent.shared import prompt_studio
+    from agent.agent_prompt_studio import OptimizationStrategy as PSStrategy
+    result = prompt_studio.optimize(
+        prompt_id=data.prompt_id,
+        strategy=PSStrategy(data.strategy),
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    return result.__dict__
+
+
+@router.post("/prompt-studio/chain")
+async def create_prompt_chain(data: PromptChainRequest):
+    """Create a prompt chain."""
+    from agent.shared import prompt_studio
+    chain = prompt_studio.create_chain(
+        name=data.name,
+        steps=data.steps,
+        description=data.description,
+    )
+    return chain.__dict__
+
+
+@router.post("/prompt-studio/chain/execute")
+async def execute_prompt_chain(data: PromptExecuteChainRequest):
+    """Execute a prompt chain."""
+    from agent.shared import prompt_studio
+    result = prompt_studio.execute_chain(
+        chain_id=data.chain_id,
+        variables=data.variables,
+    )
+    return result.__dict__ if hasattr(result, '__dict__') else result
+
+
+@router.get("/prompt-studio/stats")
+async def get_prompt_studio_stats():
+    """Get prompt studio statistics."""
+    from agent.shared import prompt_studio
+    return prompt_studio.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════
+# Terminal Interface API
+# ═══════════════════════════════════════════════════════════
+
+class TerminalExecuteRequest(BaseModel):
+    session_id: str = ""
+    command_line: str
+
+
+class TerminalScriptCreateRequest(BaseModel):
+    name: str
+    commands: list[str]
+    description: str = ""
+
+
+class TerminalScriptRunRequest(BaseModel):
+    session_id: str = ""
+    script_name: str
+
+
+@router.post("/terminal-interface/session")
+async def create_terminal_session():
+    """Create a new REPL session."""
+    from agent.shared import terminal_interface
+    session = terminal_interface.create_session()
+    return session.__dict__
+
+
+@router.post("/terminal-interface/execute")
+async def execute_terminal_command(data: TerminalExecuteRequest):
+    """Execute a command in a terminal session."""
+    from agent.shared import terminal_interface
+    session_id = data.session_id or terminal_interface.create_session().id
+    result = terminal_interface.execute(
+        session_id=session_id,
+        command_line=data.command_line,
+    )
+    return result.__dict__
+
+
+@router.get("/terminal-interface/commands")
+async def list_terminal_commands():
+    """List available terminal commands."""
+    from agent.shared import terminal_interface
+    commands = terminal_interface.get_commands()
+    return [c.__dict__ for c in commands]
+
+
+@router.post("/terminal-interface/script")
+async def create_terminal_script(data: TerminalScriptCreateRequest):
+    """Create a new terminal script."""
+    from agent.shared import terminal_interface
+    script = terminal_interface.create_script(
+        name=data.name,
+        commands=data.commands,
+        description=data.description,
+    )
+    return script.__dict__
+
+
+@router.post("/terminal-interface/script/run")
+async def run_terminal_script(data: TerminalScriptRunRequest):
+    """Execute a script in a session."""
+    from agent.shared import terminal_interface
+    session_id = data.session_id or terminal_interface.create_session().id
+    result = terminal_interface.run_script(
+        session_id=session_id,
+        script_name=data.script_name,
+    )
+    return result.__dict__
+
+
+@router.get("/terminal-interface/scripts")
+async def list_terminal_scripts():
+    """List all terminal scripts."""
+    from agent.shared import terminal_interface
+    scripts = terminal_interface.get_scripts()
+    return [s.__dict__ for s in scripts]
+
+
+@router.get("/terminal-interface/stats")
+async def get_terminal_stats():
+    """Get terminal interface statistics."""
+    from agent.shared import terminal_interface
+    return terminal_interface.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agentic Reasoning Network
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/reasoning-network/reason")
+async def reasoning_network_reason(data: dict):
+    """Execute multi-strategy reasoning on a question."""
+    from agent.shared import reasoning_network
+    from agent.agent_reasoning_network import ReasoningStrategy
+    strategies_raw = data.get("strategies", ["linear"])
+    strategies = [ReasoningStrategy(s) for s in strategies_raw if s in [e.value for e in ReasoningStrategy]]
+    result = reasoning_network.reason(
+        question=data.get("question", ""),
+        strategies=strategies or None,
+        max_paths=data.get("max_paths"),
+        prune_threshold=data.get("prune_threshold"),
+        initial_context=data.get("initial_context", ""),
+    )
+    return {
+        "result_id": result.result_id,
+        "question": result.question,
+        "conclusion": result.conclusion,
+        "confidence": result.confidence,
+        "paths_explored": result.paths_explored,
+        "paths_selected": result.paths_selected,
+        "total_nodes": result.total_nodes,
+        "strategies_used": result.strategies_used,
+        "alternatives": result.alternatives,
+        "execution_time_ms": result.execution_time_ms,
+        "reasoning_trace": result.reasoning_trace,
+    }
+
+
+@router.get("/reasoning-network/stats")
+async def reasoning_network_stats():
+    """Get reasoning network statistics."""
+    from agent.shared import reasoning_network
+    return reasoning_network.get_stats()
+
+
+@router.get("/reasoning-network/results")
+async def reasoning_network_results(limit: int = 10):
+    """Get recent reasoning results."""
+    from agent.shared import reasoning_network
+    return {"results": reasoning_network.get_recent_results(limit)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Collaborative Synthesis Engine
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/synthesis-engine/session")
+async def synthesis_engine_create_session(data: dict):
+    """Create a new synthesis session."""
+    from agent.shared import synthesis_engine
+    from agent.agent_synthesis_engine import FusionStrategy, ConflictResolution
+    try:
+        fs = FusionStrategy(data.get("fusion_strategy", "weighted_average"))
+    except ValueError:
+        fs = FusionStrategy.WEIGHTED_AVERAGE
+    try:
+        cr = ConflictResolution(data.get("conflict_resolution", "highest_confidence"))
+    except ValueError:
+        cr = ConflictResolution.HIGHEST_CONFIDENCE
+    session = synthesis_engine.create_session(
+        topic=data.get("topic", ""),
+        description=data.get("description", ""),
+        fusion_strategy=fs,
+        conflict_resolution=cr,
+    )
+    return {
+        "session_id": session.session_id,
+        "topic": session.topic,
+        "description": session.description,
+        "fusion_strategy": session.fusion_strategy.value,
+        "conflict_resolution": session.conflict_resolution.value,
+        "status": session.status,
+    }
+
+
+@router.get("/synthesis-engine/stats")
+async def synthesis_engine_stats():
+    """Get synthesis engine statistics."""
+    from agent.shared import synthesis_engine
+    return synthesis_engine.get_stats()
+
+
+@router.get("/synthesis-engine/results")
+async def synthesis_engine_results(limit: int = 10):
+    """Get recent synthesis results."""
+    from agent.shared import synthesis_engine
+    return {"results": synthesis_engine.get_recent_results(limit)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Autonomous Research Engine
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/research-engine/project")
+async def research_engine_create_project(data: dict):
+    """Create a new research project."""
+    from agent.shared import research_engine
+    project = research_engine.create_project(
+        title=data.get("title", ""),
+        research_question=data.get("research_question", ""),
+        description=data.get("description", ""),
+    )
+    return {
+        "project_id": project.project_id,
+        "title": project.title,
+        "research_question": project.research_question,
+        "description": project.description,
+        "status": project.status,
+        "current_phase": project.current_phase.value,
+    }
+
+
+@router.get("/research-engine/stats")
+async def research_engine_stats():
+    """Get research engine statistics."""
+    from agent.shared import research_engine
+    return research_engine.get_stats()
+
+
+@router.get("/research-engine/reports")
+async def research_engine_reports(limit: int = 5):
+    """Get recent research reports."""
+    from agent.shared import research_engine
+    return {"reports": research_engine.get_recent_reports(limit)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Interactive Learning Loop
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/learning-loop/session")
+async def learning_loop_create_session(data: dict):
+    """Create a new learning loop session."""
+    from agent.shared import learning_loop
+    session = learning_loop.create_session(user_id=data.get("user_id", "default"))
+    return {
+        "session_id": session.session_id,
+        "user_id": session.user_id,
+        "status": session.status,
+        "created_at": session.created_at,
+    }
+
+
+@router.post("/learning-loop/event")
+async def learning_loop_record_event(data: dict):
+    """Record a learning event."""
+    from agent.shared import learning_loop
+    from agent.agent_learning_loop import FeedbackType, LearningSignal
+    try:
+        ft = FeedbackType(data.get("feedback_type", "implicit"))
+    except ValueError:
+        ft = FeedbackType.IMPLICIT
+    try:
+        sig = LearningSignal(data.get("signal", "neutral"))
+    except ValueError:
+        sig = LearningSignal.NEUTRAL
+    event = learning_loop.record_event(
+        session_id=data.get("session_id", ""),
+        feedback_type=ft,
+        signal=sig,
+        description=data.get("description", ""),
+        context=data.get("context", ""),
+        agent_response=data.get("agent_response", ""),
+        user_reaction=data.get("user_reaction", ""),
+        confidence=data.get("confidence", 0.5),
+        tags=data.get("tags"),
+    )
+    if not event:
+        return {"error": "Session not found"}
+    return {
+        "event_id": event.event_id,
+        "feedback_type": event.feedback_type.value,
+        "signal": event.signal.value,
+        "description": event.description,
+        "recorded": True,
+    }
+
+
+@router.get("/learning-loop/stats")
+async def learning_loop_stats():
+    """Get learning loop statistics."""
+    from agent.shared import learning_loop
+    return learning_loop.get_stats()
+
+
+@router.get("/learning-loop/events")
+async def learning_loop_events(limit: int = 20):
+    """Get recent learning events."""
+    from agent.shared import learning_loop
+    events = learning_loop.get_recent_events(limit)
+    return {"events": events}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Contextual Memory Graph
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/memory-graph/node")
+async def memory_graph_add_node(data: dict):
+    """Add a node to the memory graph."""
+    from agent.shared import memory_graph
+    from agent.agent_memory_graph import NodeCategory
+    try:
+        cat = NodeCategory(data.get("category", "fact"))
+    except ValueError:
+        cat = NodeCategory.FACT
+    node = memory_graph.add_node(
+        content=data.get("content", ""),
+        category=cat,
+        importance=data.get("importance", 0.5),
+        confidence=data.get("confidence", 0.5),
+        tags=data.get("tags"),
+        embedding_hint=data.get("embedding_hint", ""),
+    )
+    return {
+        "node_id": node.node_id,
+        "content": node.content,
+        "category": node.category.value,
+        "importance": node.importance,
+        "confidence": node.confidence,
+        "tags": node.tags,
+    }
+
+
+@router.post("/memory-graph/retrieve")
+async def memory_graph_retrieve(data: dict):
+    """Retrieve nodes from the memory graph."""
+    from agent.shared import memory_graph
+    from agent.agent_memory_graph import RetrievalStrategy, NodeCategory
+    try:
+        strat = RetrievalStrategy(data.get("strategy", "semantic"))
+    except ValueError:
+        strat = RetrievalStrategy.SEMANTIC
+    category = None
+    if data.get("category"):
+        try:
+            category = NodeCategory(data["category"])
+        except ValueError:
+            pass
+    result = memory_graph.retrieve(
+        query=data.get("query", ""),
+        strategy=strat,
+        start_node_id=data.get("start_node_id"),
+        max_hops=data.get("max_hops"),
+        category=category,
+        tags=data.get("tags"),
+        min_importance=data.get("min_importance", 0.0),
+        limit=data.get("limit", 20),
+    )
+    return {
+        "nodes": [
+            {
+                "node_id": n.node_id,
+                "content": n.content,
+                "category": n.category.value,
+                "importance": n.importance,
+                "confidence": n.confidence,
+                "tags": n.tags,
+                "access_count": n.access_count,
+            }
+            for n in result.nodes
+        ],
+        "edges": [
+            {
+                "edge_id": e.edge_id,
+                "source_id": e.source_id,
+                "target_id": e.target_id,
+                "edge_type": e.edge_type.value,
+                "weight": e.weight,
+            }
+            for e in result.edges
+        ],
+        "traversal_path": result.traversal_path,
+        "relevance_scores": result.relevance_scores,
+        "total_matches": result.total_matches,
+    }
+
+
+@router.get("/memory-graph/stats")
+async def memory_graph_stats():
+    """Get memory graph statistics."""
+    from agent.shared import memory_graph
+    return memory_graph.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Multi-Modal Understanding Engine
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class UnderstandProcessRequest(BaseModel):
+    content: str
+    modality: str | None = None
+    processing_mode: str = "direct"
+    metadata: dict | None = None
+
+
+class UnderstandDetectRequest(BaseModel):
+    content: str
+
+
+class UnderstandFuseRequest(BaseModel):
+    input_ids: list[str]
+
+
+@router.post("/understanding-engine/process")
+async def understanding_engine_process(data: UnderstandProcessRequest):
+    """Process and understand content through the multi-modal engine."""
+    from agent.shared import understanding_engine
+    from agent.agent_understanding_engine import InputModality, ProcessingMode
+
+    modality = None
+    if data.modality:
+        try:
+            modality = InputModality(data.modality)
+        except ValueError:
+            pass
+
+    try:
+        pm = ProcessingMode(data.processing_mode)
+    except ValueError:
+        pm = ProcessingMode.DIRECT
+
+    result = understanding_engine.process(
+        content=data.content,
+        modality=modality,
+        processing_mode=pm,
+        metadata=data.metadata,
+    )
+    return {
+        "input_id": result.input_id,
+        "modality": result.modality.value,
+        "language": result.language,
+        "summary": result.summary,
+        "confidence": result.confidence,
+        "entities": result.entities,
+        "key_points": result.key_points,
+        "sentiment": result.sentiment,
+        "complexity": result.complexity,
+        "processing_time_ms": result.processing_time_ms,
+    }
+
+
+@router.post("/understanding-engine/detect")
+async def understanding_engine_detect(data: UnderstandDetectRequest):
+    """Detect the modality of input content."""
+    from agent.shared import understanding_engine
+    modality = understanding_engine.detect_modality(data.content)
+    language = understanding_engine.detect_language(data.content)
+    return {
+        "modality": modality.value,
+        "language": language,
+    }
+
+
+@router.post("/understanding-engine/fuse")
+async def understanding_engine_fuse(data: UnderstandFuseRequest):
+    """Fuse understanding from multiple inputs."""
+    from agent.shared import understanding_engine
+    result = understanding_engine.fuse(input_ids=data.input_ids)
+    if not result:
+        raise HTTPException(status_code=404, detail="No inputs found for fusion")
+    return {
+        "fusion_id": result.fusion_id,
+        "input_ids": result.input_ids,
+        "unified_summary": result.unified_summary,
+        "confidence": result.confidence,
+        "modalities": result.modalities,
+        "insights": result.insights,
+    }
+
+
+@router.get("/understanding-engine/stats")
+async def understanding_engine_stats():
+    """Get understanding engine statistics."""
+    from agent.shared import understanding_engine
+    return understanding_engine.get_stats()
+
+
+@router.get("/understanding-engine/results")
+async def understanding_engine_results(limit: int = 20):
+    """Get recent understanding results."""
+    from agent.shared import understanding_engine
+    results = list(understanding_engine._results.values())[-limit:] if hasattr(understanding_engine._results, 'values') else list(understanding_engine._results)[-limit:]
+    return {
+        "results": [
+            {
+                "input_id": r.input_id,
+                "modality": r.modality.value,
+                "summary": r.summary,
+                "confidence": r.confidence,
+            }
+            for r in results
+        ]
+    }
