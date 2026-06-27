@@ -580,6 +580,23 @@ class SessionCommander:
         """List all session templates."""
         return list(self._templates.values())
 
+    def get_sessions(
+        self, group_id: str = "",
+        state: SessionState | None = None, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Get registered sessions with optional filtering."""
+        sessions = []
+        for sid, meta in self._sessions.items():
+            entry = {"session_id": sid, "state": self._session_states.get(sid, SessionState.ACTIVE).value, **meta}
+            if state and self._session_states.get(sid) != state:
+                continue
+            if group_id:
+                group = self._groups.get(group_id)
+                if group and sid not in group.session_ids:
+                    continue
+            sessions.append(entry)
+        return sessions[:limit]
+
     # ── Stats ─────────────────────────────────────────────────────
 
     def get_stats(self) -> SessionCommanderStats:
