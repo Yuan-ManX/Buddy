@@ -149,6 +149,16 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'learningLoop', label: 'Learn', icon: '📚' },
   { id: 'memoryGraph', label: 'M-Graph', icon: '🕸️' },
   { id: 'understandingEngine', label: 'Understand', icon: '🔍' },
+  { id: 'hypothesisEngine', label: 'Hypothesis', icon: '🔬' },
+  { id: 'negotiation', label: 'Negotiate', icon: '🤝' },
+  { id: 'aiTwin', label: 'AI Twin', icon: '👥' },
+  { id: 'codeSynthesis', label: 'CodeGen', icon: '💻' },
+  { id: 'workflowComposer', label: 'W-Composer', icon: '🎼' },
+  { id: 'skillForge', label: 'SkillForge', icon: '⚒️' },
+  { id: 'policyGateway', label: 'Policy', icon: '🛡️' },
+  { id: 'dreamConsolidator', label: 'Dream', icon: '💭' },
+  { id: 'crossReview', label: 'X-Review', icon: '🔍' },
+  { id: 'costOptimizer', label: 'Cost Opt', icon: '💰' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
