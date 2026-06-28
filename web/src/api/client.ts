@@ -2849,4 +2849,152 @@ export const api = {
     stats: () => request<any>('/understanding-engine/stats'),
     results: (limit?: number) => request<any>(`/understanding-engine/results?limit=${limit || 10}`),
   },
+
+  // ── Hypothesis Engine ──
+  hypothesisEngine: {
+    createSession: (data: { topic: string; description?: string }) =>
+      request<any>('/hypothesis-engine/session', { method: 'POST', body: JSON.stringify(data) }),
+    propose: (data: { session_id: string; statement: string; rationale?: string; confidence?: number; parent_id?: string }) =>
+      request<any>('/hypothesis-engine/propose', { method: 'POST', body: JSON.stringify(data) }),
+    addEvidence: (data: { session_id: string; hypothesis_id: string; description: string; evidence_type?: string; weight?: number; supports?: boolean; source?: string }) =>
+      request<any>('/hypothesis-engine/evidence', { method: 'POST', body: JSON.stringify(data) }),
+    designTest: (data: { session_id: string; hypothesis_id: string; description: string; expected_result: string }) =>
+      request<any>('/hypothesis-engine/test', { method: 'POST', body: JSON.stringify(data) }),
+    runTest: (data: { session_id: string; hypothesis_id: string; test_id: string; actual_result: string; outcome?: string; confidence?: number }) =>
+      request<any>('/hypothesis-engine/run-test', { method: 'POST', body: JSON.stringify(data) }),
+    refine: (data: { session_id: string; hypothesis_id: string; new_statement: string; new_rationale?: string }) =>
+      request<any>('/hypothesis-engine/refine', { method: 'POST', body: JSON.stringify(data) }),
+    evaluate: (sessionId: string, hypothesisId: string) =>
+      request<any>(`/hypothesis-engine/evaluate?session_id=${encodeURIComponent(sessionId)}&hypothesis_id=${encodeURIComponent(hypothesisId)}`),
+    compare: (sessionId: string) =>
+      request<any>(`/hypothesis-engine/compare?session_id=${encodeURIComponent(sessionId)}`),
+    stats: () => request<any>('/hypothesis-engine/stats'),
+  },
+
+  // ── Negotiation ──
+  negotiation: {
+    createSession: (data: { topic: string; description?: string; strategy?: string }) =>
+      request<any>('/negotiation/session', { method: 'POST', body: JSON.stringify(data) }),
+    addDelegate: (data: { session_id: string; name: string; role?: string; stance?: string; priority?: number }) =>
+      request<any>('/negotiation/delegate', { method: 'POST', body: JSON.stringify(data) }),
+    propose: (data: { session_id: string; delegate_id: string; content: string; rationale?: string; confidence?: number }) =>
+      request<any>('/negotiation/propose', { method: 'POST', body: JSON.stringify(data) }),
+    vote: (data: { session_id: string; proposal_id: string; delegate_id: string; approve?: boolean }) =>
+      request<any>('/negotiation/vote', { method: 'POST', body: JSON.stringify(data) }),
+    deliberate: (data: { session_id: string; summary: string }) =>
+      request<any>('/negotiation/deliberate', { method: 'POST', body: JSON.stringify(data) }),
+    resolve: (sessionId: string) =>
+      request<any>(`/negotiation/resolve?session_id=${encodeURIComponent(sessionId)}`, { method: 'POST' }),
+    summary: (sessionId: string) =>
+      request<any>(`/negotiation/summary?session_id=${encodeURIComponent(sessionId)}`),
+    stats: () => request<any>('/negotiation/stats'),
+  },
+
+  // ── AI Twin ──
+  aiTwin: {
+    createProfile: (data: { name?: string; sync_frequency?: string }) =>
+      request<any>('/ai-twin/profile', { method: 'POST', body: JSON.stringify(data) }),
+    learn: (data: { twin_id: string; dimension?: string; action: string; context?: string; outcome?: string; weight?: number }) =>
+      request<any>('/ai-twin/learn', { method: 'POST', body: JSON.stringify(data) }),
+    predict: (data: { twin_id: string; dimension?: string; context?: string }) =>
+      request<any>('/ai-twin/predict', { method: 'POST', body: JSON.stringify(data) }),
+    mirror: (twinId: string, dimension?: string) =>
+      request<any>(`/ai-twin/mirror?twin_id=${encodeURIComponent(twinId)}&dimension=${encodeURIComponent(dimension || 'preferences')}`),
+    getProfile: (twinId: string) =>
+      request<any>(`/ai-twin/profile?twin_id=${encodeURIComponent(twinId)}`),
+    stats: () => request<any>('/ai-twin/stats'),
+  },
+
+  // ── Code Synthesis ──
+  codeSynthesis: {
+    createProject: (data: { name: string; specification: string; language?: string }) =>
+      request<any>('/code-synthesis/project', { method: 'POST', body: JSON.stringify(data) }),
+    planArchitecture: (data: { project_id: string; components: string[]; data_flow?: string; entry_point?: string; patterns?: string[]; rationale?: string }) =>
+      request<any>('/code-synthesis/architecture', { method: 'POST', body: JSON.stringify(data) }),
+    generateComponent: (data: { project_id: string; name: string; code: string; description?: string; dependencies?: string[]; test_code?: string }) =>
+      request<any>('/code-synthesis/component', { method: 'POST', body: JSON.stringify(data) }),
+    testComponent: (data: { project_id: string; component_id: string; test_result?: string; output?: string }) =>
+      request<any>('/code-synthesis/test', { method: 'POST', body: JSON.stringify(data) }),
+    refineComponent: (data: { project_id: string; component_id: string; improved_code: string; description?: string }) =>
+      request<any>('/code-synthesis/refine', { method: 'POST', body: JSON.stringify(data) }),
+    finalize: (projectId: string) =>
+      request<any>(`/code-synthesis/finalize?project_id=${encodeURIComponent(projectId)}`, { method: 'POST' }),
+    getProject: (projectId: string) =>
+      request<any>(`/code-synthesis/project?project_id=${encodeURIComponent(projectId)}`),
+    getComponent: (projectId: string, componentId: string) =>
+      request<any>(`/code-synthesis/component?project_id=${encodeURIComponent(projectId)}&component_id=${encodeURIComponent(componentId)}`),
+    stats: () => request<any>('/code-synthesis/stats'),
+  },
+
+  // ── Workflow Composer ──
+  workflowComposer: {
+    createWorkflow: (data: { name: string; description?: string; trigger_type?: string; trigger_config?: Record<string, unknown>; tags?: string[] }) =>
+      request<any>('/workflow-composer/workflow', { method: 'POST', body: JSON.stringify(data) }),
+    addNode: (data: { workflow_id: string; node_type: string; label: string; description?: string; config?: Record<string, unknown>; position_x?: number; position_y?: number }) =>
+      request<any>('/workflow-composer/node', { method: 'POST', body: JSON.stringify(data) }),
+    addEdge: (data: { workflow_id: string; source_id: string; target_id: string; condition?: string; label?: string }) =>
+      request<any>('/workflow-composer/edge', { method: 'POST', body: JSON.stringify(data) }),
+    execute: (data: { workflow_id: string; input_data?: Record<string, unknown> }) =>
+      request<any>('/workflow-composer/execute', { method: 'POST', body: JSON.stringify(data) }),
+    getWorkflow: (workflowId: string) =>
+      request<any>(`/workflow-composer/workflow?workflow_id=${encodeURIComponent(workflowId)}`),
+    getExecution: (executionId: string) =>
+      request<any>(`/workflow-composer/execution?execution_id=${encodeURIComponent(executionId)}`),
+    stats: () => request<any>('/workflow-composer/stats'),
+  },
+
+  // ── Skill Forge ──
+  skillForge: {
+    createSkill: (data: { name: string; description: string; trigger_conditions: string[]; procedure: string[] }) =>
+      request<any>('/skill-forge/skill', { method: 'POST', body: JSON.stringify(data) }),
+    designTest: (data: { skill_id: string; test_prompt: string; expected_behavior: string }) =>
+      request<any>('/skill-forge/test', { method: 'POST', body: JSON.stringify(data) }),
+    evolve: (data: { skill_id: string; change_description: string }) =>
+      request<any>('/skill-forge/evolve', { method: 'POST', body: JSON.stringify(data) }),
+    stats: () => request<any>('/skill-forge/stats'),
+  },
+
+  // ── Policy Gateway ──
+  policyGateway: {
+    addRule: (data: { name: string; description?: string; level: string; category?: string; action: string; priority?: number }) =>
+      request<any>('/policy-gateway/rule', { method: 'POST', body: JSON.stringify(data) }),
+    evaluate: (data: { agent_id: string; action_type: string; category?: string }) =>
+      request<any>('/policy-gateway/evaluate', { method: 'POST', body: JSON.stringify(data) }),
+    requestApproval: (data: { rule_id: string; agent_id: string; action_description: string }) =>
+      request<any>('/policy-gateway/approval', { method: 'POST', body: JSON.stringify(data) }),
+    stats: () => request<any>('/policy-gateway/stats'),
+  },
+
+  // ── Dream Consolidator ──
+  dreamConsolidator: {
+    addEntry: (data: { content: string; tier: string; importance?: number }) =>
+      request<any>('/dream-consolidator/entry', { method: 'POST', body: JSON.stringify(data) }),
+    createSnapshot: (data: { tier?: string; description?: string }) =>
+      request<any>('/dream-consolidator/snapshot', { method: 'POST', body: JSON.stringify(data) }),
+    startDream: (data: { strategy: string }) =>
+      request<any>('/dream-consolidator/dream', { method: 'POST', body: JSON.stringify(data) }),
+    stats: () => request<any>('/dream-consolidator/stats'),
+  },
+
+  // ── Cross Review ──
+  crossReview: {
+    registerReviewer: (data: { name: string; specialties: string[] }) =>
+      request<any>('/cross-review/reviewer', { method: 'POST', body: JSON.stringify(data) }),
+    createReview: (data: { reviewer_id: string; reviewee_id: string; artifact_type: string; artifact_content: string; strategy?: string }) =>
+      request<any>('/cross-review/review', { method: 'POST', body: JSON.stringify(data) }),
+    submitReport: (data: { review_id: string; verdict: string; summary: string; score?: number; confidence?: number }) =>
+      request<any>('/cross-review/report', { method: 'POST', body: JSON.stringify(data) }),
+    stats: () => request<any>('/cross-review/stats'),
+  },
+
+  // ── Cost Optimizer ──
+  costOptimizer: {
+    registerModel: (data: { name: string; provider: string; tier: string; cost_per_1k_input: number; cost_per_1k_output: number; quality_score?: number; max_context?: number }) =>
+      request<any>('/cost-optimizer/model', { method: 'POST', body: JSON.stringify(data) }),
+    assessComplexity: (data: { description: string; estimated_tokens?: number }) =>
+      request<any>('/cost-optimizer/assess', { method: 'POST', body: JSON.stringify(data) }),
+    route: (data: { task_id: string; strategy: string }) =>
+      request<any>('/cost-optimizer/route', { method: 'POST', body: JSON.stringify(data) }),
+    stats: () => request<any>('/cost-optimizer/stats'),
+  },
 };
