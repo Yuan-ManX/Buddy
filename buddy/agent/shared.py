@@ -105,6 +105,20 @@ from agent.agent_self_reflection import self_reflection_engine, SelfReflectionEn
 from agent.agent_memory_consolidator import memory_consolidator, MemoryConsolidator, MemoryEntry, ConsolidatedMemory, ConsolidationStrategy, MemoryImportance
 from agent.agent_context_compressor import context_compressor, ContextCompressor, ContextChunk, CompressionResult, CompressionStrategy, ContentPriority
 
+# Skill Forge, Policy Gateway, Dream Consolidator, Cross Review, Cost Optimizer
+from agent.agent_skill_forge import get_skill_forge, reset_skill_forge, AgentSkillForge, SkillOrigin, SkillStatus, TestStatus, EvolutionStage, SkillCandidate, SkillTest, SkillEvolution, SkillDependency
+from agent.agent_policy_gateway import get_policy_gateway, reset_policy_gateway, AgentPolicyGateway, PolicyLevel, PolicyAction, PolicyCategory, PolicyStatus, PolicyRule, ApprovalRequest, PolicyEvaluation, PolicyAuditEntry
+from agent.agent_dream_consolidator import get_dream_consolidator, reset_dream_consolidator, AgentDreamConsolidator, DreamPhase, ConsolidationStrategy, MemoryTier, SnapshotType, MemoryEntry, DreamSession, MemorySnapshot, ConsolidationResult
+from agent.agent_cross_review import get_cross_review, reset_cross_review, AgentCrossReview, ReviewStrategy, ReviewStatus, SeverityLevel, ReviewVerdict, ReviewItem, ReviewReport, ReviewSession, ReviewerProfile
+from agent.agent_cost_optimizer import get_cost_optimizer, reset_cost_optimizer, AgentCostOptimizer, TaskComplexity, ModelTier, RoutingStrategy, OptimizationMetric, ModelProfile, TaskProfile, RoutingDecision, CostRecord, OptimizationReport
+
+# Lifecycle Hooks, Session Fork, Alignment Engine, Context Provider, Interruptible Executor
+from agent.agent_lifecycle_hooks import get_lifecycle_hooks, reset_lifecycle_hooks, AgentLifecycleHooks, HookEvent, HookPhase, HookPriority, HookExecutionMode, HookStatus, HookResult, HookFailurePolicy, HookContext, HookExecutionResult, HookRegistration, HookInvocation, HookChain
+from agent.agent_session_fork import get_session_fork, reset_session_fork, AgentSessionFork, ForkStrategy, ForkStatus, MergeStrategy, MergeConflictPolicy, SessionNodeRole, ForkRelation, SessionMessage, ForkPoint, SessionNode, MergeRequest, MergeConflict, ForkTree
+from agent.agent_alignment_engine import get_alignment_engine, reset_alignment_engine, AgentAlignmentEngine, AlignmentDimension, AlignmentStrength, AlignmentSource, AlignmentChange, AlignmentAction, ConflictResolution, AlignmentTrait, AlignmentProfile, AlignmentSignal, AlignmentCheck, AlignmentDriftReport, CalibrationSession
+from agent.agent_context_provider import get_context_provider, reset_context_provider, AgentContextProvider, ContextSource, ContextPriority, EnrichmentStrategy, ContextFormat, AssemblyMode, QueryIntent, ProviderStatus, ContextFragment, ContextQuery, ContextBundle, SourceConnector, Disambiguation, ProviderStats
+from agent.agent_interruptible import get_interruptible_executor, reset_interruptible_executor, AgentInterruptibleExecutor, ExecutionState, CancellationReason, InterruptSignal, CheckpointType, ResumeStrategy, ExecutionPriority, CancellationScope, CancellationToken, Checkpoint, ExecutionHandle, CancellationRequest, ExecutionStep
+
 orchestrator = Orchestrator()
 skills_registry = SkillsRegistry()
 context_manager_instance = context_manager
@@ -519,6 +533,31 @@ from agent.agent_understanding_engine import (
     ModalityInput, UnderstandingResult, FusionResult,
     get_understanding_engine, reset_understanding_engine,
 )
+from agent.agent_hypothesis_engine import (
+    AgentHypothesisEngine, HypothesisStatus, EvidenceType, TestOutcome,
+    Evidence, HypothesisTest, Hypothesis, HypothesisSession,
+    get_hypothesis_engine, reset_hypothesis_engine,
+)
+from agent.agent_negotiation import (
+    AgentNegotiationProtocol, NegotiationStrategy, RoundType, DelegateRole,
+    ResolutionType, Delegate, Proposal, NegotiationRound, NegotiationSession,
+    get_negotiation_protocol, reset_negotiation_protocol,
+)
+from agent.agent_ai_twin import (
+    PlatformAITwin, MirrorDimension, SyncFrequency, MirrorAccuracy,
+    MirrorSnapshot, LearningSignal, TwinProfile,
+    get_ai_twin, reset_ai_twin,
+)
+from agent.agent_code_synthesis import (
+    AgentCodeSynthesis, SynthesisStage, LanguageTarget, TestStatus,
+    CodeComponent, ArchitecturePlan, SynthesisProject,
+    get_code_synthesis, reset_code_synthesis,
+)
+from agent.agent_workflow_composer import (
+    PlatformWorkflowComposer, NodeType, ExecutionStatus, TriggerType,
+    WorkflowNode, WorkflowEdge, WorkflowExecution, WorkflowDefinition,
+    get_workflow_composer, reset_workflow_composer,
+)
 
 personal_memory = get_personal_memory()
 voice_interface = get_voice_interface()
@@ -532,3 +571,22 @@ research_engine = get_research_engine()
 learning_loop = get_learning_loop()
 memory_graph = get_memory_graph()
 understanding_engine = get_understanding_engine()
+hypothesis_engine = get_hypothesis_engine()
+negotiation_protocol = get_negotiation_protocol()
+ai_twin = get_ai_twin()
+code_synthesis = get_code_synthesis()
+workflow_composer = get_workflow_composer()
+
+# Skill Forge, Policy Gateway, Dream Consolidator, Cross Review, Cost Optimizer instances
+skill_forge = get_skill_forge()
+policy_gateway = get_policy_gateway()
+dream_consolidator = get_dream_consolidator()
+cross_review = get_cross_review()
+cost_optimizer = get_cost_optimizer()
+
+# Lifecycle Hooks, Session Fork, Alignment Engine, Context Provider, Interruptible Executor instances
+lifecycle_hooks = get_lifecycle_hooks()
+session_fork = get_session_fork()
+alignment_engine = get_alignment_engine()
+context_provider = get_context_provider()
+interruptible_executor = get_interruptible_executor()
