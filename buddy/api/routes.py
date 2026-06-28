@@ -24066,7 +24066,7 @@ async def memory_graph_retrieve(data: dict):
         ],
         "traversal_path": result.traversal_path,
         "relevance_scores": result.relevance_scores,
-        "total_matches": result.total_matches,
+        "total_matches": len(result.nodes),
     }
 
 
@@ -24123,13 +24123,12 @@ async def understanding_engine_process(data: UnderstandProcessRequest):
     return {
         "input_id": result.input_id,
         "modality": result.modality.value,
-        "language": result.language,
+        "detected_language": result.detected_language,
         "summary": result.summary,
         "confidence": result.confidence,
-        "entities": result.entities,
-        "key_points": result.key_points,
-        "sentiment": result.sentiment,
-        "complexity": result.complexity,
+        "entities": result.extracted_entities,
+        "key_points": result.extracted_keywords,
+        "understanding": result.understanding,
         "processing_time_ms": result.processing_time_ms,
     }
 
@@ -24155,11 +24154,12 @@ async def understanding_engine_fuse(data: UnderstandFuseRequest):
         raise HTTPException(status_code=404, detail="No inputs found for fusion")
     return {
         "fusion_id": result.fusion_id,
-        "input_ids": result.input_ids,
-        "unified_summary": result.unified_summary,
+        "inputs": result.inputs,
+        "unified_understanding": result.unified_understanding,
         "confidence": result.confidence,
         "modalities": result.modalities,
-        "insights": result.insights,
+        "insights": result.cross_modal_insights,
+        "consistency_score": result.consistency_score,
     }
 
 
@@ -24186,3 +24186,1423 @@ async def understanding_engine_results(limit: int = 20):
             for r in results
         ]
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Hypothesis Engine
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class HypothesisSessionRequest(BaseModel):
+    topic: str
+    description: str = ""
+
+
+class HypothesisProposeRequest(BaseModel):
+    session_id: str
+    statement: str
+    rationale: str = ""
+    confidence: float = 0.5
+    parent_id: str | None = None
+
+
+class HypothesisEvidenceRequest(BaseModel):
+    session_id: str
+    hypothesis_id: str
+    description: str
+    evidence_type: str = "observation"
+    weight: float = 0.5
+    supports: bool = True
+    source: str = ""
+
+
+class HypothesisTestRequest(BaseModel):
+    session_id: str
+    hypothesis_id: str
+    description: str
+    expected_result: str
+
+
+class HypothesisRunTestRequest(BaseModel):
+    session_id: str
+    hypothesis_id: str
+    test_id: str
+    actual_result: str
+    outcome: str = "pass"
+    confidence: float = 0.5
+
+
+class HypothesisRefineRequest(BaseModel):
+    session_id: str
+    hypothesis_id: str
+    new_statement: str
+    new_rationale: str = ""
+
+
+@router.post("/hypothesis-engine/session")
+async def hypothesis_create_session(data: HypothesisSessionRequest):
+    """Create a hypothesis exploration session."""
+    from agent.shared import hypothesis_engine
+    session = hypothesis_engine.create_session(data.topic, data.description)
+    return {
+        "session_id": session.session_id,
+        "topic": session.topic,
+        "created_at": session.created_at,
+    }
+
+
+@router.post("/hypothesis-engine/propose")
+async def hypothesis_propose(data: HypothesisProposeRequest):
+    """Propose a new hypothesis."""
+    from agent.shared import hypothesis_engine
+    h = hypothesis_engine.propose(
+        session_id=data.session_id,
+        statement=data.statement,
+        rationale=data.rationale,
+        confidence=data.confidence,
+        parent_id=data.parent_id,
+    )
+    if not h:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {
+        "hypothesis_id": h.hypothesis_id,
+        "statement": h.statement,
+        "confidence": h.confidence,
+        "status": h.status.value,
+    }
+
+
+@router.post("/hypothesis-engine/evidence")
+async def hypothesis_add_evidence(data: HypothesisEvidenceRequest):
+    """Add evidence to a hypothesis."""
+    from agent.shared import hypothesis_engine
+    from agent.agent_hypothesis_engine import EvidenceType
+    try:
+        et = EvidenceType(data.evidence_type)
+    except ValueError:
+        et = EvidenceType.OBSERVATION
+    ev = hypothesis_engine.add_evidence(
+        session_id=data.session_id,
+        hypothesis_id=data.hypothesis_id,
+        description=data.description,
+        evidence_type=et,
+        weight=data.weight,
+        supports=data.supports,
+        source=data.source,
+    )
+    if not ev:
+        raise HTTPException(status_code=404, detail="Session or hypothesis not found")
+    return {"evidence_id": ev.evidence_id, "recorded": True}
+
+
+@router.post("/hypothesis-engine/test")
+async def hypothesis_design_test(data: HypothesisTestRequest):
+    """Design a test for a hypothesis."""
+    from agent.shared import hypothesis_engine
+    t = hypothesis_engine.design_test(
+        session_id=data.session_id,
+        hypothesis_id=data.hypothesis_id,
+        description=data.description,
+        expected_result=data.expected_result,
+    )
+    if not t:
+        raise HTTPException(status_code=404, detail="Session or hypothesis not found")
+    return {"test_id": t.test_id, "designed": True}
+
+
+@router.post("/hypothesis-engine/run-test")
+async def hypothesis_run_test(data: HypothesisRunTestRequest):
+    """Run a test on a hypothesis."""
+    from agent.shared import hypothesis_engine
+    from agent.agent_hypothesis_engine import TestOutcome
+    try:
+        oc = TestOutcome(data.outcome)
+    except ValueError:
+        oc = TestOutcome.PASS
+    t = hypothesis_engine.run_test(
+        session_id=data.session_id,
+        hypothesis_id=data.hypothesis_id,
+        test_id=data.test_id,
+        actual_result=data.actual_result,
+        outcome=oc,
+        confidence=data.confidence,
+    )
+    if not t:
+        raise HTTPException(status_code=404, detail="Session, hypothesis, or test not found")
+    return {"test_id": t.test_id, "outcome": t.outcome.value, "completed": True}
+
+
+@router.post("/hypothesis-engine/refine")
+async def hypothesis_refine(data: HypothesisRefineRequest):
+    """Refine a hypothesis."""
+    from agent.shared import hypothesis_engine
+    h = hypothesis_engine.refine(
+        session_id=data.session_id,
+        hypothesis_id=data.hypothesis_id,
+        new_statement=data.new_statement,
+        new_rationale=data.new_rationale,
+    )
+    if not h:
+        raise HTTPException(status_code=404, detail="Session or hypothesis not found")
+    return {"hypothesis_id": h.hypothesis_id, "refined": True}
+
+
+@router.get("/hypothesis-engine/evaluate")
+async def hypothesis_evaluate(session_id: str, hypothesis_id: str):
+    """Evaluate a hypothesis."""
+    from agent.shared import hypothesis_engine
+    result = hypothesis_engine.evaluate(session_id, hypothesis_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Not found")
+    return result
+
+
+@router.get("/hypothesis-engine/compare")
+async def hypothesis_compare(session_id: str):
+    """Compare all hypotheses in a session."""
+    from agent.shared import hypothesis_engine
+    return hypothesis_engine.compare(session_id)
+
+
+@router.get("/hypothesis-engine/stats")
+async def hypothesis_stats():
+    """Get hypothesis engine statistics."""
+    from agent.shared import hypothesis_engine
+    return hypothesis_engine.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Negotiation Protocol
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class NegotiationSessionRequest(BaseModel):
+    topic: str
+    description: str = ""
+    strategy: str = "collaborative"
+
+
+class NegotiationDelegateRequest(BaseModel):
+    session_id: str
+    name: str
+    role: str = "proposer"
+    stance: str = ""
+    priority: int = 0
+
+
+class NegotiationProposeRequest(BaseModel):
+    session_id: str
+    delegate_id: str
+    content: str
+    rationale: str = ""
+    confidence: float = 0.5
+
+
+class NegotiationVoteRequest(BaseModel):
+    session_id: str
+    proposal_id: str
+    delegate_id: str
+    approve: bool = True
+
+
+class NegotiationDeliberateRequest(BaseModel):
+    session_id: str
+    summary: str
+
+
+@router.post("/negotiation/session")
+async def negotiation_create_session(data: NegotiationSessionRequest):
+    """Create a negotiation session."""
+    from agent.shared import negotiation_protocol
+    from agent.agent_negotiation import NegotiationStrategy
+    try:
+        strat = NegotiationStrategy(data.strategy)
+    except ValueError:
+        strat = NegotiationStrategy.COLLABORATIVE
+    session = negotiation_protocol.create_session(data.topic, data.description, strat)
+    return {
+        "session_id": session.session_id,
+        "topic": session.topic,
+        "strategy": session.strategy.value,
+    }
+
+
+@router.post("/negotiation/delegate")
+async def negotiation_add_delegate(data: NegotiationDelegateRequest):
+    """Add a delegate to a negotiation."""
+    from agent.shared import negotiation_protocol
+    from agent.agent_negotiation import DelegateRole
+    try:
+        role = DelegateRole(data.role)
+    except ValueError:
+        role = DelegateRole.PROPOSER
+    d = negotiation_protocol.add_delegate(
+        session_id=data.session_id,
+        name=data.name,
+        role=role,
+        stance=data.stance,
+        priority=data.priority,
+    )
+    if not d:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"delegate_id": d.delegate_id, "name": d.name, "role": d.role.value}
+
+
+@router.post("/negotiation/propose")
+async def negotiation_propose(data: NegotiationProposeRequest):
+    """Submit a proposal."""
+    from agent.shared import negotiation_protocol
+    p = negotiation_protocol.propose(
+        session_id=data.session_id,
+        delegate_id=data.delegate_id,
+        content=data.content,
+        rationale=data.rationale,
+        confidence=data.confidence,
+    )
+    if not p:
+        raise HTTPException(status_code=404, detail="Session or delegate not found")
+    return {"proposal_id": p.proposal_id, "round": p.round_number, "submitted": True}
+
+
+@router.post("/negotiation/vote")
+async def negotiation_vote(data: NegotiationVoteRequest):
+    """Cast a vote on a proposal."""
+    from agent.shared import negotiation_protocol
+    ok = negotiation_protocol.vote(
+        session_id=data.session_id,
+        proposal_id=data.proposal_id,
+        delegate_id=data.delegate_id,
+        approve=data.approve,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"voted": True}
+
+
+@router.post("/negotiation/deliberate")
+async def negotiation_deliberate(data: NegotiationDeliberateRequest):
+    """Add a deliberation round."""
+    from agent.shared import negotiation_protocol
+    rd = negotiation_protocol.deliberate(data.session_id, data.summary)
+    if not rd:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"round_id": rd.round_id, "round_number": rd.round_number}
+
+
+@router.post("/negotiation/resolve")
+async def negotiation_resolve(session_id: str = ""):
+    """Resolve a negotiation session."""
+    from agent.shared import negotiation_protocol
+    result = negotiation_protocol.resolve(session_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return result
+
+
+@router.get("/negotiation/summary")
+async def negotiation_summary(session_id: str):
+    """Get negotiation session summary."""
+    from agent.shared import negotiation_protocol
+    result = negotiation_protocol.get_summary(session_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return result
+
+
+@router.get("/negotiation/stats")
+async def negotiation_stats():
+    """Get negotiation protocol statistics."""
+    from agent.shared import negotiation_protocol
+    return negotiation_protocol.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Platform AI Twin
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AITwinProfileRequest(BaseModel):
+    name: str = ""
+    sync_frequency: str = "continuous"
+
+
+class AITwinLearnRequest(BaseModel):
+    twin_id: str
+    dimension: str = "preferences"
+    action: str
+    context: str = ""
+    outcome: str = ""
+    weight: float = 0.5
+
+
+class AITwinPredictRequest(BaseModel):
+    twin_id: str
+    dimension: str = "preferences"
+    context: str = ""
+
+
+@router.post("/ai-twin/profile")
+async def ai_twin_create_profile(data: AITwinProfileRequest):
+    """Create a new AI twin profile."""
+    from agent.shared import ai_twin
+    from agent.agent_ai_twin import SyncFrequency
+    try:
+        sf = SyncFrequency(data.sync_frequency)
+    except ValueError:
+        sf = SyncFrequency.CONTINUOUS
+    profile = ai_twin.create_profile(data.name, sf)
+    return {
+        "twin_id": profile.twin_id,
+        "name": profile.name,
+        "sync_frequency": profile.sync_frequency.value,
+    }
+
+
+@router.post("/ai-twin/learn")
+async def ai_twin_learn(data: AITwinLearnRequest):
+    """Record a learning signal for the twin."""
+    from agent.shared import ai_twin
+    from agent.agent_ai_twin import MirrorDimension
+    try:
+        dim = MirrorDimension(data.dimension)
+    except ValueError:
+        dim = MirrorDimension.PREFERENCES
+    signal = ai_twin.learn(
+        twin_id=data.twin_id,
+        dimension=dim,
+        action=data.action,
+        context=data.context,
+        outcome=data.outcome,
+        weight=data.weight,
+    )
+    if not signal:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"signal_id": signal.signal_id, "learned": True}
+
+
+@router.post("/ai-twin/predict")
+async def ai_twin_predict(data: AITwinPredictRequest):
+    """Predict user behavior from the twin."""
+    from agent.shared import ai_twin
+    from agent.agent_ai_twin import MirrorDimension
+    try:
+        dim = MirrorDimension(data.dimension)
+    except ValueError:
+        dim = MirrorDimension.PREFERENCES
+    result = ai_twin.predict(twin_id=data.twin_id, dimension=dim, context=data.context)
+    if not result:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return result
+
+
+@router.get("/ai-twin/mirror")
+async def ai_twin_mirror(twin_id: str, dimension: str = "preferences"):
+    """Get mirror snapshot for a dimension."""
+    from agent.shared import ai_twin
+    from agent.agent_ai_twin import MirrorDimension
+    try:
+        dim = MirrorDimension(dimension)
+    except ValueError:
+        dim = MirrorDimension.PREFERENCES
+    result = ai_twin.get_mirror_snapshot(twin_id, dim)
+    if not result:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return result
+
+
+@router.get("/ai-twin/profile")
+async def ai_twin_profile(twin_id: str):
+    """Get complete twin profile summary."""
+    from agent.shared import ai_twin
+    result = ai_twin.get_profile_summary(twin_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return result
+
+
+@router.get("/ai-twin/stats")
+async def ai_twin_stats():
+    """Get AI twin platform statistics."""
+    from agent.shared import ai_twin
+    return ai_twin.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Code Synthesis
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class CodeSynthesisProjectRequest(BaseModel):
+    name: str
+    specification: str
+    language: str = "python"
+
+
+class CodeSynthesisArchitectureRequest(BaseModel):
+    project_id: str
+    components: list[str]
+    data_flow: str = ""
+    entry_point: str = ""
+    patterns: list[str] = []
+    rationale: str = ""
+
+
+class CodeSynthesisComponentRequest(BaseModel):
+    project_id: str
+    name: str
+    code: str
+    description: str = ""
+    dependencies: list[str] = []
+    test_code: str = ""
+
+
+class CodeSynthesisTestRequest(BaseModel):
+    project_id: str
+    component_id: str
+    test_result: str = "pass"
+    output: str = ""
+
+
+class CodeSynthesisRefineRequest(BaseModel):
+    project_id: str
+    component_id: str
+    improved_code: str
+    description: str = ""
+
+
+@router.post("/code-synthesis/project")
+async def code_synthesis_create_project(data: CodeSynthesisProjectRequest):
+    """Create a code synthesis project."""
+    from agent.shared import code_synthesis
+    from agent.agent_code_synthesis import LanguageTarget
+    try:
+        lang = LanguageTarget(data.language)
+    except ValueError:
+        lang = LanguageTarget.PYTHON
+    project = code_synthesis.create_project(data.name, data.specification, lang)
+    return {
+        "project_id": project.project_id,
+        "name": project.name,
+        "language": project.language.value,
+        "stage": project.stage.value,
+    }
+
+
+@router.post("/code-synthesis/architecture")
+async def code_synthesis_plan_architecture(data: CodeSynthesisArchitectureRequest):
+    """Plan architecture for a project."""
+    from agent.shared import code_synthesis
+    plan = code_synthesis.plan_architecture(
+        project_id=data.project_id,
+        components=data.components,
+        data_flow=data.data_flow,
+        entry_point=data.entry_point,
+        patterns=data.patterns,
+        rationale=data.rationale,
+    )
+    if not plan:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"plan_id": plan.plan_id, "components": plan.components, "planned": True}
+
+
+@router.post("/code-synthesis/component")
+async def code_synthesis_generate_component(data: CodeSynthesisComponentRequest):
+    """Generate a code component."""
+    from agent.shared import code_synthesis
+    comp = code_synthesis.generate_component(
+        project_id=data.project_id,
+        name=data.name,
+        code=data.code,
+        description=data.description,
+        dependencies=data.dependencies,
+        test_code=data.test_code,
+    )
+    if not comp:
+        raise HTTPException(status_code=404, detail="Project not found or max components reached")
+    return {"component_id": comp.component_id, "name": comp.name, "version": comp.version}
+
+
+@router.post("/code-synthesis/test")
+async def code_synthesis_test_component(data: CodeSynthesisTestRequest):
+    """Record test results for a component."""
+    from agent.shared import code_synthesis
+    from agent.agent_code_synthesis import TestStatus
+    try:
+        ts = TestStatus(data.test_result)
+    except ValueError:
+        ts = TestStatus.PASS
+    comp = code_synthesis.test_component(data.project_id, data.component_id, ts, data.output)
+    if not comp:
+        raise HTTPException(status_code=404, detail="Project or component not found")
+    return {"component_id": comp.component_id, "test_status": comp.test_status.value}
+
+
+@router.post("/code-synthesis/refine")
+async def code_synthesis_refine_component(data: CodeSynthesisRefineRequest):
+    """Refine a code component."""
+    from agent.shared import code_synthesis
+    comp = code_synthesis.refine_component(
+        project_id=data.project_id,
+        component_id=data.component_id,
+        improved_code=data.improved_code,
+        description=data.description,
+    )
+    if not comp:
+        raise HTTPException(status_code=404, detail="Project or component not found")
+    return {"component_id": comp.component_id, "version": comp.version, "refined": True}
+
+
+@router.post("/code-synthesis/finalize")
+async def code_synthesis_finalize(project_id: str = ""):
+    """Finalize a code synthesis project."""
+    from agent.shared import code_synthesis
+    project = code_synthesis.finalize_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"project_id": project.project_id, "stage": project.stage.value, "finalized": True}
+
+
+@router.get("/code-synthesis/project")
+async def code_synthesis_get_project(project_id: str):
+    """Get project summary."""
+    from agent.shared import code_synthesis
+    result = code_synthesis.get_project_summary(project_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
+
+
+@router.get("/code-synthesis/component")
+async def code_synthesis_get_component(project_id: str, component_id: str):
+    """Get full code for a component."""
+    from agent.shared import code_synthesis
+    result = code_synthesis.get_component_code(project_id, component_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Not found")
+    return result
+
+
+@router.get("/code-synthesis/stats")
+async def code_synthesis_stats():
+    """Get code synthesis statistics."""
+    from agent.shared import code_synthesis
+    return code_synthesis.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Platform Workflow Composer
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class WorkflowCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    trigger_type: str = "manual"
+    trigger_config: dict | None = None
+    tags: list[str] = []
+
+
+class WorkflowNodeRequest(BaseModel):
+    workflow_id: str
+    node_type: str = "action"
+    label: str
+    description: str = ""
+    config: dict | None = None
+    position_x: float = 0.0
+    position_y: float = 0.0
+
+
+class WorkflowEdgeRequest(BaseModel):
+    workflow_id: str
+    source_id: str
+    target_id: str
+    condition: str = ""
+    label: str = ""
+
+
+class WorkflowExecuteRequest(BaseModel):
+    workflow_id: str
+    input_data: dict | None = None
+
+
+@router.post("/workflow-composer/workflow")
+async def workflow_create(data: WorkflowCreateRequest):
+    """Create a new workflow."""
+    from agent.shared import workflow_composer
+    from agent.agent_workflow_composer import TriggerType
+    try:
+        tt = TriggerType(data.trigger_type)
+    except ValueError:
+        tt = TriggerType.MANUAL
+    wf = workflow_composer.create_workflow(
+        name=data.name,
+        description=data.description,
+        trigger_type=tt,
+        trigger_config=data.trigger_config,
+        tags=data.tags,
+    )
+    return {
+        "workflow_id": wf.workflow_id,
+        "name": wf.name,
+        "trigger_type": wf.trigger_type.value,
+    }
+
+
+@router.post("/workflow-composer/node")
+async def workflow_add_node(data: WorkflowNodeRequest):
+    """Add a node to a workflow."""
+    from agent.shared import workflow_composer
+    from agent.agent_workflow_composer import NodeType
+    try:
+        nt = NodeType(data.node_type)
+    except ValueError:
+        nt = NodeType.ACTION
+    node = workflow_composer.add_node(
+        workflow_id=data.workflow_id,
+        node_type=nt,
+        label=data.label,
+        description=data.description,
+        config=data.config,
+        position_x=data.position_x,
+        position_y=data.position_y,
+    )
+    if not node:
+        raise HTTPException(status_code=404, detail="Workflow not found or max nodes reached")
+    return {"node_id": node.node_id, "node_type": node.node_type.value, "added": True}
+
+
+@router.post("/workflow-composer/edge")
+async def workflow_add_edge(data: WorkflowEdgeRequest):
+    """Add an edge to a workflow."""
+    from agent.shared import workflow_composer
+    edge = workflow_composer.add_edge(
+        workflow_id=data.workflow_id,
+        source_id=data.source_id,
+        target_id=data.target_id,
+        condition=data.condition,
+        label=data.label,
+    )
+    if not edge:
+        raise HTTPException(status_code=404, detail="Workflow or nodes not found")
+    return {"edge_id": edge.edge_id, "added": True}
+
+
+@router.post("/workflow-composer/execute")
+async def workflow_execute(data: WorkflowExecuteRequest):
+    """Execute a workflow."""
+    from agent.shared import workflow_composer
+    execution = workflow_composer.execute(data.workflow_id, data.input_data)
+    if not execution:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return {
+        "execution_id": execution.execution_id,
+        "status": execution.status.value,
+        "output": execution.output,
+    }
+
+
+@router.get("/workflow-composer/workflow")
+async def workflow_get(workflow_id: str):
+    """Get workflow summary."""
+    from agent.shared import workflow_composer
+    result = workflow_composer.get_workflow_summary(workflow_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return result
+
+
+@router.get("/workflow-composer/execution")
+async def workflow_execution_status(execution_id: str):
+    """Get execution status."""
+    from agent.shared import workflow_composer
+    result = workflow_composer.get_execution_status(execution_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return result
+
+
+@router.get("/workflow-composer/stats")
+async def workflow_composer_stats():
+    """Get workflow composer statistics."""
+    from agent.shared import workflow_composer
+    return workflow_composer.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Skill Forge
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class SkillCreateRequest(BaseModel):
+    name: str
+    description: str
+    trigger_conditions: list[str]
+    procedure: list[str]
+    pitfalls: list[str] = []
+    verification: str = ""
+    origin: str = "experience"
+
+class SkillUpdateRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    trigger_conditions: list[str] | None = None
+    procedure: list[str] | None = None
+    pitfalls: list[str] | None = None
+    verification: str | None = None
+
+class SkillTestDesignRequest(BaseModel):
+    skill_id: str
+    test_prompt: str
+    expected_behavior: str
+
+class SkillTestRunRequest(BaseModel):
+    skill_id: str
+    test_id: str
+    actual_behavior: str
+    baseline_score: float = 0.5
+    skill_score: float = 0.7
+    notes: str = ""
+
+class SkillEvolveRequest(BaseModel):
+    skill_id: str
+    change_description: str
+    new_procedure: list[str] | None = None
+    new_pitfalls: list[str] | None = None
+    new_verification: str | None = None
+
+class SkillDependencyRequest(BaseModel):
+    skill_id: str
+    depends_on_skill_id: str
+    dependency_type: str = "requires"
+
+@router.post("/skill-forge/skill")
+async def skill_forge_create(data: SkillCreateRequest):
+    """Create a new skill candidate."""
+    from agent.shared import skill_forge
+    from agent.agent_skill_forge import SkillOrigin
+    origin = SkillOrigin(data.origin) if data.origin else SkillOrigin.EXPERIENCE
+    skill = skill_forge.create_skill(
+        name=data.name, description=data.description,
+        trigger_conditions=data.trigger_conditions, procedure=data.procedure,
+        pitfalls=data.pitfalls, verification=data.verification, origin=origin,
+    )
+    return {"skill_id": skill.skill_id, "name": skill.name, "status": skill.status.value}
+
+@router.put("/skill-forge/skill/{skill_id}")
+async def skill_forge_update(skill_id: str, data: SkillUpdateRequest):
+    """Update a skill."""
+    from agent.shared import skill_forge
+    skill = skill_forge.update_skill(skill_id, name=data.name, description=data.description,
+        trigger_conditions=data.trigger_conditions, procedure=data.procedure,
+        pitfalls=data.pitfalls, verification=data.verification)
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return {"skill_id": skill.skill_id, "name": skill.name, "status": skill.status.value}
+
+@router.get("/skill-forge/skill/{skill_id}")
+async def skill_forge_get(skill_id: str):
+    """Get a skill by ID."""
+    from agent.shared import skill_forge
+    skill = skill_forge.get_skill(skill_id)
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return {"skill_id": skill.skill_id, "name": skill.name, "description": skill.description,
+            "status": skill.status.value, "origin": skill.origin.value, "version": skill.version,
+            "confidence_score": skill.confidence_score, "success_count": skill.success_count,
+            "failure_count": skill.failure_count, "evolution_stage": skill.evolution_stage.value}
+
+@router.get("/skill-forge/skills")
+async def skill_forge_list(status: str | None = None, origin: str | None = None):
+    """List skills with optional filters."""
+    from agent.shared import skill_forge
+    from agent.agent_skill_forge import SkillStatus, SkillOrigin
+    status_enum = SkillStatus(status) if status else None
+    origin_enum = SkillOrigin(origin) if origin else None
+    skills = skill_forge.list_skills(status=status_enum, origin=origin_enum)
+    return [{"skill_id": s.skill_id, "name": s.name, "status": s.status.value,
+             "origin": s.origin.value, "confidence": s.confidence_score} for s in skills]
+
+@router.get("/skill-forge/active")
+async def skill_forge_active():
+    """Get all active skills."""
+    from agent.shared import skill_forge
+    skills = skill_forge.get_active_skills()
+    return [{"skill_id": s.skill_id, "name": s.name, "confidence": s.confidence_score} for s in skills]
+
+@router.post("/skill-forge/test")
+async def skill_forge_design_test(data: SkillTestDesignRequest):
+    """Design a test for a skill."""
+    from agent.shared import skill_forge
+    test = skill_forge.design_test(data.skill_id, data.test_prompt, data.expected_behavior)
+    if not test:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return {"test_id": test.test_id, "skill_id": test.skill_id, "status": test.status.value}
+
+@router.post("/skill-forge/run-test")
+async def skill_forge_run_test(data: SkillTestRunRequest):
+    """Run a skill test."""
+    from agent.shared import skill_forge
+    test = skill_forge.run_test(data.skill_id, data.test_id, data.actual_behavior,
+        data.baseline_score, data.skill_score, data.notes)
+    if not test:
+        raise HTTPException(status_code=404, detail="Skill or test not found")
+    return {"test_id": test.test_id, "status": test.status.value,
+            "baseline_score": test.baseline_score, "skill_score": test.skill_score}
+
+@router.post("/skill-forge/evolve")
+async def skill_forge_evolve(data: SkillEvolveRequest):
+    """Evolve a skill."""
+    from agent.shared import skill_forge
+    skill = skill_forge.evolve_skill(data.skill_id, data.change_description,
+        data.new_procedure, data.new_pitfalls, data.new_verification)
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found or not validated")
+    return {"skill_id": skill.skill_id, "version": skill.version,
+            "evolution_stage": skill.evolution_stage.value, "confidence": skill.confidence_score}
+
+@router.post("/skill-forge/dependency")
+async def skill_forge_add_dependency(data: SkillDependencyRequest):
+    """Add a skill dependency."""
+    from agent.shared import skill_forge
+    dep = skill_forge.add_dependency(data.skill_id, data.depends_on_skill_id, data.dependency_type)
+    if not dep:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return {"skill_id": dep.skill_id, "depends_on": dep.depends_on_skill_id, "type": dep.dependency_type}
+
+@router.post("/skill-forge/retire/{skill_id}")
+async def skill_forge_retire(skill_id: str):
+    """Retire a skill."""
+    from agent.shared import skill_forge
+    skill = skill_forge.retire_skill(skill_id)
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    return {"skill_id": skill.skill_id, "status": skill.status.value}
+
+@router.get("/skill-forge/stats")
+async def skill_forge_stats():
+    """Get skill forge statistics."""
+    from agent.shared import skill_forge
+    return skill_forge.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Policy Gateway
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class PolicyRuleRequest(BaseModel):
+    name: str
+    description: str = ""
+    level: str = "global"
+    category: str = "tool_execution"
+    action: str = "allow"
+    conditions: dict | None = None
+    priority: int = 0
+
+class PolicyUpdateRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    action: str | None = None
+    conditions: dict | None = None
+    priority: int | None = None
+    status: str | None = None
+
+class PolicyEvaluateRequest(BaseModel):
+    agent_id: str
+    action_type: str
+    category: str = "tool_execution"
+    context: dict | None = None
+
+class ApprovalRequestModel(BaseModel):
+    rule_id: str
+    agent_id: str
+    action_description: str
+    context: dict | None = None
+
+class ApprovalResolveRequest(BaseModel):
+    approved: bool
+    resolved_by: str = ""
+    notes: str = ""
+
+@router.post("/policy-gateway/rule")
+async def policy_add_rule(data: PolicyRuleRequest):
+    """Add a policy rule."""
+    from agent.shared import policy_gateway
+    from agent.agent_policy_gateway import PolicyLevel, PolicyCategory, PolicyAction
+    rule = policy_gateway.add_rule(data.name, data.description,
+        PolicyLevel(data.level), PolicyCategory(data.category),
+        PolicyAction(data.action), data.conditions, data.priority)
+    return {"rule_id": rule.rule_id, "name": rule.name, "action": rule.action.value}
+
+@router.put("/policy-gateway/rule/{rule_id}")
+async def policy_update_rule(rule_id: str, data: PolicyUpdateRequest):
+    """Update a policy rule."""
+    from agent.shared import policy_gateway
+    from agent.agent_policy_gateway import PolicyAction, PolicyStatus
+    action = PolicyAction(data.action) if data.action else None
+    status = PolicyStatus(data.status) if data.status else None
+    rule = policy_gateway.update_rule(rule_id, data.name, data.description, action,
+        data.conditions, data.priority, status)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return {"rule_id": rule.rule_id, "name": rule.name, "action": rule.action.value}
+
+@router.delete("/policy-gateway/rule/{rule_id}")
+async def policy_remove_rule(rule_id: str):
+    """Remove a policy rule."""
+    from agent.shared import policy_gateway
+    if not policy_gateway.remove_rule(rule_id):
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return {"deleted": True}
+
+@router.get("/policy-gateway/rule/{rule_id}")
+async def policy_get_rule(rule_id: str):
+    """Get a policy rule."""
+    from agent.shared import policy_gateway
+    rule = policy_gateway.get_rule(rule_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return {"rule_id": rule.rule_id, "name": rule.name, "level": rule.level.value,
+            "category": rule.category.value, "action": rule.action.value, "priority": rule.priority,
+            "status": rule.status.value, "hit_count": rule.hit_count}
+
+@router.get("/policy-gateway/rules")
+async def policy_list_rules(level: str | None = None, category: str | None = None, status: str | None = None):
+    """List policy rules."""
+    from agent.shared import policy_gateway
+    from agent.agent_policy_gateway import PolicyLevel, PolicyCategory, PolicyStatus
+    level_enum = PolicyLevel(level) if level else None
+    cat_enum = PolicyCategory(category) if category else None
+    status_enum = PolicyStatus(status) if status else None
+    rules = policy_gateway.list_rules(level=level_enum, category=cat_enum, status=status_enum)
+    return [{"rule_id": r.rule_id, "name": r.name, "level": r.level.value,
+             "action": r.action.value, "priority": r.priority, "hit_count": r.hit_count} for r in rules]
+
+@router.post("/policy-gateway/evaluate")
+async def policy_evaluate(data: PolicyEvaluateRequest):
+    """Evaluate an action against policies."""
+    from agent.shared import policy_gateway
+    from agent.agent_policy_gateway import PolicyCategory
+    result = policy_gateway.evaluate(data.agent_id, data.action_type,
+        PolicyCategory(data.category), data.context)
+    return {"action": result.action, "rule_id": result.rule_id, "reason": result.reason}
+
+@router.post("/policy-gateway/approval")
+async def policy_request_approval(data: ApprovalRequestModel):
+    """Request approval for an action."""
+    from agent.shared import policy_gateway
+    req = policy_gateway.request_approval(data.rule_id, data.agent_id,
+        data.action_description, data.context)
+    return {"request_id": req.request_id, "status": req.status}
+
+@router.post("/policy-gateway/approval/{request_id}/resolve")
+async def policy_resolve_approval(request_id: str, data: ApprovalResolveRequest):
+    """Resolve an approval request."""
+    from agent.shared import policy_gateway
+    req = policy_gateway.resolve_approval(request_id, data.approved, data.resolved_by, data.notes)
+    if not req:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    return {"request_id": req.request_id, "status": req.status}
+
+@router.get("/policy-gateway/approvals/pending")
+async def policy_pending_approvals(agent_id: str | None = None):
+    """Get pending approvals."""
+    from agent.shared import policy_gateway
+    approvals = policy_gateway.get_pending_approvals(agent_id)
+    return [{"request_id": a.request_id, "agent_id": a.agent_id,
+             "action_description": a.action_description, "status": a.status} for a in approvals]
+
+@router.get("/policy-gateway/audit")
+async def policy_audit_entries(agent_id: str | None = None, limit: int = 100):
+    """Get audit entries."""
+    from agent.shared import policy_gateway
+    entries = policy_gateway.get_audit_entries(agent_id, limit)
+    return [{"entry_id": e.entry_id, "agent_id": e.agent_id, "action_type": e.action_type,
+             "category": e.category.value, "decision": e.decision, "timestamp": e.timestamp} for e in entries]
+
+@router.get("/policy-gateway/stats")
+async def policy_gateway_stats():
+    """Get policy gateway statistics."""
+    from agent.shared import policy_gateway
+    return policy_gateway.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Dream Consolidator
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class DreamEntryRequest(BaseModel):
+    content: str
+    tier: str = "warm"
+    importance: float = 0.5
+    tags: list[str] = []
+    metadata: dict | None = None
+
+class DreamUpdateEntryRequest(BaseModel):
+    content: str | None = None
+    tier: str | None = None
+    importance: float | None = None
+    tags: list[str] | None = None
+
+class DreamStartRequest(BaseModel):
+    strategy: str = "merge"
+
+@router.post("/dream-consolidator/entry")
+async def dream_add_entry(data: DreamEntryRequest):
+    """Add a memory entry."""
+    from agent.shared import dream_consolidator
+    from agent.agent_dream_consolidator import MemoryTier
+    entry = dream_consolidator.add_entry(data.content, MemoryTier(data.tier),
+        data.importance, data.tags, data.metadata)
+    return {"entry_id": entry.entry_id, "tier": entry.tier.value, "importance": entry.importance}
+
+@router.put("/dream-consolidator/entry/{entry_id}")
+async def dream_update_entry(entry_id: str, data: DreamUpdateEntryRequest):
+    """Update a memory entry."""
+    from agent.shared import dream_consolidator
+    from agent.agent_dream_consolidator import MemoryTier
+    tier = MemoryTier(data.tier) if data.tier else None
+    entry = dream_consolidator.update_entry(entry_id, data.content, tier, data.importance, data.tags)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"entry_id": entry.entry_id, "importance": entry.importance}
+
+@router.get("/dream-consolidator/entry/{entry_id}")
+async def dream_get_entry(entry_id: str):
+    """Get a memory entry."""
+    from agent.shared import dream_consolidator
+    entry = dream_consolidator.get_entry(entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"entry_id": entry.entry_id, "content": entry.content, "tier": entry.tier.value,
+            "importance": entry.importance, "access_count": entry.access_count, "tags": entry.tags}
+
+@router.get("/dream-consolidator/entries")
+async def dream_list_entries(tier: str | None = None, min_importance: float | None = None, limit: int = 50):
+    """List memory entries."""
+    from agent.shared import dream_consolidator
+    from agent.agent_dream_consolidator import MemoryTier
+    tier_enum = MemoryTier(tier) if tier else None
+    entries = dream_consolidator.list_entries(tier=tier_enum, min_importance=min_importance, limit=limit)
+    return [{"entry_id": e.entry_id, "content": e.content[:100], "tier": e.tier.value,
+             "importance": e.importance, "access_count": e.access_count} for e in entries]
+
+@router.post("/dream-consolidator/snapshot")
+async def dream_create_snapshot(snapshot_type: str = "full"):
+    """Create a memory snapshot."""
+    from agent.shared import dream_consolidator
+    from agent.agent_dream_consolidator import SnapshotType
+    snapshot = dream_consolidator.create_snapshot(SnapshotType(snapshot_type))
+    return {"snapshot_id": snapshot.snapshot_id, "total_entries": snapshot.total_entries}
+
+@router.post("/dream-consolidator/restore/{snapshot_id}")
+async def dream_restore_snapshot(snapshot_id: str):
+    """Restore a snapshot."""
+    from agent.shared import dream_consolidator
+    if not dream_consolidator.restore_snapshot(snapshot_id):
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return {"restored": True, "snapshot_id": snapshot_id}
+
+@router.get("/dream-consolidator/snapshots")
+async def dream_list_snapshots(limit: int = 20):
+    """List snapshots."""
+    from agent.shared import dream_consolidator
+    snapshots = dream_consolidator.list_snapshots(limit)
+    return [{"snapshot_id": s.snapshot_id, "type": s.snapshot_type.value,
+             "total_entries": s.total_entries, "created_at": s.created_at} for s in snapshots]
+
+@router.post("/dream-consolidator/dream")
+async def dream_start(data: DreamStartRequest):
+    """Start a dream consolidation session."""
+    from agent.shared import dream_consolidator
+    from agent.agent_dream_consolidator import ConsolidationStrategy
+    session = dream_consolidator.start_dream(ConsolidationStrategy(data.strategy))
+    return {"session_id": session.session_id, "phase": session.phase.value,
+            "entries_processed": session.entries_processed, "entries_consolidated": session.entries_consolidated}
+
+@router.get("/dream-consolidator/sessions")
+async def dream_list_sessions(limit: int = 20):
+    """List dream sessions."""
+    from agent.shared import dream_consolidator
+    sessions = dream_consolidator.list_dream_sessions(limit)
+    return [{"session_id": s.session_id, "phase": s.phase.value,
+             "entries_processed": s.entries_processed, "completed_at": s.completed_at} for s in sessions]
+
+@router.get("/dream-consolidator/stats")
+async def dream_consolidator_stats():
+    """Get dream consolidator statistics."""
+    from agent.shared import dream_consolidator
+    return dream_consolidator.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Cross Review
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ReviewerRegisterRequest(BaseModel):
+    name: str
+    specialties: list[str] = []
+
+class ReviewerUpdateRequest(BaseModel):
+    name: str | None = None
+    specialties: list[str] | None = None
+    trust_score: float | None = None
+
+class ReviewCreateRequest(BaseModel):
+    reviewer_id: str
+    reviewee_id: str
+    artifact_type: str
+    artifact_content: str
+    strategy: str = "peer_review"
+    artifact_metadata: dict | None = None
+
+class ReviewReportRequest(BaseModel):
+    verdict: str
+    summary: str
+    items: list[dict] = []
+    score: float = 0.5
+    confidence: float = 0.5
+
+class ReviewDisputeRequest(BaseModel):
+    reason: str
+
+class ReviewResolveRequest(BaseModel):
+    resolution_notes: str = ""
+
+@router.post("/cross-review/reviewer")
+async def cross_review_register(data: ReviewerRegisterRequest):
+    """Register a reviewer."""
+    from agent.shared import cross_review
+    reviewer = cross_review.register_reviewer(data.name, data.specialties)
+    return {"reviewer_id": reviewer.reviewer_id, "name": reviewer.name, "trust_score": reviewer.trust_score}
+
+@router.put("/cross-review/reviewer/{reviewer_id}")
+async def cross_review_update_reviewer(reviewer_id: str, data: ReviewerUpdateRequest):
+    """Update a reviewer."""
+    from agent.shared import cross_review
+    reviewer = cross_review.update_reviewer(reviewer_id, data.name, data.specialties, data.trust_score)
+    if not reviewer:
+        raise HTTPException(status_code=404, detail="Reviewer not found")
+    return {"reviewer_id": reviewer.reviewer_id, "trust_score": reviewer.trust_score}
+
+@router.get("/cross-review/reviewer/{reviewer_id}")
+async def cross_review_get_reviewer(reviewer_id: str):
+    """Get a reviewer."""
+    from agent.shared import cross_review
+    reviewer = cross_review.get_reviewer(reviewer_id)
+    if not reviewer:
+        raise HTTPException(status_code=404, detail="Reviewer not found")
+    return {"reviewer_id": reviewer.reviewer_id, "name": reviewer.name,
+            "total_reviews": reviewer.total_reviews, "trust_score": reviewer.trust_score}
+
+@router.get("/cross-review/reviewers")
+async def cross_review_list_reviewers(specialty: str | None = None):
+    """List reviewers."""
+    from agent.shared import cross_review
+    reviewers = cross_review.list_reviewers(specialty)
+    return [{"reviewer_id": r.reviewer_id, "name": r.name, "trust_score": r.trust_score,
+             "total_reviews": r.total_reviews} for r in reviewers]
+
+@router.post("/cross-review/review")
+async def cross_review_create(data: ReviewCreateRequest):
+    """Create a review session."""
+    from agent.shared import cross_review
+    from agent.agent_cross_review import ReviewStrategy
+    session = cross_review.create_review(data.reviewer_id, data.reviewee_id,
+        data.artifact_type, data.artifact_content, ReviewStrategy(data.strategy), data.artifact_metadata)
+    if not session:
+        raise HTTPException(status_code=404, detail="Reviewer not found")
+    return {"review_id": session.review_id, "status": session.status.value, "strategy": session.strategy.value}
+
+@router.post("/cross-review/review/{review_id}/report")
+async def cross_review_submit_report(review_id: str, data: ReviewReportRequest):
+    """Submit a review report."""
+    from agent.shared import cross_review
+    from agent.agent_cross_review import ReviewVerdict, ReviewItem, SeverityLevel
+    items = [ReviewItem(title=i.get("title", ""), description=i.get("description", ""),
+        severity=SeverityLevel(i.get("severity", "info")), category=i.get("category", ""),
+        line_reference=i.get("line_reference", ""), suggestion=i.get("suggestion", ""),
+        resolved=i.get("resolved", False)) for i in data.items]
+    report = cross_review.submit_report(review_id, ReviewVerdict(data.verdict),
+        data.summary, items, data.score, data.confidence)
+    if not report:
+        raise HTTPException(status_code=404, detail="Review not found")
+    return {"report_id": report.report_id, "verdict": report.verdict.value, "score": report.score}
+
+@router.post("/cross-review/review/{review_id}/dispute")
+async def cross_review_dispute(review_id: str, data: ReviewDisputeRequest):
+    """Dispute a review."""
+    from agent.shared import cross_review
+    session = cross_review.dispute_review(review_id, data.reason)
+    if not session:
+        raise HTTPException(status_code=404, detail="Review not found")
+    return {"review_id": session.review_id, "status": session.status.value, "round": session.round_number}
+
+@router.post("/cross-review/review/{review_id}/resolve")
+async def cross_review_resolve(review_id: str, data: ReviewResolveRequest):
+    """Resolve a review."""
+    from agent.shared import cross_review
+    session = cross_review.resolve_review(review_id, data.resolution_notes)
+    if not session:
+        raise HTTPException(status_code=404, detail="Review not found")
+    return {"review_id": session.review_id, "status": session.status.value}
+
+@router.get("/cross-review/review/{review_id}")
+async def cross_review_get(review_id: str):
+    """Get a review session."""
+    from agent.shared import cross_review
+    session = cross_review.get_review(review_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Review not found")
+    return {"review_id": session.review_id, "status": session.status.value,
+            "strategy": session.strategy.value, "round_number": session.round_number}
+
+@router.get("/cross-review/reviews")
+async def cross_review_list(reviewer_id: str | None = None, status: str | None = None, limit: int = 50):
+    """List reviews."""
+    from agent.shared import cross_review
+    reviews = cross_review.list_reviews(reviewer_id, status, limit)
+    return [{"review_id": r.review_id, "reviewer_id": r.reviewer_id, "status": r.status.value,
+             "strategy": r.strategy.value} for r in reviews]
+
+@router.get("/cross-review/stats")
+async def cross_review_stats():
+    """Get cross review statistics."""
+    from agent.shared import cross_review
+    return cross_review.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Cost Optimizer
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ModelRegisterRequest(BaseModel):
+    name: str
+    provider: str
+    tier: str = "standard"
+    cost_per_1k_input: float = 0.0
+    cost_per_1k_output: float = 0.0
+    avg_latency_ms: float = 500.0
+    quality_score: float = 0.7
+    max_context: int = 8192
+    capabilities: list[str] = []
+
+class ModelUpdateRequest(BaseModel):
+    cost_per_1k_input: float | None = None
+    cost_per_1k_output: float | None = None
+    avg_latency_ms: float | None = None
+    quality_score: float | None = None
+    active: bool | None = None
+
+class ComplexityAssessRequest(BaseModel):
+    description: str
+    required_capabilities: list[str] = []
+    estimated_tokens: int = 1000
+
+class RouteRequest(BaseModel):
+    task_id: str
+    strategy: str = "balanced"
+
+class UsageRecordRequest(BaseModel):
+    model_id: str
+    task_id: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: float
+    quality_score: float | None = None
+
+@router.post("/cost-optimizer/model")
+async def cost_opt_register_model(data: ModelRegisterRequest):
+    """Register a model."""
+    from agent.shared import cost_optimizer
+    from agent.agent_cost_optimizer import ModelTier
+    model = cost_optimizer.register_model(data.name, data.provider, ModelTier(data.tier),
+        data.cost_per_1k_input, data.cost_per_1k_output, data.avg_latency_ms,
+        data.quality_score, data.max_context, data.capabilities)
+    return {"model_id": model.model_id, "name": model.name, "tier": model.tier.value}
+
+@router.put("/cost-optimizer/model/{model_id}")
+async def cost_opt_update_model(model_id: str, data: ModelUpdateRequest):
+    """Update a model."""
+    from agent.shared import cost_optimizer
+    model = cost_optimizer.update_model(model_id, data.cost_per_1k_input,
+        data.cost_per_1k_output, data.avg_latency_ms, data.quality_score, data.active)
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    return {"model_id": model.model_id, "name": model.name, "active": model.active}
+
+@router.delete("/cost-optimizer/model/{model_id}")
+async def cost_opt_remove_model(model_id: str):
+    """Remove a model."""
+    from agent.shared import cost_optimizer
+    if not cost_optimizer.remove_model(model_id):
+        raise HTTPException(status_code=404, detail="Model not found")
+    return {"deleted": True}
+
+@router.get("/cost-optimizer/model/{model_id}")
+async def cost_opt_get_model(model_id: str):
+    """Get a model."""
+    from agent.shared import cost_optimizer
+    model = cost_optimizer.get_model(model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    return {"model_id": model.model_id, "name": model.name, "tier": model.tier.value,
+            "cost_per_1k_input": model.cost_per_1k_input, "quality_score": model.quality_score}
+
+@router.get("/cost-optimizer/models")
+async def cost_opt_list_models(tier: str | None = None, active_only: bool = True):
+    """List models."""
+    from agent.shared import cost_optimizer
+    from agent.agent_cost_optimizer import ModelTier
+    tier_enum = ModelTier(tier) if tier else None
+    models = cost_optimizer.list_models(tier=tier_enum, active_only=active_only)
+    return [{"model_id": m.model_id, "name": m.name, "tier": m.tier.value,
+             "quality_score": m.quality_score, "active": m.active} for m in models]
+
+@router.post("/cost-optimizer/assess")
+async def cost_opt_assess(data: ComplexityAssessRequest):
+    """Assess task complexity."""
+    from agent.shared import cost_optimizer
+    task = cost_optimizer.assess_complexity(data.description, data.required_capabilities, data.estimated_tokens)
+    return {"task_id": task.task_id, "complexity": task.detected_complexity.value,
+            "estimated_tokens": task.estimated_tokens}
+
+@router.post("/cost-optimizer/route")
+async def cost_opt_route(data: RouteRequest):
+    """Route a task to the best model."""
+    from agent.shared import cost_optimizer
+    from agent.agent_cost_optimizer import RoutingStrategy, TaskProfile, TaskComplexity
+    task_profile = cost_optimizer.assess_complexity("routing request")
+    task_profile.task_id = data.task_id
+    decision = cost_optimizer.route(task_profile, RoutingStrategy(data.strategy))
+    if not decision:
+        raise HTTPException(status_code=404, detail="No suitable model found")
+    return {"decision_id": decision.decision_id, "selected_model_id": decision.selected_model_id,
+            "estimated_cost": decision.estimated_cost, "estimated_quality": decision.estimated_quality,
+            "confidence": decision.confidence, "reasoning": decision.reasoning}
+
+@router.post("/cost-optimizer/usage")
+async def cost_opt_record_usage(data: UsageRecordRequest):
+    """Record model usage."""
+    from agent.shared import cost_optimizer
+    record = cost_optimizer.record_usage(data.model_id, data.task_id, data.input_tokens,
+        data.output_tokens, data.latency_ms, data.quality_score)
+    return {"record_id": record.record_id, "cost": record.cost}
+
+@router.get("/cost-optimizer/decision/{decision_id}")
+async def cost_opt_get_decision(decision_id: str):
+    """Get a routing decision."""
+    from agent.shared import cost_optimizer
+    decision = cost_optimizer.get_decision(decision_id)
+    if not decision:
+        raise HTTPException(status_code=404, detail="Decision not found")
+    return {"decision_id": decision.decision_id, "selected_model_id": decision.selected_model_id,
+            "estimated_cost": decision.estimated_cost, "confidence": decision.confidence}
+
+@router.get("/cost-optimizer/report")
+async def cost_opt_report():
+    """Generate cost optimization report."""
+    from agent.shared import cost_optimizer
+    report = cost_optimizer.generate_report()
+    return {"report_id": report.report_id, "total_cost": report.total_cost,
+            "total_tasks": report.total_tasks, "avg_cost_per_task": report.avg_cost_per_task,
+            "cost_savings": report.cost_savings, "model_distribution": report.model_distribution}
+
+@router.get("/cost-optimizer/stats")
+async def cost_optimizer_stats():
+    """Get cost optimizer statistics."""
+    from agent.shared import cost_optimizer
+    return cost_optimizer.get_stats()
