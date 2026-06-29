@@ -128,7 +128,7 @@ export const HypothesisEnginePanel: React.FC = () => {
         session_id: testDesignForm.session_id.trim(),
         hypothesis_id: testDesignForm.hypothesis_id.trim(),
         description: testDesignForm.description.trim(),
-        expected_result: testDesignForm.expected_result || undefined,
+        expected_result: testDesignForm.expected_result || '',
       });
       toast.success('Test designed successfully');
       setTestDesignForm({ session_id: '', hypothesis_id: '', description: '', expected_result: '' });
@@ -143,7 +143,7 @@ export const HypothesisEnginePanel: React.FC = () => {
         session_id: runTestForm.session_id.trim(),
         hypothesis_id: runTestForm.hypothesis_id.trim(),
         test_id: runTestForm.test_id.trim(),
-        actual_result: runTestForm.actual_result || undefined,
+        actual_result: runTestForm.actual_result || '',
         outcome: runTestForm.outcome,
         confidence: runTestForm.confidence ? Number(runTestForm.confidence) : undefined,
       });
