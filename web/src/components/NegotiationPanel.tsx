@@ -161,7 +161,7 @@ export const NegotiationPanel: React.FC = () => {
   const handleGetSummary = async () => {
     if (!summarySessionId.trim()) return;
     try {
-      const result = await api.negotiation.getSummary(summarySessionId.trim());
+      const result = await api.negotiation.summary(summarySessionId.trim());
       setSummaryResult(result);
       toast.success('Summary loaded');
     } catch (e: any) { toast.error(e.message); }
