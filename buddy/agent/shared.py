@@ -119,6 +119,13 @@ from agent.agent_alignment_engine import get_alignment_engine, reset_alignment_e
 from agent.agent_context_provider import get_context_provider, reset_context_provider, AgentContextProvider, ContextSource, ContextPriority, EnrichmentStrategy, ContextFormat, AssemblyMode, QueryIntent, ProviderStatus, ContextFragment, ContextQuery, ContextBundle, SourceConnector, Disambiguation, ProviderStats
 from agent.agent_interruptible import get_interruptible_executor, reset_interruptible_executor, AgentInterruptibleExecutor, ExecutionState, CancellationReason, InterruptSignal, CheckpointType, ResumeStrategy, ExecutionPriority, CancellationScope, CancellationToken, Checkpoint, ExecutionHandle, CancellationRequest, ExecutionStep
 
+# Action Space, Goal Manager, Dialogue Manager, Benchmark Engine, Belief Engine
+from agent.agent_action_space import get_action_space, reset_action_space, AgentActionSpace, ActionCategory, ActionStatus, FeasibilityLevel, ConstraintType, ValidationResult, RiskLevel, ActionConstraint, ActionDefinition, FeasibilityReport, ActionExecution, ActionSpaceStats
+from agent.agent_goal_manager import get_goal_manager, reset_goal_manager, AgentGoalManager, GoalStatus, GoalPriority, GoalType, GoalOrigin, AchievementLevel, DependencyType, GoalMetric, GoalDependency, Goal, GoalReview, GoalManagerStats
+from agent.agent_dialogue_manager import get_dialogue_manager, reset_dialogue_manager, AgentDialogueManager, DialogueState, DialogueAct, TurnType, ConversationPhase, StrategyType, TopicStatus, Topic, DialogueTurn, DialogueContext, TransitionRule, DialogueManagerStats
+from agent.agent_benchmark import get_benchmark_engine, reset_benchmark_engine, AgentBenchmarkEngine, MetricCategory, EvaluationStatus, ScoreScale, ComparisonResult, BenchmarkType, TrendDirection, MetricDefinition, MetricResult, EvaluationRun, Benchmark, ComparisonReport, TrendAnalysis, BenchmarkStats
+from agent.agent_belief_state import get_belief_engine, reset_belief_engine, AgentBeliefEngine, BeliefStatus, EvidenceType, EvidenceStrength, RevisionType, BeliefCategory, ConfidenceLevel, Evidence, Belief, BeliefRevision, BeliefNetwork, ConsistencyCheck, BeliefEngineStats
+
 orchestrator = Orchestrator()
 skills_registry = SkillsRegistry()
 context_manager_instance = context_manager
@@ -590,3 +597,10 @@ session_fork = get_session_fork()
 alignment_engine = get_alignment_engine()
 context_provider = get_context_provider()
 interruptible_executor = get_interruptible_executor()
+
+# Action Space, Goal Manager, Dialogue Manager, Benchmark Engine, Belief Engine instances
+action_space = get_action_space()
+goal_manager = get_goal_manager()
+dialogue_manager = get_dialogue_manager()
+benchmark_engine = get_benchmark_engine()
+belief_engine = get_belief_engine()
