@@ -2997,4 +2997,215 @@ export const api = {
       request<any>('/cost-optimizer/route', { method: 'POST', body: JSON.stringify(data) }),
     stats: () => request<any>('/cost-optimizer/stats'),
   },
+
+  lifecycleHooks: {
+    registerHook: (data: { name: string; description?: string; event: string; phase?: string; priority?: string; execution_mode?: string; failure_policy?: string; owner?: string; tags?: string[]; max_retries?: number; timeout_ms?: number }) =>
+      request<any>('/lifecycle-hooks/hook', { method: 'POST', body: JSON.stringify(data) }),
+    updateHook: (hookId: string, data: { priority?: string; status?: string; failure_policy?: string; enabled?: boolean }) =>
+      request<any>(`/lifecycle-hooks/hook/${hookId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    unregisterHook: (hookId: string) =>
+      request<any>(`/lifecycle-hooks/hook/${hookId}`, { method: 'DELETE' }),
+    getHook: (hookId: string) => request<any>(`/lifecycle-hooks/hook/${hookId}`),
+    listHooks: (params?: { event?: string; phase?: string; status?: string; owner?: string }) =>
+      request<any>(`/lifecycle-hooks/hooks${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    invoke: (data: { event: string; phase?: string; session_id?: string; agent_id?: string; payload?: any; metadata?: any; trace_id?: string }) =>
+      request<any>('/lifecycle-hooks/invoke', { method: 'POST', body: JSON.stringify(data) }),
+    invocations: (params?: { hook_id?: string; event?: string; limit?: number }) =>
+      request<any>(`/lifecycle-hooks/invocations${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    hookStats: (hookId: string) => request<any>(`/lifecycle-hooks/hook/${hookId}/stats`),
+    stats: () => request<any>('/lifecycle-hooks/stats'),
+  },
+
+  sessionFork: {
+    createRoot: (data: { session_id: string; tags?: string[]; metadata?: any }) =>
+      request<any>('/session-fork/session', { method: 'POST', body: JSON.stringify(data) }),
+    fork: (data: { source_session_id: string; new_session_id: string; strategy?: string; source_message_index?: number; message_range?: number[]; reason?: string; forked_by?: string; tags?: string[] }) =>
+      request<any>('/session-fork/fork', { method: 'POST', body: JSON.stringify(data) }),
+    appendMessage: (sessionId: string, data: { role: string; content: string; metadata?: any; tokens?: number; tool_calls?: any[]; parent_message_id?: string }) =>
+      request<any>(`/session-fork/session/${sessionId}/message`, { method: 'POST', body: JSON.stringify(data) }),
+    getSession: (sessionId: string) => request<any>(`/session-fork/session/${sessionId}`),
+    listSessions: (params?: { status?: string; parent?: string; root?: string }) =>
+      request<any>(`/session-fork/sessions${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    getTree: (sessionId: string) => request<any>(`/session-fork/session/${sessionId}/tree`),
+    requestMerge: (data: { fork_session_id: string; target_session_id: string; strategy?: string; conflict_policy?: string; message_range?: number[]; cherry_pick_ids?: string[]; squash_summary?: string }) =>
+      request<any>('/session-fork/merge', { method: 'POST', body: JSON.stringify(data) }),
+    executeMerge: (mergeId: string) => request<any>(`/session-fork/merge/${mergeId}/execute`, { method: 'POST' }),
+    listMerges: (params?: { status?: string; fork_session?: string; target_session?: string }) =>
+      request<any>(`/session-fork/merges${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    stats: () => request<any>('/session-fork/stats'),
+  },
+
+  alignmentEngine: {
+    createProfile: (data: { user_id: string; agent_id: string }) =>
+      request<any>('/alignment-engine/profile', { method: 'POST', body: JSON.stringify(data) }),
+    getProfile: (profileId: string) => request<any>(`/alignment-engine/profile/${profileId}`),
+    listProfiles: (params?: { user_id?: string; agent_id?: string }) =>
+      request<any>(`/alignment-engine/profiles${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    setTrait: (profileId: string, data: { dimension: string; value: string; source?: string; evidence?: string; confidence?: number; lock?: boolean }) =>
+      request<any>(`/alignment-engine/profile/${profileId}/trait`, { method: 'POST', body: JSON.stringify(data) }),
+    getTrait: (profileId: string, dimension: string) => request<any>(`/alignment-engine/profile/${profileId}/trait/${dimension}`),
+    recordSignal: (profileId: string, data: { dimension: string; observed_value: string; evidence: string; source?: string; weight?: number }) =>
+      request<any>(`/alignment-engine/profile/${profileId}/signal`, { method: 'POST', body: JSON.stringify(data) }),
+    processSignals: (profileId: string, maxSignals?: number) =>
+      request<any>(`/alignment-engine/profile/${profileId}/process-signals?max_signals=${maxSignals || 100}`, { method: 'POST' }),
+    checkAlignment: (profileId: string, data: { proposed_action: string; action_description?: string; dimension?: string }) =>
+      request<any>(`/alignment-engine/profile/${profileId}/check`, { method: 'POST', body: JSON.stringify(data) }),
+    calibrate: (profileId: string, data: { dimension_updates?: any }) =>
+      request<any>(`/alignment-engine/profile/${profileId}/calibrate`, { method: 'POST', body: JSON.stringify(data) }),
+    getSummary: (profileId: string) => request<any>(`/alignment-engine/profile/${profileId}/summary`),
+    stats: () => request<any>('/alignment-engine/stats'),
+  },
+
+  contextProvider: {
+    registerConnector: (data: { source: string; name: string; description?: string; priority?: string; max_tokens?: number; cache_ttl_seconds?: number; config?: any }) =>
+      request<any>('/context-provider/connector', { method: 'POST', body: JSON.stringify(data) }),
+    unregisterConnector: (connectorId: string) =>
+      request<any>(`/context-provider/connector/${connectorId}`, { method: 'DELETE' }),
+    listConnectors: (params?: { source?: string; status?: string }) =>
+      request<any>(`/context-provider/connectors${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    enrich: (data: { user_input: string; agent_id?: string; session_id?: string; target_tokens?: number; assembly_mode?: string; strategies?: string[]; required_sources?: string[]; excluded_sources?: string[] }) =>
+      request<any>('/context-provider/enrich', { method: 'POST', body: JSON.stringify(data) }),
+    classifyIntent: (data: { user_input: string }) =>
+      request<any>('/context-provider/classify-intent', { method: 'POST', body: JSON.stringify(data) }),
+    getBundle: (bundleId: string) => request<any>(`/context-provider/bundle/${bundleId}`),
+    listBundles: (params?: { query_id?: string; limit?: number }) =>
+      request<any>(`/context-provider/bundles${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    stats: () => request<any>('/context-provider/stats'),
+  },
+
+  interruptibleExec: {
+    register: (data: { name: string; description?: string; agent_id?: string; session_id?: string; parent_execution_id?: string; priority?: string; timeout_seconds?: number; total_steps?: number; metadata?: any }) =>
+      request<any>('/interruptible/execution', { method: 'POST', body: JSON.stringify(data) }),
+    start: (executionId: string) => request<any>(`/interruptible/execution/${executionId}/start`, { method: 'POST' }),
+    complete: (executionId: string, result?: any) =>
+      request<any>(`/interruptible/execution/${executionId}/complete`, { method: 'POST', body: JSON.stringify({ result: result || {} }) }),
+    cancel: (executionId: string, data: { reason?: string; scope?: string; requested_by?: string }) =>
+      request<any>(`/interruptible/execution/${executionId}/cancel`, { method: 'POST', body: JSON.stringify(data) }),
+    pause: (executionId: string) => request<any>(`/interruptible/execution/${executionId}/pause`, { method: 'POST' }),
+    resume: (executionId: string) => request<any>(`/interruptible/execution/${executionId}/resume`, { method: 'POST' }),
+    checkpoint: (executionId: string, data: { checkpoint_type?: string; step_index?: number; step_description?: string; state?: any }) =>
+      request<any>(`/interruptible/execution/${executionId}/checkpoint`, { method: 'POST', body: JSON.stringify(data) }),
+    check: (executionId: string) => request<any>(`/interruptible/execution/${executionId}/check`, { method: 'POST' }),
+    get: (executionId: string) => request<any>(`/interruptible/execution/${executionId}`),
+    list: (params?: { state?: string; agent_id?: string; parent?: string; limit?: number }) =>
+      request<any>(`/interruptible/executions${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    stats: () => request<any>('/interruptible/stats'),
+  },
+
+  // Action Space API
+  actionSpace: {
+    register: (data: { name: string; description?: string; category?: string; parameters_schema?: any; required_resources?: string[]; estimated_duration_ms?: number; estimated_cost?: number; risk_level?: number; tags?: string[] }) =>
+      request<any>('/action-space/action', { method: 'POST', body: JSON.stringify(data) }),
+    unregister: (actionId: string) => request<any>(`/action-space/action/${actionId}`, { method: 'DELETE' }),
+    get: (actionId: string) => request<any>(`/action-space/action/${actionId}`),
+    list: (params?: { category?: string; status?: string; tag?: string }) =>
+      request<any>(`/action-space/actions${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    addConstraint: (actionId: string, data: { constraint_type?: string; description?: string; check_function_name?: string; parameters?: any; severity?: number }) =>
+      request<any>(`/action-space/action/${actionId}/constraint`, { method: 'POST', body: JSON.stringify(data) }),
+    checkFeasibility: (actionId: string, data: { parameters?: any; context?: any }) =>
+      request<any>(`/action-space/action/${actionId}/feasibility`, { method: 'POST', body: JSON.stringify(data) }),
+    validate: (actionId: string, data: { parameters?: any }) =>
+      request<any>(`/action-space/action/${actionId}/validate`, { method: 'POST', body: JSON.stringify(data) }),
+    recordExecution: (actionId: string, data: { parameters?: any; status?: string; result?: any; error?: string | null }) =>
+      request<any>(`/action-space/action/${actionId}/execution`, { method: 'POST', body: JSON.stringify(data) }),
+    listExecutions: (params?: { action_id?: string; limit?: number }) =>
+      request<any>(`/action-space/executions${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    actionStats: (actionId: string) => request<any>(`/action-space/action/${actionId}/stats`),
+    stats: () => request<any>('/action-space/stats'),
+  },
+
+  // Goal Manager API
+  goalManager: {
+    create: (data: { title: string; description?: string; goal_type?: string; origin?: string; priority?: number; agent_id?: string; user_id?: string; parent_goal_id?: string | null; deadline?: number | null; tags?: string[]; metrics?: any[]; metadata?: any }) =>
+      request<any>('/goal-manager/goal', { method: 'POST', body: JSON.stringify(data) }),
+    get: (goalId: string) => request<any>(`/goal-manager/goal/${goalId}`),
+    list: (params?: { status?: string; priority?: number; goal_type?: string; agent_id?: string; user_id?: string; parent?: string }) =>
+      request<any>(`/goal-manager/goals${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    update: (goalId: string, data: { title?: string; description?: string; status?: string; priority?: number; deadline?: number; notes?: string }) =>
+      request<any>(`/goal-manager/goal/${goalId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (goalId: string) => request<any>(`/goal-manager/goal/${goalId}`, { method: 'DELETE' }),
+    addMetric: (goalId: string, data: { name: string; description?: string; target_value?: number; unit?: string; threshold?: number }) =>
+      request<any>(`/goal-manager/goal/${goalId}/metric`, { method: 'POST', body: JSON.stringify(data) }),
+    updateMetric: (goalId: string, metricId: string, currentValue: number) =>
+      request<any>(`/goal-manager/goal/${goalId}/metric/${metricId}`, { method: 'PUT', body: JSON.stringify({ current_value: currentValue }) }),
+    checkAchievement: (goalId: string) => request<any>(`/goal-manager/goal/${goalId}/check-achievement`, { method: 'POST' }),
+    recalculate: (goalId: string) => request<any>(`/goal-manager/goal/${goalId}/recalculate`, { method: 'POST' }),
+    review: (goalId: string, data: { reviewer?: string; achievement_assessment?: number; progress_notes?: string; recommended_actions?: string[]; score?: number }) =>
+      request<any>(`/goal-manager/goal/${goalId}/review`, { method: 'POST', body: JSON.stringify(data) }),
+    subGoals: (goalId: string) => request<any>(`/goal-manager/goal/${goalId}/sub-goals`),
+    overdue: () => request<any>('/goal-manager/overdue'),
+    blocked: () => request<any>('/goal-manager/blocked'),
+    prioritize: (agentId?: string) => request<any>(`/goal-manager/prioritize${agentId ? '?agent_id=' + agentId : ''}`),
+    stats: () => request<any>('/goal-manager/stats'),
+  },
+
+  // Dialogue Manager API
+  dialogueManager: {
+    createSession: (data: { session_id: string; agent_id?: string; user_id?: string; strategy?: string; session_goals?: string[] }) =>
+      request<any>('/dialogue-manager/session', { method: 'POST', body: JSON.stringify(data) }),
+    getSession: (sessionId: string) => request<any>(`/dialogue-manager/session/${sessionId}`),
+    listSessions: (activeOnly?: boolean) => request<any>(`/dialogue-manager/sessions${activeOnly ? '?active_only=true' : ''}`),
+    endSession: (sessionId: string) => request<any>(`/dialogue-manager/session/${sessionId}`, { method: 'DELETE' }),
+    recordTurn: (sessionId: string, data: { turn_type?: string; dialogue_act?: string; content?: string; speaker?: string; topics?: string[] }) =>
+      request<any>(`/dialogue-manager/session/${sessionId}/turn`, { method: 'POST', body: JSON.stringify(data) }),
+    getState: (sessionId: string) => request<any>(`/dialogue-manager/session/${sessionId}/state`),
+    transition: (sessionId: string, data: { trigger_act?: string; context_info?: any }) =>
+      request<any>(`/dialogue-manager/session/${sessionId}/transition`, { method: 'POST', body: JSON.stringify(data) }),
+    suggestAct: (sessionId: string) => request<any>(`/dialogue-manager/session/${sessionId}/suggest-act`, { method: 'POST' }),
+    setStrategy: (sessionId: string, strategy: string) =>
+      request<any>(`/dialogue-manager/session/${sessionId}/strategy`, { method: 'PUT', body: JSON.stringify({ strategy }) }),
+    introduceTopic: (sessionId: string, data: { name: string; description?: string; relevance_score?: number }) =>
+      request<any>(`/dialogue-manager/session/${sessionId}/topic`, { method: 'POST', body: JSON.stringify(data) }),
+    getTurns: (sessionId: string, limit?: number) => request<any>(`/dialogue-manager/session/${sessionId}/turns${limit ? '?limit=' + limit : ''}`),
+    getSummary: (sessionId: string) => request<any>(`/dialogue-manager/session/${sessionId}/summary`),
+    stats: () => request<any>('/dialogue-manager/stats'),
+  },
+
+  // Benchmark Engine API
+  benchmarkEngine: {
+    create: (data: { name: string; description?: string; benchmark_type?: string; metric_defs?: any[]; baseline_agent_id?: string | null; target_score?: number | null }) =>
+      request<any>('/benchmark/benchmark', { method: 'POST', body: JSON.stringify(data) }),
+    get: (benchmarkId: string) => request<any>(`/benchmark/benchmark/${benchmarkId}`),
+    list: (benchmarkType?: string) => request<any>(`/benchmark/benchmarks${benchmarkType ? '?benchmark_type=' + benchmarkType : ''}`),
+    registerMetric: (benchmarkId: string, data: { name: string; description?: string; category?: string; scale?: string; min_value?: number; max_value?: number; unit?: string; weight?: number; aggregation_method?: string }) =>
+      request<any>(`/benchmark/benchmark/${benchmarkId}/metric`, { method: 'POST', body: JSON.stringify(data) }),
+    startEvaluation: (benchmarkId: string, data: { agent_id: string; context?: any }) =>
+      request<any>(`/benchmark/benchmark/${benchmarkId}/evaluation`, { method: 'POST', body: JSON.stringify(data) }),
+    recordMetric: (runId: string, data: { metric_id: string; value: number; raw_data?: any; notes?: string }) =>
+      request<any>(`/benchmark/evaluation/${runId}/metric`, { method: 'POST', body: JSON.stringify(data) }),
+    completeEvaluation: (runId: string, data: { error?: string | null }) =>
+      request<any>(`/benchmark/evaluation/${runId}/complete`, { method: 'POST', body: JSON.stringify(data) }),
+    getRun: (runId: string) => request<any>(`/benchmark/evaluation/${runId}`),
+    listRuns: (params?: { benchmark_id?: string; agent_id?: string; status?: string; limit?: number }) =>
+      request<any>(`/benchmark/runs${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    calculateScore: (runId: string) => request<any>(`/benchmark/evaluation/${runId}/score`),
+    compare: (runAId: string, runBId: string) => request<any>(`/benchmark/compare?run_a_id=${runAId}&run_b_id=${runBId}`),
+    leaderboard: (benchmarkId: string, limit?: number) => request<any>(`/benchmark/leaderboard/${benchmarkId}${limit ? '?limit=' + limit : ''}`),
+    stats: () => request<any>('/benchmark/stats'),
+  },
+
+  // Belief Engine API
+  beliefEngine: {
+    createNetwork: (data: { agent_id?: string }) =>
+      request<any>('/belief-engine/network', { method: 'POST', body: JSON.stringify(data) }),
+    getNetwork: (networkId: string) => request<any>(`/belief-engine/network/${networkId}`),
+    listNetworks: () => request<any>('/belief-engine/networks'),
+    addBelief: (networkId: string, data: { proposition: string; description?: string; category?: string; initial_confidence?: number; related_beliefs?: string[]; dependencies?: string[]; metadata?: any }) =>
+      request<any>(`/belief-engine/network/${networkId}/belief`, { method: 'POST', body: JSON.stringify(data) }),
+    getBelief: (networkId: string, beliefId: string) => request<any>(`/belief-engine/network/${networkId}/belief/${beliefId}`),
+    listBeliefs: (networkId: string, params?: { category?: string; status?: string; min_confidence?: number }) =>
+      request<any>(`/belief-engine/network/${networkId}/beliefs${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    addEvidence: (data: { evidence_type?: string; strength?: number; content?: string; source?: string; reliability?: number }) =>
+      request<any>('/belief-engine/evidence', { method: 'POST', body: JSON.stringify(data) }),
+    linkEvidence: (networkId: string, beliefId: string, evidenceId: string) =>
+      request<any>(`/belief-engine/network/${networkId}/belief/${beliefId}/evidence/${evidenceId}`, { method: 'POST' }),
+    revise: (networkId: string, beliefId: string, data: { evidence_id: string; reasoning?: string }) =>
+      request<any>(`/belief-engine/network/${networkId}/belief/${beliefId}/revise`, { method: 'POST', body: JSON.stringify(data) }),
+    getRevisions: (networkId: string, beliefId: string) => request<any>(`/belief-engine/network/${networkId}/belief/${beliefId}/revisions`),
+    checkConsistency: (networkId: string) => request<any>(`/belief-engine/network/${networkId}/consistency`, { method: 'POST' }),
+    propagate: (networkId: string, beliefId: string) => request<any>(`/belief-engine/network/${networkId}/belief/${beliefId}/propagate`, { method: 'POST' }),
+    mostConfident: (networkId: string, params?: { category?: string; limit?: number }) =>
+      request<any>(`/belief-engine/network/${networkId}/most-confident${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    stats: () => request<any>('/belief-engine/stats'),
+  },
 };
