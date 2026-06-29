@@ -113,7 +113,7 @@ export const AITwinPanel: React.FC = () => {
   const handleGetMirror = async () => {
     if (!mirrorForm.twin_id.trim()) return;
     try {
-      const result = await api.aiTwin.getMirror(mirrorForm.twin_id.trim(), mirrorForm.dimension);
+      const result = await api.aiTwin.mirror(mirrorForm.twin_id.trim(), mirrorForm.dimension);
       setMirrorResult(result);
       toast.success('Mirror data loaded');
     } catch (e: any) { toast.error(e.message); }
