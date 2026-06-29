@@ -159,6 +159,16 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'dreamConsolidator', label: 'Dream', icon: '💭' },
   { id: 'crossReview', label: 'X-Review', icon: '🔍' },
   { id: 'costOptimizer', label: 'Cost Opt', icon: '💰' },
+  { id: 'lifecycleHooks', label: 'Hooks', icon: '🪝' },
+  { id: 'sessionFork', label: 'Fork', icon: '🔀' },
+  { id: 'alignmentEngine', label: 'Align', icon: '🎯' },
+  { id: 'contextProvider', label: 'Provider', icon: '📡' },
+  { id: 'interruptibleExec', label: 'Exec', icon: '🛑' },
+  { id: 'actionSpace', label: 'Actions', icon: '⚡' },
+  { id: 'goalManager', label: 'Goals', icon: '🎯' },
+  { id: 'dialogueManager', label: 'Dialogue', icon: '💬' },
+  { id: 'benchmarkEngine', label: 'Bench', icon: '📊' },
+  { id: 'beliefEngine', label: 'Belief', icon: '🧠' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
