@@ -25606,3 +25606,1798 @@ async def cost_optimizer_stats():
     """Get cost optimizer statistics."""
     from agent.shared import cost_optimizer
     return cost_optimizer.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Lifecycle Hooks
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class HookRegisterRequest(BaseModel):
+    name: str
+    description: str = ""
+    event: str
+    phase: str = "pre"
+    priority: str = "normal"
+    execution_mode: str = "sync"
+    failure_policy: str = "propagate"
+    owner: str = "system"
+    tags: list[str] = []
+    max_retries: int = 0
+    timeout_ms: int | None = None
+
+class HookUpdateRequest(BaseModel):
+    priority: str | None = None
+    status: str | None = None
+    failure_policy: str | None = None
+    enabled: bool | None = None
+
+class HookInvokeRequest(BaseModel):
+    event: str
+    phase: str = "pre"
+    session_id: str = ""
+    agent_id: str = ""
+    payload: dict = {}
+    metadata: dict = {}
+    trace_id: str | None = None
+
+
+@router.post("/lifecycle-hooks/hook")
+async def lifecycle_hooks_register(data: HookRegisterRequest):
+    """Register a new lifecycle hook."""
+    from agent.shared import lifecycle_hooks, HookEvent, HookPhase, HookPriority, HookExecutionMode, HookFailurePolicy
+    try:
+        event = HookEvent(data.event)
+        phase = HookPhase(data.phase)
+        priority = HookPriority[data.priority.upper()]
+        execution_mode = HookExecutionMode(data.execution_mode)
+        failure_policy = HookFailurePolicy(data.failure_policy)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid enum value: {exc}")
+    hook = lifecycle_hooks.register_hook(
+        name=data.name, description=data.description, event=event, phase=phase,
+        priority=priority, execution_mode=execution_mode, failure_policy=failure_policy,
+        owner=data.owner, tags=data.tags, max_retries=data.max_retries, timeout_ms=data.timeout_ms,
+    )
+    return {"hook_id": hook.hook_id, "name": hook.name, "event": hook.event.value,
+            "phase": hook.phase.value, "priority": hook.priority.name, "status": hook.status.value}
+
+
+@router.put("/lifecycle-hooks/hook/{hook_id}")
+async def lifecycle_hooks_update(hook_id: str, data: HookUpdateRequest):
+    """Update a lifecycle hook."""
+    from agent.shared import lifecycle_hooks, HookPriority, HookStatus, HookFailurePolicy
+    kwargs: dict = {}
+    if data.priority is not None:
+        kwargs["priority"] = HookPriority[data.priority.upper()]
+    if data.status is not None:
+        kwargs["status"] = HookStatus(data.status)
+    if data.failure_policy is not None:
+        kwargs["failure_policy"] = HookFailurePolicy(data.failure_policy)
+    if data.enabled is not None:
+        kwargs["enabled"] = data.enabled
+    hook = lifecycle_hooks.update_hook(hook_id, **kwargs)
+    if hook is None:
+        raise HTTPException(status_code=404, detail="Hook not found")
+    return {"hook_id": hook.hook_id, "status": hook.status.value, "enabled": hook.enabled}
+
+
+@router.delete("/lifecycle-hooks/hook/{hook_id}")
+async def lifecycle_hooks_unregister(hook_id: str):
+    """Unregister a lifecycle hook."""
+    from agent.shared import lifecycle_hooks
+    ok = lifecycle_hooks.unregister_hook(hook_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Hook not found")
+    return {"unregistered": True, "hook_id": hook_id}
+
+
+@router.get("/lifecycle-hooks/hook/{hook_id}")
+async def lifecycle_hooks_get(hook_id: str):
+    """Get a lifecycle hook by ID."""
+    from agent.shared import lifecycle_hooks
+    hook = lifecycle_hooks.get_hook(hook_id)
+    if hook is None:
+        raise HTTPException(status_code=404, detail="Hook not found")
+    return {"hook_id": hook.hook_id, "name": hook.name, "description": hook.description,
+            "event": hook.event.value, "phase": hook.phase.value, "priority": hook.priority.name,
+            "status": hook.status.value, "enabled": hook.enabled, "invocation_count": hook.invocation_count,
+            "success_count": hook.success_count, "failure_count": hook.failure_count,
+            "avg_latency_ms": hook.avg_latency_ms}
+
+
+@router.get("/lifecycle-hooks/hooks")
+async def lifecycle_hooks_list(event: str | None = None, phase: str | None = None,
+                               status: str | None = None, owner: str | None = None):
+    """List lifecycle hooks with optional filters."""
+    from agent.shared import lifecycle_hooks, HookEvent, HookPhase, HookStatus
+    evt = HookEvent(event) if event else None
+    phs = HookPhase(phase) if phase else None
+    sts = HookStatus(status) if status else None
+    hooks = lifecycle_hooks.list_hooks(event=evt, phase=phs, status=sts, owner=owner)
+    return [{"hook_id": h.hook_id, "name": h.name, "event": h.event.value,
+             "phase": h.phase.value, "priority": h.priority.name, "status": h.status.value,
+             "invocation_count": h.invocation_count} for h in hooks]
+
+
+@router.post("/lifecycle-hooks/invoke")
+async def lifecycle_hooks_invoke(data: HookInvokeRequest):
+    """Invoke all hooks matching an event and phase."""
+    from agent.shared import lifecycle_hooks, HookEvent, HookPhase
+    try:
+        event = HookEvent(data.event)
+        phase = HookPhase(data.phase)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid enum value: {exc}")
+    results = lifecycle_hooks.invoke(
+        event=event, phase=phase, session_id=data.session_id, agent_id=data.agent_id,
+        payload=data.payload, metadata=data.metadata, trace_id=data.trace_id,
+    )
+    return {"results": [{"result": r.result.value, "message": r.message,
+                         "should_skip": r.should_skip, "should_abort": r.should_abort} for r in results],
+            "count": len(results)}
+
+
+@router.get("/lifecycle-hooks/invocations")
+async def lifecycle_hooks_invocations(hook_id: str | None = None, event: str | None = None,
+                                      limit: int = 100):
+    """Get the invocation log."""
+    from agent.shared import lifecycle_hooks, HookEvent
+    evt = HookEvent(event) if event else None
+    invs = lifecycle_hooks.get_invocation_log(hook_id=hook_id, event=evt, limit=limit)
+    return [{"invocation_id": i.invocation_id, "hook_id": i.hook_id, "event": i.event.value,
+             "phase": i.phase.value, "result": i.result.value if i.result else None,
+             "latency_ms": i.latency_ms, "error": i.error} for i in invs]
+
+
+@router.get("/lifecycle-hooks/hook/{hook_id}/stats")
+async def lifecycle_hooks_hook_stats(hook_id: str):
+    """Get statistics for a specific hook."""
+    from agent.shared import lifecycle_hooks
+    stats = lifecycle_hooks.get_hook_stats(hook_id)
+    if "error" in stats:
+        raise HTTPException(status_code=404, detail=stats["error"])
+    return stats
+
+
+@router.get("/lifecycle-hooks/stats")
+async def lifecycle_hooks_stats():
+    """Get overall lifecycle hooks statistics."""
+    from agent.shared import lifecycle_hooks
+    return lifecycle_hooks.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Session Fork
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class CreateRootSessionRequest(BaseModel):
+    session_id: str
+    tags: list[str] = []
+    metadata: dict = {}
+
+class ForkSessionRequest(BaseModel):
+    source_session_id: str
+    new_session_id: str
+    strategy: str = "deep"
+    source_message_index: int | None = None
+    message_range: list[int] | None = None
+    reason: str = ""
+    forked_by: str = "user"
+    tags: list[str] = []
+
+class AppendMessageRequest(BaseModel):
+    role: str
+    content: str
+    metadata: dict = {}
+    tokens: int = 0
+    tool_calls: list[dict] = []
+    parent_message_id: str | None = None
+
+class MergeRequestCreate(BaseModel):
+    fork_session_id: str
+    target_session_id: str
+    strategy: str = "append"
+    conflict_policy: str = "prefer_fork"
+    message_range: list[int] | None = None
+    cherry_pick_ids: list[str] = []
+    squash_summary: str | None = None
+
+
+@router.post("/session-fork/session")
+async def session_fork_create_root(data: CreateRootSessionRequest):
+    """Create a new root session."""
+    from agent.shared import session_fork
+    try:
+        node = session_fork.create_root_session(data.session_id, tags=data.tags, metadata=data.metadata)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"session_id": node.session_id, "root_session_id": node.root_session_id,
+            "role": node.role.value, "status": node.status.value, "depth": node.depth}
+
+
+@router.post("/session-fork/fork")
+async def session_fork_fork(data: ForkSessionRequest):
+    """Fork an existing session."""
+    from agent.shared import session_fork, ForkStrategy
+    try:
+        strategy = ForkStrategy(data.strategy)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid strategy: {exc}")
+    msg_range = tuple(data.message_range) if data.message_range else None
+    try:
+        node = session_fork.fork_session(
+            data.source_session_id, data.new_session_id, strategy=strategy,
+            source_message_index=data.source_message_index, message_range=msg_range,
+            reason=data.reason, forked_by=data.forked_by, tags=data.tags,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"session_id": node.session_id, "parent_session_id": node.parent_session_id,
+            "root_session_id": node.root_session_id, "role": node.role.value,
+            "status": node.status.value, "depth": node.depth, "message_count": node.message_count}
+
+
+@router.post("/session-fork/session/{session_id}/message")
+async def session_fork_append_message(session_id: str, data: AppendMessageRequest):
+    """Append a message to a session."""
+    from agent.shared import session_fork
+    try:
+        msg = session_fork.append_message(
+            session_id, data.role, data.content, metadata=data.metadata,
+            tokens=data.tokens, tool_calls=data.tool_calls, parent_message_id=data.parent_message_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"message_id": msg.message_id, "role": msg.role, "tokens": msg.tokens,
+            "timestamp": msg.timestamp}
+
+
+@router.get("/session-fork/session/{session_id}")
+async def session_fork_get(session_id: str):
+    """Get a session by ID."""
+    from agent.shared import session_fork
+    node = session_fork.get_session(session_id)
+    if node is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"session_id": node.session_id, "parent_session_id": node.parent_session_id,
+            "root_session_id": node.root_session_id, "role": node.role.value,
+            "status": node.status.value, "depth": node.depth, "message_count": node.message_count,
+            "total_tokens": node.total_tokens, "children": node.children, "tags": node.tags}
+
+
+@router.get("/session-fork/sessions")
+async def session_fork_list(status: str | None = None, parent: str | None = None,
+                            root: str | None = None):
+    """List sessions with optional filters."""
+    from agent.shared import session_fork, ForkStatus
+    sts = ForkStatus(status) if status else None
+    nodes = session_fork.list_sessions(status=sts, parent=parent, root=root)
+    return [{"session_id": n.session_id, "role": n.role.value, "status": n.status.value,
+             "depth": n.depth, "message_count": n.message_count} for n in nodes]
+
+
+@router.get("/session-fork/session/{session_id}/tree")
+async def session_fork_tree(session_id: str):
+    """Get the fork tree for the root of this session."""
+    from agent.shared import session_fork
+    node = session_fork.get_session(session_id)
+    if node is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    tree = session_fork.get_fork_tree(node.root_session_id)
+    return {"root_session_id": tree.root_session_id, "total_sessions": tree.total_sessions,
+            "total_messages": tree.total_messages, "max_depth": tree.max_depth,
+            "active_forks": tree.active_forks, "leaf_sessions": tree.leaf_sessions}
+
+
+@router.post("/session-fork/merge")
+async def session_fork_request_merge(data: MergeRequestCreate):
+    """Create a merge request."""
+    from agent.shared import session_fork, MergeStrategy, MergeConflictPolicy
+    try:
+        strategy = MergeStrategy(data.strategy)
+        policy = MergeConflictPolicy(data.conflict_policy)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid enum: {exc}")
+    msg_range = tuple(data.message_range) if data.message_range else None
+    try:
+        req = session_fork.request_merge(
+            data.fork_session_id, data.target_session_id, strategy=strategy,
+            conflict_policy=policy, message_range=msg_range,
+            cherry_pick_ids=data.cherry_pick_ids, squash_summary=data.squash_summary,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"merge_id": req.merge_id, "status": req.status,
+            "strategy": req.strategy.value, "conflict_policy": req.conflict_policy.value}
+
+
+@router.post("/session-fork/merge/{merge_id}/execute")
+async def session_fork_execute_merge(merge_id: str):
+    """Execute a pending merge request."""
+    from agent.shared import session_fork
+    try:
+        req = session_fork.execute_merge(merge_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if req is None:
+        raise HTTPException(status_code=404, detail="Merge request not found")
+    return {"merge_id": req.merge_id, "status": req.status,
+            "merged_message_ids": req.merged_message_ids, "conflicts": req.conflicts}
+
+
+@router.get("/session-fork/merges")
+async def session_fork_list_merges(status: str | None = None, fork_session: str | None = None,
+                                   target_session: str | None = None):
+    """List merge requests."""
+    from agent.shared import session_fork
+    reqs = session_fork.list_merge_requests(status=status, fork_session=fork_session,
+                                            target_session=target_session)
+    return [{"merge_id": r.merge_id, "fork_session_id": r.fork_session_id,
+             "target_session_id": r.target_session_id, "status": r.status,
+             "strategy": r.strategy.value} for r in reqs]
+
+
+@router.get("/session-fork/stats")
+async def session_fork_stats():
+    """Get session fork statistics."""
+    from agent.shared import session_fork
+    return session_fork.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Alignment Engine
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class CreateProfileRequest(BaseModel):
+    user_id: str
+    agent_id: str
+
+class SetTraitRequest(BaseModel):
+    dimension: str
+    value: str
+    source: str = "explicit"
+    evidence: str = ""
+    confidence: float | None = None
+    lock: bool = False
+
+class RecordSignalRequest(BaseModel):
+    dimension: str
+    observed_value: str
+    evidence: str
+    source: str = "observed"
+    weight: float = 1.0
+
+class CheckAlignmentRequest(BaseModel):
+    proposed_action: str
+    action_description: str = ""
+    dimension: str | None = None
+
+class CalibrateRequest(BaseModel):
+    dimension_updates: dict = {}
+
+
+@router.post("/alignment-engine/profile")
+async def alignment_engine_create_profile(data: CreateProfileRequest):
+    """Create a new alignment profile."""
+    from agent.shared import alignment_engine
+    try:
+        profile = alignment_engine.create_profile(data.user_id, data.agent_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"profile_id": profile.profile_id, "user_id": profile.user_id,
+            "agent_id": profile.agent_id, "overall_alignment": profile.overall_alignment}
+
+
+@router.get("/alignment-engine/profile/{profile_id}")
+async def alignment_engine_get_profile(profile_id: str):
+    """Get an alignment profile."""
+    from agent.shared import alignment_engine
+    profile = alignment_engine.get_profile(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"profile_id": profile.profile_id, "user_id": profile.user_id,
+            "agent_id": profile.agent_id, "overall_alignment": profile.overall_alignment,
+            "total_interactions": profile.total_interactions, "explicit_traits": profile.explicit_traits,
+            "inferred_traits": profile.inferred_traits, "traits_count": len(profile.traits),
+            "version": profile.version}
+
+
+@router.get("/alignment-engine/profiles")
+async def alignment_engine_list_profiles(user_id: str | None = None, agent_id: str | None = None):
+    """List alignment profiles."""
+    from agent.shared import alignment_engine
+    profiles = alignment_engine.list_profiles(user_id=user_id, agent_id=agent_id)
+    return [{"profile_id": p.profile_id, "user_id": p.user_id, "agent_id": p.agent_id,
+             "overall_alignment": p.overall_alignment, "traits_count": len(p.traits)} for p in profiles]
+
+
+@router.post("/alignment-engine/profile/{profile_id}/trait")
+async def alignment_engine_set_trait(profile_id: str, data: SetTraitRequest):
+    """Set or update an alignment trait."""
+    from agent.shared import alignment_engine, AlignmentDimension, AlignmentSource
+    try:
+        dim = AlignmentDimension(data.dimension)
+        src = AlignmentSource(data.source)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid enum: {exc}")
+    try:
+        trait = alignment_engine.set_trait(
+            profile_id, dim, data.value, source=src, evidence=data.evidence,
+            confidence=data.confidence, lock=data.lock,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if trait is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"trait_id": trait.trait_id, "dimension": trait.dimension.value,
+            "value": trait.value, "confidence": trait.confidence,
+            "source": trait.source.value, "evidence_count": trait.evidence_count}
+
+
+@router.get("/alignment-engine/profile/{profile_id}/trait/{dimension}")
+async def alignment_engine_get_trait(profile_id: str, dimension: str):
+    """Get a specific alignment trait."""
+    from agent.shared import alignment_engine, AlignmentDimension
+    try:
+        dim = AlignmentDimension(dimension)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid dimension: {exc}")
+    trait = alignment_engine.get_trait(profile_id, dim)
+    if trait is None:
+        raise HTTPException(status_code=404, detail="Trait not found")
+    return {"trait_id": trait.trait_id, "dimension": trait.dimension.value,
+            "value": trait.value, "confidence": trait.confidence,
+            "source": trait.source.value, "evidence_count": trait.evidence_count,
+            "is_locked": trait.is_locked, "examples": trait.examples}
+
+
+@router.post("/alignment-engine/profile/{profile_id}/signal")
+async def alignment_engine_record_signal(profile_id: str, data: RecordSignalRequest):
+    """Record an alignment signal."""
+    from agent.shared import alignment_engine, AlignmentDimension, AlignmentSource
+    try:
+        dim = AlignmentDimension(data.dimension)
+        src = AlignmentSource(data.source)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid enum: {exc}")
+    signal = alignment_engine.record_signal(
+        profile_id, dim, data.observed_value, data.evidence, source=src, weight=data.weight,
+    )
+    if signal is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"signal_id": signal.signal_id, "dimension": signal.dimension.value,
+            "observed_value": signal.observed_value, "weight": signal.weight}
+
+
+@router.post("/alignment-engine/profile/{profile_id}/process-signals")
+async def alignment_engine_process_signals(profile_id: str, max_signals: int = 100):
+    """Process pending signals for a profile."""
+    from agent.shared import alignment_engine
+    result = alignment_engine.process_signals(profile_id, max_signals=max_signals)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@router.post("/alignment-engine/profile/{profile_id}/check")
+async def alignment_engine_check(profile_id: str, data: CheckAlignmentRequest):
+    """Check alignment of a proposed action."""
+    from agent.shared import alignment_engine, AlignmentDimension
+    dim = AlignmentDimension(data.dimension) if data.dimension else None
+    check = alignment_engine.check_alignment(
+        profile_id, data.proposed_action, data.action_description, dim,
+    )
+    if check is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"check_id": check.check_id, "alignment_score": check.alignment_score,
+            "recommended_action": check.recommended_action.value, "reasoning": check.reasoning,
+            "conflicts": check.conflicts, "suggestions": check.suggestions}
+
+
+@router.post("/alignment-engine/profile/{profile_id}/calibrate")
+async def alignment_engine_calibrate(profile_id: str, data: CalibrateRequest):
+    """Run a calibration session."""
+    from agent.shared import alignment_engine, AlignmentDimension
+    updates = {}
+    for k, v in data.dimension_updates.items():
+        try:
+            updates[AlignmentDimension(k)] = v
+        except ValueError:
+            pass
+    session = alignment_engine.calibrate(profile_id, dimension_updates=updates)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {"session_id": session.session_id, "questions_asked": session.questions_asked,
+            "answers_received": session.answers_received, "traits_updated": session.traits_updated,
+            "traits_added": session.traits_added, "traits_confirmed": session.traits_confirmed}
+
+
+@router.get("/alignment-engine/profile/{profile_id}/summary")
+async def alignment_engine_summary(profile_id: str):
+    """Get alignment summary for a profile."""
+    from agent.shared import alignment_engine
+    summary = alignment_engine.get_alignment_summary(profile_id)
+    if "error" in summary:
+        raise HTTPException(status_code=404, detail=summary["error"])
+    return summary
+
+
+@router.get("/alignment-engine/stats")
+async def alignment_engine_stats():
+    """Get overall alignment engine statistics."""
+    from agent.shared import alignment_engine
+    return alignment_engine.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Context Provider
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class RegisterConnectorRequest(BaseModel):
+    source: str
+    name: str
+    description: str = ""
+    priority: str = "normal"
+    max_tokens: int = 2000
+    cache_ttl_seconds: int = 300
+    config: dict = {}
+
+class EnrichRequest(BaseModel):
+    user_input: str
+    agent_id: str = ""
+    session_id: str = ""
+    target_tokens: int = 4000
+    assembly_mode: str = "balanced"
+    strategies: list[str] = ["expand"]
+    required_sources: list[str] = []
+    excluded_sources: list[str] = []
+
+class ClassifyIntentRequest(BaseModel):
+    user_input: str
+
+
+@router.post("/context-provider/connector")
+async def context_provider_register_connector(data: RegisterConnectorRequest):
+    """Register a context source connector."""
+    from agent.shared import context_provider
+    from agent.agent_context_provider import ContextSource, ContextPriority
+    try:
+        source = ContextSource(data.source)
+        priority = ContextPriority[data.priority.upper()]
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid enum: {exc}")
+    try:
+        connector = context_provider.register_connector(
+            source=source, name=data.name, description=data.description, priority=priority,
+            max_tokens=data.max_tokens, cache_ttl_seconds=data.cache_ttl_seconds, config=data.config,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"connector_id": connector.connector_id, "source": connector.source.value,
+            "name": connector.name, "status": connector.status.value,
+            "priority": connector.priority.name}
+
+
+@router.delete("/context-provider/connector/{connector_id}")
+async def context_provider_unregister_connector(connector_id: str):
+    """Unregister a context source connector."""
+    from agent.shared import context_provider
+    ok = context_provider.unregister_connector(connector_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Connector not found")
+    return {"unregistered": True, "connector_id": connector_id}
+
+
+@router.get("/context-provider/connectors")
+async def context_provider_list_connectors(source: str | None = None, status: str | None = None):
+    """List context source connectors."""
+    from agent.shared import context_provider
+    from agent.agent_context_provider import ContextSource, ProviderStatus
+    src = ContextSource(source) if source else None
+    sts = ProviderStatus(status) if status else None
+    connectors = context_provider.list_connectors(source=src, status=sts)
+    return [{"connector_id": c.connector_id, "source": c.source.value, "name": c.name,
+             "status": c.status.value, "priority": c.priority.name,
+             "invocation_count": c.invocation_count, "enabled": c.enabled} for c in connectors]
+
+
+@router.post("/context-provider/enrich")
+async def context_provider_enrich(data: EnrichRequest):
+    """Enrich a user query with gathered context."""
+    from agent.shared import context_provider
+    from agent.agent_context_provider import EnrichmentStrategy, AssemblyMode, ContextSource
+    try:
+        mode = AssemblyMode(data.assembly_mode)
+        strategies = [EnrichmentStrategy(s) for s in data.strategies]
+        required = [ContextSource(s) for s in data.required_sources]
+        excluded = [ContextSource(s) for s in data.excluded_sources]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid enum: {exc}")
+    from agent.agent_context_provider import ContextQuery
+    import time as _time
+    query = ContextQuery(
+        query_id=f"q-{_time.time_ns()}",
+        user_input=data.user_input,
+        agent_id=data.agent_id,
+        session_id=data.session_id,
+        target_tokens=data.target_tokens,
+        assembly_mode=mode,
+        strategies=strategies,
+        required_sources=required,
+        excluded_sources=excluded,
+    )
+    bundle = context_provider.enrich(query)
+    return {"bundle_id": bundle.bundle_id, "query_id": bundle.query_id,
+            "total_tokens": bundle.total_tokens, "fragment_count": len(bundle.fragments),
+            "intent": bundle.intent.value if bundle.intent else None,
+            "assembled_text": bundle.assembled_text[:500],
+            "assembly_time_ms": bundle.assembly_time_ms,
+            "disambiguations": len(bundle.disambiguations),
+            "citations": bundle.citations}
+
+
+@router.post("/context-provider/classify-intent")
+async def context_provider_classify_intent(data: ClassifyIntentRequest):
+    """Classify the intent of a user input."""
+    from agent.shared import context_provider
+    intent = context_provider.classify_intent(data.user_input)
+    return {"intent": intent.value, "user_input": data.user_input}
+
+
+@router.get("/context-provider/bundle/{bundle_id}")
+async def context_provider_get_bundle(bundle_id: str):
+    """Get a context bundle by ID."""
+    from agent.shared import context_provider
+    bundle = context_provider.get_bundle(bundle_id)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="Bundle not found")
+    return {"bundle_id": bundle.bundle_id, "query_id": bundle.query_id,
+            "total_tokens": bundle.total_tokens, "fragment_count": len(bundle.fragments),
+            "intent": bundle.intent.value if bundle.intent else None,
+            "assembly_time_ms": bundle.assembly_time_ms}
+
+
+@router.get("/context-provider/bundles")
+async def context_provider_list_bundles(query_id: str | None = None, limit: int = 100):
+    """List context bundles."""
+    from agent.shared import context_provider
+    bundles = context_provider.list_bundles(query_id=query_id, limit=limit)
+    return [{"bundle_id": b.bundle_id, "query_id": b.query_id,
+             "total_tokens": b.total_tokens, "fragment_count": len(b.fragments)} for b in bundles]
+
+
+@router.get("/context-provider/stats")
+async def context_provider_stats():
+    """Get overall context provider statistics."""
+    from agent.shared import context_provider
+    return context_provider.get_stats()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Interruptible Executor
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class RegisterExecutionRequest(BaseModel):
+    name: str
+    description: str = ""
+    agent_id: str = ""
+    session_id: str = ""
+    parent_execution_id: str | None = None
+    priority: str = "normal"
+    timeout_seconds: float | None = None
+    total_steps: int = 0
+    metadata: dict = {}
+
+class CheckpointRequest(BaseModel):
+    checkpoint_type: str = "user_defined"
+    step_index: int = 0
+    step_description: str = ""
+    state: dict = {}
+
+class CancelExecutionRequest(BaseModel):
+    reason: str = "user_request"
+    scope: str = "self"
+    requested_by: str = "user"
+
+
+@router.post("/interruptible/execution")
+async def interruptible_register(data: RegisterExecutionRequest):
+    """Register a new interruptible execution."""
+    from agent.shared import interruptible_executor, ExecutionPriority
+    try:
+        priority = ExecutionPriority[data.priority.upper()]
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid priority: {exc}")
+    try:
+        handle = interruptible_executor.register_execution(
+            name=data.name, description=data.description, agent_id=data.agent_id,
+            session_id=data.session_id, parent_execution_id=data.parent_execution_id,
+            priority=priority, timeout_seconds=data.timeout_seconds, total_steps=data.total_steps,
+            metadata=data.metadata,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"execution_id": handle.execution_id, "name": handle.name,
+            "state": handle.state.value, "priority": handle.priority.name,
+            "token_id": handle.token_id}
+
+
+@router.post("/interruptible/execution/{execution_id}/start")
+async def interruptible_start(execution_id: str):
+    """Start a registered execution."""
+    from agent.shared import interruptible_executor
+    handle = interruptible_executor.start_execution(execution_id)
+    if handle is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return {"execution_id": handle.execution_id, "state": handle.state.value,
+            "started_at": handle.started_at}
+
+
+class CompleteExecutionRequest(BaseModel):
+    result: dict = {}
+
+
+@router.post("/interruptible/execution/{execution_id}/complete")
+async def interruptible_complete(execution_id: str, data: CompleteExecutionRequest = CompleteExecutionRequest()):
+    """Mark an execution as completed."""
+    from agent.shared import interruptible_executor
+    handle = interruptible_executor.complete_execution(execution_id, result=data.result)
+    if handle is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return {"execution_id": handle.execution_id, "state": handle.state.value,
+            "completed_at": handle.completed_at}
+
+
+@router.post("/interruptible/execution/{execution_id}/cancel")
+async def interruptible_cancel(execution_id: str, data: CancelExecutionRequest):
+    """Cancel an execution."""
+    from agent.shared import interruptible_executor, CancellationReason, CancellationScope
+    try:
+        reason = CancellationReason(data.reason)
+        scope = CancellationScope(data.scope)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid enum: {exc}")
+    try:
+        req = interruptible_executor.cancel_execution(
+            execution_id, reason=reason, scope=scope, requested_by=data.requested_by,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"request_id": req.request_id, "execution_id": req.execution_id,
+            "reason": req.reason.value, "scope": req.scope.value, "processed": req.processed}
+
+
+@router.post("/interruptible/execution/{execution_id}/pause")
+async def interruptible_pause(execution_id: str):
+    """Pause a running execution."""
+    from agent.shared import interruptible_executor
+    handle = interruptible_executor.pause_execution(execution_id)
+    if handle is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return {"execution_id": handle.execution_id, "state": handle.state.value}
+
+
+@router.post("/interruptible/execution/{execution_id}/resume")
+async def interruptible_resume(execution_id: str):
+    """Resume a paused execution."""
+    from agent.shared import interruptible_executor
+    handle = interruptible_executor.resume_execution(execution_id)
+    if handle is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return {"execution_id": handle.execution_id, "state": handle.state.value}
+
+
+@router.post("/interruptible/execution/{execution_id}/checkpoint")
+async def interruptible_checkpoint(execution_id: str, data: CheckpointRequest):
+    """Create a checkpoint for an execution."""
+    from agent.shared import interruptible_executor, CheckpointType
+    try:
+        ctype = CheckpointType(data.checkpoint_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid type: {exc}")
+    cp = interruptible_executor.checkpoint(
+        execution_id, checkpoint_type=ctype, step_index=data.step_index,
+        step_description=data.step_description, state=data.state,
+    )
+    if cp is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return {"checkpoint_id": cp.checkpoint_id, "execution_id": cp.execution_id,
+            "checkpoint_type": cp.checkpoint_type.value, "step_index": cp.step_index}
+
+
+@router.post("/interruptible/execution/{execution_id}/check")
+async def interruptible_check(execution_id: str):
+    """Check if an execution should be interrupted."""
+    from agent.shared import interruptible_executor
+    signal = interruptible_executor.check_interrupt(execution_id)
+    return {"execution_id": execution_id, "signal": signal.value if signal else None}
+
+
+@router.get("/interruptible/execution/{execution_id}")
+async def interruptible_get(execution_id: str):
+    """Get an execution by ID."""
+    from agent.shared import interruptible_executor
+    handle = interruptible_executor.get_execution(execution_id)
+    if handle is None:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return {"execution_id": handle.execution_id, "name": handle.name,
+            "state": handle.state.value, "priority": handle.priority.name,
+            "started_at": handle.started_at, "completed_at": handle.completed_at,
+            "total_steps": handle.total_steps, "completed_steps": handle.completed_steps,
+            "current_step": handle.current_step, "error": handle.error,
+            "children": handle.children, "parent_execution_id": handle.parent_execution_id}
+
+
+@router.get("/interruptible/executions")
+async def interruptible_list(state: str | None = None, agent_id: str | None = None,
+                             parent: str | None = None, limit: int = 100):
+    """List executions with optional filters."""
+    from agent.shared import interruptible_executor, ExecutionState
+    sts = ExecutionState(state) if state else None
+    handles = interruptible_executor.list_executions(state=sts, agent_id=agent_id,
+                                                     parent=parent, limit=limit)
+    return [{"execution_id": h.execution_id, "name": h.name, "state": h.state.value,
+             "priority": h.priority.name, "started_at": h.started_at,
+             "completed_at": h.completed_at} for h in handles]
+
+
+@router.get("/interruptible/stats")
+async def interruptible_stats():
+    """Get overall interruptible executor statistics."""
+    from agent.shared import interruptible_executor
+    return interruptible_executor.get_stats()
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Action Space Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ActionRegisterRequest(BaseModel):
+    name: str
+    description: str = ""
+    category: str = "tool_based"
+    parameters_schema: dict = {}
+    required_resources: list[str] = []
+    estimated_duration_ms: int = 0
+    estimated_cost: float = 0.0
+    risk_level: int = 1
+    tags: list[str] = []
+
+
+@router.post("/action-space/action")
+async def action_space_register(data: ActionRegisterRequest):
+    """Register a new action in the action space."""
+    from agent.shared import action_space
+    from agent.agent_action_space import ActionCategory, RiskLevel
+    action = action_space.register_action(
+        name=data.name,
+        description=data.description,
+        category=ActionCategory(data.category),
+        parameters_schema=data.parameters_schema,
+        required_resources=data.required_resources,
+        estimated_duration_ms=data.estimated_duration_ms,
+        estimated_cost=data.estimated_cost,
+        risk_level=RiskLevel(data.risk_level),
+        tags=data.tags,
+    )
+    return action.to_dict()
+
+
+@router.delete("/action-space/action/{action_id}")
+async def action_space_unregister(action_id: str):
+    """Remove an action from the action space."""
+    from agent.shared import action_space
+    success = action_space.unregister_action(action_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Action not found")
+    return {"deleted": True, "action_id": action_id}
+
+
+@router.get("/action-space/action/{action_id}")
+async def action_space_get(action_id: str):
+    """Get a specific action definition."""
+    from agent.shared import action_space
+    action = action_space.get_action(action_id)
+    if action is None:
+        raise HTTPException(status_code=404, detail="Action not found")
+    return action.to_dict()
+
+
+@router.get("/action-space/actions")
+async def action_space_list(category: str | None = None, status: str | None = None, tag: str | None = None):
+    """List actions with optional filters."""
+    from agent.shared import action_space
+    from agent.agent_action_space import ActionCategory, ActionStatus
+    cat = ActionCategory(category) if category else None
+    st = ActionStatus(status) if status else None
+    actions = action_space.list_actions(category=cat, status=st, tag=tag)
+    return {"actions": [a.to_dict() for a in actions], "total": len(actions)}
+
+
+class ConstraintRegisterRequest(BaseModel):
+    constraint_type: str = "precondition"
+    description: str = ""
+    check_function_name: str = ""
+    parameters: dict = {}
+    severity: int = 1
+
+
+@router.post("/action-space/action/{action_id}/constraint")
+async def action_space_add_constraint(action_id: str, data: ConstraintRegisterRequest):
+    """Add a constraint to an action."""
+    from agent.shared import action_space
+    from agent.agent_action_space import ConstraintType, RiskLevel
+    constraint = action_space.register_constraint(
+        action_id=action_id,
+        constraint_type=ConstraintType(data.constraint_type),
+        description=data.description,
+        check_function_name=data.check_function_name,
+        parameters=data.parameters,
+        severity=RiskLevel(data.severity),
+    )
+    return constraint.to_dict()
+
+
+class FeasibilityCheckRequest(BaseModel):
+    parameters: dict = {}
+    context: dict = {}
+
+
+@router.post("/action-space/action/{action_id}/feasibility")
+async def action_space_check_feasibility(action_id: str, data: FeasibilityCheckRequest):
+    """Check feasibility of executing an action."""
+    from agent.shared import action_space
+    report = action_space.check_feasibility(action_id, data.parameters, data.context)
+    return report.to_dict()
+
+
+class ActionValidateRequest(BaseModel):
+    parameters: dict = {}
+
+
+@router.post("/action-space/action/{action_id}/validate")
+async def action_space_validate(action_id: str, data: ActionValidateRequest):
+    """Validate action parameters."""
+    from agent.shared import action_space
+    result = action_space.validate_action(action_id, data.parameters)
+    return {"validation_result": result.value}
+
+
+class ActionExecutionRequest(BaseModel):
+    parameters: dict = {}
+    status: str = "completed"
+    result: dict = {}
+    error: str | None = None
+
+
+@router.post("/action-space/action/{action_id}/execution")
+async def action_space_record_execution(action_id: str, data: ActionExecutionRequest):
+    """Record an action execution."""
+    from agent.shared import action_space
+    execution = action_space.record_execution(
+        action_id=action_id,
+        parameters=data.parameters,
+        status=data.status,
+        result=data.result,
+        error=data.error,
+    )
+    return execution.to_dict()
+
+
+@router.get("/action-space/executions")
+async def action_space_list_executions(action_id: str | None = None, limit: int = 100):
+    """List action executions."""
+    from agent.shared import action_space
+    executions = action_space.list_executions(action_id=action_id, limit=limit)
+    return {"executions": [e.to_dict() for e in executions], "total": len(executions)}
+
+
+@router.get("/action-space/action/{action_id}/stats")
+async def action_space_action_stats(action_id: str):
+    """Get stats for a specific action."""
+    from agent.shared import action_space
+    stats = action_space.get_action_stats(action_id)
+    if stats is None:
+        raise HTTPException(status_code=404, detail="Action not found")
+    return stats
+
+
+@router.get("/action-space/stats")
+async def action_space_stats():
+    """Get overall action space statistics."""
+    from agent.shared import action_space
+    return action_space.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Goal Manager Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class GoalCreateRequest(BaseModel):
+    title: str
+    description: str = ""
+    goal_type: str = "outcome"
+    origin: str = "user_request"
+    priority: int = 2
+    agent_id: str = ""
+    user_id: str = ""
+    parent_goal_id: str | None = None
+    deadline: float | None = None
+    tags: list[str] = []
+    metrics: list[dict] = []
+    metadata: dict = {}
+
+
+@router.post("/goal-manager/goal")
+async def goal_manager_create(data: GoalCreateRequest):
+    """Create a new goal."""
+    from agent.shared import goal_manager
+    from agent.agent_goal_manager import GoalType, GoalOrigin, GoalPriority
+    metrics_data = data.metrics
+    goal = goal_manager.create_goal(
+        title=data.title,
+        description=data.description,
+        goal_type=GoalType(data.goal_type),
+        origin=GoalOrigin(data.origin),
+        priority=GoalPriority(data.priority),
+        agent_id=data.agent_id,
+        user_id=data.user_id,
+        parent_goal_id=data.parent_goal_id,
+        deadline=data.deadline,
+        tags=data.tags,
+        metrics=metrics_data,
+        metadata=data.metadata,
+    )
+    return goal.to_dict()
+
+
+@router.get("/goal-manager/goal/{goal_id}")
+async def goal_manager_get(goal_id: str):
+    """Get a specific goal."""
+    from agent.shared import goal_manager
+    goal = goal_manager.get_goal(goal_id)
+    if goal is None:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return goal.to_dict()
+
+
+@router.get("/goal-manager/goals")
+async def goal_manager_list(
+    status: str | None = None,
+    priority: int | None = None,
+    goal_type: str | None = None,
+    agent_id: str | None = None,
+    user_id: str | None = None,
+    parent: str | None = None,
+):
+    """List goals with optional filters."""
+    from agent.shared import goal_manager
+    from agent.agent_goal_manager import GoalStatus, GoalPriority, GoalType
+    st = GoalStatus(status) if status else None
+    pr = GoalPriority(priority) if priority is not None else None
+    gt = GoalType(goal_type) if goal_type else None
+    goals = goal_manager.list_goals(status=st, priority=pr, goal_type=gt, agent_id=agent_id, user_id=user_id, parent=parent)
+    return {"goals": [g.to_dict() for g in goals], "total": len(goals)}
+
+
+class GoalUpdateRequest(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    status: str | None = None
+    priority: int | None = None
+    deadline: float | None = None
+    notes: str | None = None
+
+
+@router.put("/goal-manager/goal/{goal_id}")
+async def goal_manager_update(goal_id: str, data: GoalUpdateRequest):
+    """Update a goal."""
+    from agent.shared import goal_manager
+    from agent.agent_goal_manager import GoalStatus, GoalPriority
+    updates = {}
+    if data.title is not None:
+        updates["title"] = data.title
+    if data.description is not None:
+        updates["description"] = data.description
+    if data.status is not None:
+        updates["status"] = GoalStatus(data.status)
+    if data.priority is not None:
+        updates["priority"] = GoalPriority(data.priority)
+    if data.deadline is not None:
+        updates["deadline"] = data.deadline
+    if data.notes is not None:
+        updates["notes"] = data.notes
+    goal = goal_manager.update_goal(goal_id, **updates)
+    if goal is None:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return goal.to_dict()
+
+
+@router.delete("/goal-manager/goal/{goal_id}")
+async def goal_manager_delete(goal_id: str):
+    """Delete a goal."""
+    from agent.shared import goal_manager
+    success = goal_manager.delete_goal(goal_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return {"deleted": True, "goal_id": goal_id}
+
+
+class GoalMetricRequest(BaseModel):
+    name: str
+    description: str = ""
+    target_value: float = 1.0
+    unit: str = ""
+    threshold: float = 0.5
+
+
+@router.post("/goal-manager/goal/{goal_id}/metric")
+async def goal_manager_add_metric(goal_id: str, data: GoalMetricRequest):
+    """Add a metric to a goal."""
+    from agent.shared import goal_manager
+    metric = goal_manager.add_metric(
+        goal_id=goal_id,
+        name=data.name,
+        description=data.description,
+        target_value=data.target_value,
+        unit=data.unit,
+        threshold=data.threshold,
+    )
+    return metric.to_dict()
+
+
+class GoalMetricUpdateRequest(BaseModel):
+    current_value: float
+
+
+@router.put("/goal-manager/goal/{goal_id}/metric/{metric_id}")
+async def goal_manager_update_metric(goal_id: str, metric_id: str, data: GoalMetricUpdateRequest):
+    """Update a goal metric's current value."""
+    from agent.shared import goal_manager
+    goal = goal_manager.update_metric(goal_id, metric_id, data.current_value)
+    if goal is None:
+        raise HTTPException(status_code=404, detail="Goal or metric not found")
+    return goal.to_dict()
+
+
+@router.post("/goal-manager/goal/{goal_id}/check-achievement")
+async def goal_manager_check_achievement(goal_id: str):
+    """Check achievement level of a goal."""
+    from agent.shared import goal_manager
+    level = goal_manager.check_achievement(goal_id)
+    return {"goal_id": goal_id, "achievement_level": level.value, "level_name": level.name}
+
+
+@router.post("/goal-manager/goal/{goal_id}/recalculate")
+async def goal_manager_recalculate(goal_id: str):
+    """Recalculate progress for a goal."""
+    from agent.shared import goal_manager
+    progress = goal_manager.recalculate_progress(goal_id)
+    return {"goal_id": goal_id, "progress_score": progress}
+
+
+class GoalReviewRequest(BaseModel):
+    reviewer: str = "system"
+    achievement_assessment: int = 0
+    progress_notes: str = ""
+    recommended_actions: list[str] = []
+    score: float = 0.0
+
+
+@router.post("/goal-manager/goal/{goal_id}/review")
+async def goal_manager_review(goal_id: str, data: GoalReviewRequest):
+    """Review a goal."""
+    from agent.shared import goal_manager
+    from agent.agent_goal_manager import AchievementLevel
+    review = goal_manager.review_goal(
+        goal_id=goal_id,
+        reviewer=data.reviewer,
+        achievement_assessment=AchievementLevel(data.achievement_assessment),
+        progress_notes=data.progress_notes,
+        recommended_actions=data.recommended_actions,
+        score=data.score,
+    )
+    return review.to_dict()
+
+
+@router.get("/goal-manager/goal/{goal_id}/sub-goals")
+async def goal_manager_sub_goals(goal_id: str):
+    """Get sub-goals of a goal."""
+    from agent.shared import goal_manager
+    goals = goal_manager.get_sub_goals(goal_id)
+    return {"sub_goals": [g.to_dict() for g in goals], "total": len(goals)}
+
+
+@router.get("/goal-manager/overdue")
+async def goal_manager_overdue():
+    """Get overdue goals."""
+    from agent.shared import goal_manager
+    goals = goal_manager.get_overdue_goals()
+    return {"overdue_goals": [g.to_dict() for g in goals], "total": len(goals)}
+
+
+@router.get("/goal-manager/blocked")
+async def goal_manager_blocked():
+    """Get blocked goals."""
+    from agent.shared import goal_manager
+    goals = goal_manager.get_blocked_goals()
+    return {"blocked_goals": [g.to_dict() for g in goals], "total": len(goals)}
+
+
+@router.get("/goal-manager/prioritize")
+async def goal_manager_prioritize(agent_id: str | None = None):
+    """Get prioritized goals."""
+    from agent.shared import goal_manager
+    goals = goal_manager.prioritize_goals(agent_id=agent_id)
+    return {"prioritized_goals": [g.to_dict() for g in goals], "total": len(goals)}
+
+
+@router.get("/goal-manager/stats")
+async def goal_manager_stats():
+    """Get overall goal manager statistics."""
+    from agent.shared import goal_manager
+    return goal_manager.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Dialogue Manager Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DialogueSessionRequest(BaseModel):
+    session_id: str
+    agent_id: str = ""
+    user_id: str = ""
+    strategy: str = "direct_answer"
+    session_goals: list[str] = []
+
+
+@router.post("/dialogue-manager/session")
+async def dialogue_manager_create_session(data: DialogueSessionRequest):
+    """Create a new dialogue session."""
+    from agent.shared import dialogue_manager
+    from agent.agent_dialogue_manager import StrategyType
+    ctx = dialogue_manager.create_session(
+        session_id=data.session_id,
+        agent_id=data.agent_id,
+        user_id=data.user_id,
+        strategy=StrategyType(data.strategy),
+        session_goals=data.session_goals,
+    )
+    return ctx.to_dict()
+
+
+@router.get("/dialogue-manager/session/{session_id}")
+async def dialogue_manager_get_session(session_id: str):
+    """Get a dialogue session."""
+    from agent.shared import dialogue_manager
+    ctx = dialogue_manager.get_session(session_id)
+    if ctx is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return ctx.to_dict()
+
+
+@router.get("/dialogue-manager/sessions")
+async def dialogue_manager_list_sessions(active_only: bool = False):
+    """List dialogue sessions."""
+    from agent.shared import dialogue_manager
+    sessions = dialogue_manager.list_sessions(active_only=active_only)
+    return {"sessions": [s.to_dict() for s in sessions], "total": len(sessions)}
+
+
+@router.delete("/dialogue-manager/session/{session_id}")
+async def dialogue_manager_end_session(session_id: str):
+    """End a dialogue session."""
+    from agent.shared import dialogue_manager
+    success = dialogue_manager.end_session(session_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"ended": True, "session_id": session_id}
+
+
+class DialogueTurnRequest(BaseModel):
+    turn_type: str = "user"
+    dialogue_act: str = "inform"
+    content: str = ""
+    speaker: str = ""
+    topics: list[str] = []
+
+
+@router.post("/dialogue-manager/session/{session_id}/turn")
+async def dialogue_manager_record_turn(session_id: str, data: DialogueTurnRequest):
+    """Record a dialogue turn."""
+    from agent.shared import dialogue_manager
+    from agent.agent_dialogue_manager import TurnType, DialogueAct
+    turn = dialogue_manager.record_turn(
+        session_id=session_id,
+        turn_type=TurnType(data.turn_type),
+        dialogue_act=DialogueAct(data.dialogue_act),
+        content=data.content,
+        speaker=data.speaker,
+        topics=data.topics,
+    )
+    return turn.to_dict()
+
+
+@router.get("/dialogue-manager/session/{session_id}/state")
+async def dialogue_manager_get_state(session_id: str):
+    """Get current dialogue state."""
+    from agent.shared import dialogue_manager
+    state = dialogue_manager.get_current_state(session_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"session_id": session_id, "current_state": state.value}
+
+
+class DialogueTransitionRequest(BaseModel):
+    trigger_act: str = "inform"
+    context_info: dict = {}
+
+
+@router.post("/dialogue-manager/session/{session_id}/transition")
+async def dialogue_manager_transition(session_id: str, data: DialogueTransitionRequest):
+    """Transition dialogue state."""
+    from agent.shared import dialogue_manager
+    from agent.agent_dialogue_manager import DialogueAct
+    new_state = dialogue_manager.transition_state(
+        session_id=session_id,
+        trigger_act=DialogueAct(data.trigger_act),
+        context_info=data.context_info,
+    )
+    return {"session_id": session_id, "new_state": new_state.value}
+
+
+@router.post("/dialogue-manager/session/{session_id}/suggest-act")
+async def dialogue_manager_suggest_act(session_id: str):
+    """Suggest next dialogue act."""
+    from agent.shared import dialogue_manager
+    act = dialogue_manager.suggest_next_act(session_id)
+    if act is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"session_id": session_id, "suggested_act": act.value}
+
+
+class DialogueStrategyRequest(BaseModel):
+    strategy: str
+
+
+@router.put("/dialogue-manager/session/{session_id}/strategy")
+async def dialogue_manager_set_strategy(session_id: str, data: DialogueStrategyRequest):
+    """Set dialogue strategy."""
+    from agent.shared import dialogue_manager
+    from agent.agent_dialogue_manager import StrategyType
+    ctx = dialogue_manager.set_strategy(session_id, StrategyType(data.strategy))
+    if ctx is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return ctx.to_dict()
+
+
+class DialogueTopicRequest(BaseModel):
+    name: str
+    description: str = ""
+    relevance_score: float = 0.5
+
+
+@router.post("/dialogue-manager/session/{session_id}/topic")
+async def dialogue_manager_introduce_topic(session_id: str, data: DialogueTopicRequest):
+    """Introduce a new topic."""
+    from agent.shared import dialogue_manager
+    topic = dialogue_manager.introduce_topic(
+        session_id=session_id,
+        name=data.name,
+        description=data.description,
+        relevance_score=data.relevance_score,
+    )
+    return topic.to_dict()
+
+
+@router.get("/dialogue-manager/session/{session_id}/turns")
+async def dialogue_manager_get_turns(session_id: str, limit: int = 50):
+    """Get dialogue turns."""
+    from agent.shared import dialogue_manager
+    turns = dialogue_manager.get_turns(session_id, limit=limit)
+    return {"turns": [t.to_dict() for t in turns], "total": len(turns)}
+
+
+@router.get("/dialogue-manager/session/{session_id}/summary")
+async def dialogue_manager_get_summary(session_id: str):
+    """Get session summary."""
+    from agent.shared import dialogue_manager
+    summary = dialogue_manager.get_session_summary(session_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return summary
+
+
+@router.get("/dialogue-manager/stats")
+async def dialogue_manager_stats():
+    """Get overall dialogue manager statistics."""
+    from agent.shared import dialogue_manager
+    return dialogue_manager.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Benchmark Engine Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class BenchmarkCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    benchmark_type: str = "single_run"
+    metric_defs: list[dict] = []
+    baseline_agent_id: str | None = None
+    target_score: float | None = None
+
+
+@router.post("/benchmark/benchmark")
+async def benchmark_create(data: BenchmarkCreateRequest):
+    """Create a new benchmark."""
+    from agent.shared import benchmark_engine
+    from agent.agent_benchmark import BenchmarkType, MetricDefinition, MetricCategory, ScoreScale
+    metrics = []
+    for md in data.metric_defs:
+        metrics.append(MetricDefinition(
+            metric_id=md.get("metric_id", str(uuid.uuid4())[:8]),
+            name=md["name"],
+            description=md.get("description", ""),
+            category=MetricCategory(md.get("category", "accuracy")),
+            scale=ScoreScale(md.get("scale", "percentage")),
+            min_value=md.get("min_value", 0.0),
+            max_value=md.get("max_value", 100.0),
+            unit=md.get("unit", ""),
+            weight=md.get("weight", 1.0),
+            aggregation_method=md.get("aggregation_method", "mean"),
+        ))
+    benchmark = benchmark_engine.create_benchmark(
+        name=data.name,
+        description=data.description,
+        benchmark_type=BenchmarkType(data.benchmark_type),
+        metric_defs=metrics,
+        baseline_agent_id=data.baseline_agent_id,
+        target_score=data.target_score,
+    )
+    return benchmark.to_dict()
+
+
+@router.get("/benchmark/benchmark/{benchmark_id}")
+async def benchmark_get(benchmark_id: str):
+    """Get a specific benchmark."""
+    from agent.shared import benchmark_engine
+    benchmark = benchmark_engine.get_benchmark(benchmark_id)
+    if benchmark is None:
+        raise HTTPException(status_code=404, detail="Benchmark not found")
+    return benchmark.to_dict()
+
+
+@router.get("/benchmark/benchmarks")
+async def benchmark_list(benchmark_type: str | None = None):
+    """List benchmarks."""
+    from agent.shared import benchmark_engine
+    from agent.agent_benchmark import BenchmarkType
+    bt = BenchmarkType(benchmark_type) if benchmark_type else None
+    benchmarks = benchmark_engine.list_benchmarks(benchmark_type=bt)
+    return {"benchmarks": [b.to_dict() for b in benchmarks], "total": len(benchmarks)}
+
+
+class BenchmarkMetricRequest(BaseModel):
+    name: str
+    description: str = ""
+    category: str = "accuracy"
+    scale: str = "percentage"
+    min_value: float = 0.0
+    max_value: float = 100.0
+    unit: str = ""
+    weight: float = 1.0
+    aggregation_method: str = "mean"
+
+
+@router.post("/benchmark/benchmark/{benchmark_id}/metric")
+async def benchmark_register_metric(benchmark_id: str, data: BenchmarkMetricRequest):
+    """Register a metric on a benchmark."""
+    from agent.shared import benchmark_engine
+    from agent.agent_benchmark import MetricCategory, ScoreScale
+    metric = benchmark_engine.register_metric(
+        benchmark_id=benchmark_id,
+        name=data.name,
+        description=data.description,
+        category=MetricCategory(data.category),
+        scale=ScoreScale(data.scale),
+        min_value=data.min_value,
+        max_value=data.max_value,
+        unit=data.unit,
+        weight=data.weight,
+        aggregation_method=data.aggregation_method,
+    )
+    return metric.to_dict()
+
+
+class EvaluationStartRequest(BaseModel):
+    agent_id: str
+    context: dict = {}
+
+
+@router.post("/benchmark/benchmark/{benchmark_id}/evaluation")
+async def benchmark_start_evaluation(benchmark_id: str, data: EvaluationStartRequest):
+    """Start a new evaluation run."""
+    from agent.shared import benchmark_engine
+    run = benchmark_engine.start_evaluation(
+        benchmark_id=benchmark_id,
+        agent_id=data.agent_id,
+        context=data.context,
+    )
+    return run.to_dict()
+
+
+class MetricResultRequest(BaseModel):
+    metric_id: str
+    value: float
+    raw_data: dict = {}
+    notes: str = ""
+
+
+@router.post("/benchmark/evaluation/{run_id}/metric")
+async def benchmark_record_metric(run_id: str, data: MetricResultRequest):
+    """Record a metric result on a run."""
+    from agent.shared import benchmark_engine
+    result = benchmark_engine.record_metric_result(
+        run_id=run_id,
+        metric_id=data.metric_id,
+        value=data.value,
+        raw_data=data.raw_data,
+        notes=data.notes,
+    )
+    return result.to_dict()
+
+
+class EvaluationCompleteRequest(BaseModel):
+    error: str | None = None
+
+
+@router.post("/benchmark/evaluation/{run_id}/complete")
+async def benchmark_complete_evaluation(run_id: str, data: EvaluationCompleteRequest):
+    """Complete an evaluation run."""
+    from agent.shared import benchmark_engine
+    run = benchmark_engine.complete_evaluation(run_id, error=data.error)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return run.to_dict()
+
+
+@router.get("/benchmark/evaluation/{run_id}")
+async def benchmark_get_run(run_id: str):
+    """Get a specific evaluation run."""
+    from agent.shared import benchmark_engine
+    run = benchmark_engine.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return run.to_dict()
+
+
+@router.get("/benchmark/runs")
+async def benchmark_list_runs(
+    benchmark_id: str | None = None,
+    agent_id: str | None = None,
+    status: str | None = None,
+    limit: int = 100,
+):
+    """List evaluation runs."""
+    from agent.shared import benchmark_engine
+    from agent.agent_benchmark import EvaluationStatus
+    st = EvaluationStatus(status) if status else None
+    runs = benchmark_engine.list_runs(benchmark_id=benchmark_id, agent_id=agent_id, status=st, limit=limit)
+    return {"runs": [r.to_dict() for r in runs], "total": len(runs)}
+
+
+@router.get("/benchmark/evaluation/{run_id}/score")
+async def benchmark_calculate_score(run_id: str):
+    """Calculate score for a run."""
+    from agent.shared import benchmark_engine
+    score = benchmark_engine.calculate_score(run_id)
+    return {"run_id": run_id, "score": score}
+
+
+@router.get("/benchmark/compare")
+async def benchmark_compare_runs(run_a_id: str, run_b_id: str):
+    """Compare two runs."""
+    from agent.shared import benchmark_engine
+    report = benchmark_engine.compare_runs(run_a_id, run_b_id)
+    return report.to_dict()
+
+
+@router.get("/benchmark/leaderboard/{benchmark_id}")
+async def benchmark_leaderboard(benchmark_id: str, limit: int = 10):
+    """Get leaderboard for a benchmark."""
+    from agent.shared import benchmark_engine
+    leaderboard = benchmark_engine.get_leaderboard(benchmark_id, limit=limit)
+    return {"leaderboard": leaderboard, "total": len(leaderboard)}
+
+
+@router.get("/benchmark/stats")
+async def benchmark_stats():
+    """Get overall benchmark statistics."""
+    from agent.shared import benchmark_engine
+    return benchmark_engine.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Belief Engine Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class BeliefNetworkRequest(BaseModel):
+    agent_id: str = "default"
+
+
+@router.post("/belief-engine/network")
+async def belief_engine_create_network(data: BeliefNetworkRequest):
+    """Create a new belief network."""
+    from agent.shared import belief_engine
+    network = belief_engine.create_network(agent_id=data.agent_id)
+    return network.to_dict()
+
+
+@router.get("/belief-engine/network/{network_id}")
+async def belief_engine_get_network(network_id: str):
+    """Get a belief network."""
+    from agent.shared import belief_engine
+    network = belief_engine.get_network(network_id)
+    if network is None:
+        raise HTTPException(status_code=404, detail="Network not found")
+    return {"network_id": network.network_id, "agent_id": network.agent_id,
+            "total_beliefs": len(network.beliefs), "total_revisions": network.total_revisions,
+            "created_at": network.created_at, "updated_at": network.updated_at}
+
+
+@router.get("/belief-engine/networks")
+async def belief_engine_list_networks():
+    """List all belief networks."""
+    from agent.shared import belief_engine
+    networks = belief_engine.list_networks()
+    return {"networks": [{"network_id": n.network_id, "agent_id": n.agent_id,
+                          "total_beliefs": len(n.beliefs), "total_revisions": n.total_revisions} for n in networks],
+            "total": len(networks)}
+
+
+class BeliefAddRequest(BaseModel):
+    proposition: str
+    description: str = ""
+    category: str = "factual"
+    initial_confidence: float = 0.5
+    related_beliefs: list[str] = []
+    dependencies: list[str] = []
+    metadata: dict = {}
+
+
+@router.post("/belief-engine/network/{network_id}/belief")
+async def belief_engine_add_belief(network_id: str, data: BeliefAddRequest):
+    """Add a belief to a network."""
+    from agent.shared import belief_engine
+    from agent.agent_belief_state import BeliefCategory
+    belief = belief_engine.add_belief(
+        network_id=network_id,
+        proposition=data.proposition,
+        description=data.description,
+        category=BeliefCategory(data.category),
+        initial_confidence=data.initial_confidence,
+        related_beliefs=data.related_beliefs,
+        dependencies=data.dependencies,
+        metadata=data.metadata,
+    )
+    return belief.to_dict()
+
+
+@router.get("/belief-engine/network/{network_id}/belief/{belief_id}")
+async def belief_engine_get_belief(network_id: str, belief_id: str):
+    """Get a specific belief."""
+    from agent.shared import belief_engine
+    belief = belief_engine.get_belief(network_id, belief_id)
+    if belief is None:
+        raise HTTPException(status_code=404, detail="Belief not found")
+    return belief.to_dict()
+
+
+@router.get("/belief-engine/network/{network_id}/beliefs")
+async def belief_engine_list_beliefs(
+    network_id: str,
+    category: str | None = None,
+    status: str | None = None,
+    min_confidence: float | None = None,
+):
+    """List beliefs in a network."""
+    from agent.shared import belief_engine
+    from agent.agent_belief_state import BeliefCategory, BeliefStatus
+    cat = BeliefCategory(category) if category else None
+    st = BeliefStatus(status) if status else None
+    beliefs = belief_engine.list_beliefs(network_id, category=cat, status=st, min_confidence=min_confidence)
+    return {"beliefs": [b.to_dict() for b in beliefs], "total": len(beliefs)}
+
+
+class EvidenceAddRequest(BaseModel):
+    evidence_type: str = "observation"
+    strength: int = 2
+    content: str = ""
+    source: str = ""
+    reliability: float = 0.8
+
+
+@router.post("/belief-engine/evidence")
+async def belief_engine_add_evidence(data: EvidenceAddRequest):
+    """Add evidence."""
+    from agent.shared import belief_engine
+    from agent.agent_belief_state import EvidenceType, EvidenceStrength
+    evidence = belief_engine.add_evidence(
+        evidence_type=EvidenceType(data.evidence_type),
+        strength=EvidenceStrength(data.strength),
+        content=data.content,
+        source=data.source,
+        reliability=data.reliability,
+    )
+    return evidence.to_dict()
+
+
+@router.post("/belief-engine/network/{network_id}/belief/{belief_id}/evidence/{evidence_id}")
+async def belief_engine_link_evidence(network_id: str, belief_id: str, evidence_id: str):
+    """Link evidence to a belief."""
+    from agent.shared import belief_engine
+    belief = belief_engine.link_evidence(network_id, belief_id, evidence_id)
+    if belief is None:
+        raise HTTPException(status_code=404, detail="Belief or network not found")
+    return belief.to_dict()
+
+
+class BeliefReviseRequest(BaseModel):
+    evidence_id: str
+    reasoning: str = ""
+
+
+@router.post("/belief-engine/network/{network_id}/belief/{belief_id}/revise")
+async def belief_engine_revise(network_id: str, belief_id: str, data: BeliefReviseRequest):
+    """Revise a belief based on evidence."""
+    from agent.shared import belief_engine
+    revision = belief_engine.revise_belief(
+        network_id=network_id,
+        belief_id=belief_id,
+        evidence_id=data.evidence_id,
+        reasoning=data.reasoning,
+    )
+    if revision is None:
+        raise HTTPException(status_code=404, detail="Belief, evidence, or network not found")
+    return revision.to_dict()
+
+
+@router.get("/belief-engine/network/{network_id}/belief/{belief_id}/revisions")
+async def belief_engine_get_revisions(network_id: str, belief_id: str):
+    """Get revision history for a belief."""
+    from agent.shared import belief_engine
+    revisions = belief_engine.get_revisions(network_id, belief_id)
+    return {"revisions": [r.to_dict() for r in revisions], "total": len(revisions)}
+
+
+@router.post("/belief-engine/network/{network_id}/consistency")
+async def belief_engine_check_consistency(network_id: str):
+    """Check consistency of a belief network."""
+    from agent.shared import belief_engine
+    check = belief_engine.check_consistency(network_id)
+    return check.to_dict()
+
+
+@router.post("/belief-engine/network/{network_id}/belief/{belief_id}/propagate")
+async def belief_engine_propagate(network_id: str, belief_id: str):
+    """Propagate belief update to related beliefs."""
+    from agent.shared import belief_engine
+    updated_ids = belief_engine.propagate_update(network_id, belief_id)
+    return {"network_id": network_id, "source_belief": belief_id, "updated_beliefs": updated_ids}
+
+
+@router.get("/belief-engine/network/{network_id}/most-confident")
+async def belief_engine_most_confident(network_id: str, category: str | None = None, limit: int = 10):
+    """Get most confident beliefs."""
+    from agent.shared import belief_engine
+    from agent.agent_belief_state import BeliefCategory
+    cat = BeliefCategory(category) if category else None
+    beliefs = belief_engine.get_most_confident(network_id, category=cat, limit=limit)
+    return {"beliefs": [b.to_dict() for b in beliefs], "total": len(beliefs)}
+
+
+@router.get("/belief-engine/stats")
+async def belief_engine_stats():
+    """Get overall belief engine statistics."""
+    from agent.shared import belief_engine
+    return belief_engine.get_stats().to_dict()
