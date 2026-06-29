@@ -94,7 +94,7 @@ export const CodeSynthesisPanel: React.FC = () => {
     try {
       await api.codeSynthesis.planArchitecture({
         project_id: planForm.project_id.trim(),
-        components: planForm.components ? planForm.components.split(',').map((s: string) => s.trim()) : undefined,
+        components: planForm.components ? planForm.components.split(',').map((s: string) => s.trim()) : [],
         data_flow: planForm.data_flow || undefined,
         entry_point: planForm.entry_point || undefined,
         patterns: planForm.patterns ? planForm.patterns.split(',').map((s: string) => s.trim()) : undefined,
@@ -126,7 +126,7 @@ export const CodeSynthesisPanel: React.FC = () => {
   const handleTest = async () => {
     if (!testForm.project_id.trim() || !testForm.component_id.trim()) return;
     try {
-      await api.codeSynthesis.test({
+      await api.codeSynthesis.testComponent({
         project_id: testForm.project_id.trim(),
         component_id: testForm.component_id.trim(),
         test_result: testForm.test_result,
@@ -141,7 +141,7 @@ export const CodeSynthesisPanel: React.FC = () => {
   const handleRefine = async () => {
     if (!refineForm.project_id.trim() || !refineForm.component_id.trim() || !refineForm.improved_code.trim()) return;
     try {
-      await api.codeSynthesis.refine({
+      await api.codeSynthesis.refineComponent({
         project_id: refineForm.project_id.trim(),
         component_id: refineForm.component_id.trim(),
         improved_code: refineForm.improved_code.trim(),
