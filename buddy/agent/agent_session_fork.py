@@ -112,9 +112,9 @@ class SessionNode:
     """A node in the fork tree representing one session and its history."""
 
     session_id: str
+    root_session_id: str = ""
     parent_session_id: str | None = None
-    root_session_id: str
-    role: SessionNodeRole
+    role: SessionNodeRole = SessionNodeRole.ROOT
     status: ForkStatus = ForkStatus.ACTIVE
     messages: list[SessionMessage] = field(default_factory=list)
     fork_point: ForkPoint | None = None
