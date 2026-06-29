@@ -203,6 +203,23 @@ async def request_logging_middleware(request: Request, call_next):
     return response
 
 
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    """Return 400 Bad Request for invalid enum values or coercion failures.
+
+    Route handlers that convert request strings into Enums (e.g. ScoreScale,
+    GoalStatus, BeliefCategory) raise ValueError when the supplied value is
+    not a valid member. Without this handler those would surface as opaque
+    500 errors; surfacing them as 400 with the underlying message makes the
+    API contract clearer for clients.
+    """
+    logger.warning(f"Invalid value on {request.method} {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=400,
+        content={"detail": f"Invalid value: {exc}"},
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled error on {request.method} {request.url.path}: {exc}")
