@@ -184,6 +184,11 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'curiosityEngine', label: 'Curiosity', icon: '🔍' },
   { id: 'mentalSimulation', label: 'Mental', icon: '🧠' },
   { id: 'narrativeEngine', label: 'Narrative', icon: '📖' },
+  { id: 'cognitiveMapping', label: 'C-Map', icon: '🗺️' },
+  { id: 'biasDetector', label: 'Bias', icon: '⚠️' },
+  { id: 'cognitiveAffordance', label: 'Afford', icon: '🎯' },
+  { id: 'cognitiveScaffolding', label: 'Scaffold', icon: '🏗️' },
+  { id: 'affectiveEngine', label: 'Affect', icon: '💖' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
