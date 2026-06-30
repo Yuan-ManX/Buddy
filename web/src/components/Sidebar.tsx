@@ -169,6 +169,21 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'dialogueManager', label: 'Dialogue', icon: '💬' },
   { id: 'benchmarkEngine', label: 'Bench', icon: '📊' },
   { id: 'beliefEngine', label: 'Belief', icon: '🧠' },
+  { id: 'tracingPipeline', label: 'Trace', icon: '🔍' },
+  { id: 'quotaManager', label: 'Quota', icon: '🚦' },
+  { id: 'causalEngine', label: 'Causal', icon: '🔗' },
+  { id: 'temporalEngine', label: 'Temporal', icon: '📅' },
+  { id: 'anomalyDetector', label: 'Anomaly', icon: '🚨' },
+  { id: 'scenarioSimulator', label: 'Scenario', icon: '🎯' },
+  { id: 'explanationSynthesizer', label: 'Explain', icon: '💡' },
+  { id: 'knowledgeDistiller', label: 'Distill', icon: '🎓' },
+  { id: 'attentionAllocator', label: 'Attention', icon: '🔬' },
+  { id: 'ethicalDeliberation', label: 'Ethics', icon: '🛡' },
+  { id: 'conceptFormation', label: 'Concept', icon: '🧩' },
+  { id: 'analogyEngine', label: 'Analogy', icon: '🔄' },
+  { id: 'curiosityEngine', label: 'Curiosity', icon: '🔍' },
+  { id: 'mentalSimulation', label: 'Mental', icon: '🧠' },
+  { id: 'narrativeEngine', label: 'Narrative', icon: '📖' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
