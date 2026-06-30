@@ -181,6 +181,21 @@ import { GoalManagerPanel } from './components/GoalManagerPanel';
 import { DialogueManagerPanel } from './components/DialogueManagerPanel';
 import { BenchmarkEnginePanel } from './components/BenchmarkEnginePanel';
 import { BeliefEnginePanel } from './components/BeliefEnginePanel';
+import { TracingPipelinePanel } from './components/TracingPipelinePanel';
+import { QuotaManagerPanel } from './components/QuotaManagerPanel';
+import { CausalEnginePanel } from './components/CausalEnginePanel';
+import { TemporalEnginePanel } from './components/TemporalEnginePanel';
+import { AnomalyDetectorPanel } from './components/AnomalyDetectorPanel';
+import { ScenarioSimulatorPanel } from './components/ScenarioSimulatorPanel';
+import { ExplanationSynthesizerPanel } from './components/ExplanationSynthesizerPanel';
+import { KnowledgeDistillerPanel } from './components/KnowledgeDistillerPanel';
+import { AttentionAllocatorPanel } from './components/AttentionAllocatorPanel';
+import { EthicalDeliberationPanel } from './components/EthicalDeliberationPanel';
+import { ConceptFormationPanel } from './components/ConceptFormationPanel';
+import { AnalogyEnginePanel } from './components/AnalogyEnginePanel';
+import { CuriosityEnginePanel } from './components/CuriosityEnginePanel';
+import { MentalSimulationPanel } from './components/MentalSimulationPanel';
+import { NarrativeEnginePanel } from './components/NarrativeEnginePanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { CommandPalette } from './components/CommandPalette';
@@ -734,6 +749,21 @@ export default function App() {
           {activeTab === 'dialogueManager' && <DialogueManagerPanel />}
           {activeTab === 'benchmarkEngine' && <BenchmarkEnginePanel />}
           {activeTab === 'beliefEngine' && <BeliefEnginePanel />}
+          {activeTab === 'tracingPipeline' && <TracingPipelinePanel />}
+          {activeTab === 'quotaManager' && <QuotaManagerPanel />}
+          {activeTab === 'causalEngine' && <CausalEnginePanel />}
+          {activeTab === 'temporalEngine' && <TemporalEnginePanel />}
+          {activeTab === 'anomalyDetector' && <AnomalyDetectorPanel />}
+          {activeTab === 'scenarioSimulator' && <ScenarioSimulatorPanel />}
+          {activeTab === 'explanationSynthesizer' && <ExplanationSynthesizerPanel />}
+          {activeTab === 'knowledgeDistiller' && <KnowledgeDistillerPanel />}
+          {activeTab === 'attentionAllocator' && <AttentionAllocatorPanel />}
+          {activeTab === 'ethicalDeliberation' && <EthicalDeliberationPanel />}
+          {activeTab === 'conceptFormation' && <ConceptFormationPanel />}
+          {activeTab === 'analogyEngine' && <AnalogyEnginePanel />}
+          {activeTab === 'curiosityEngine' && <CuriosityEnginePanel />}
+          {activeTab === 'mentalSimulation' && <MentalSimulationPanel />}
+          {activeTab === 'narrativeEngine' && <NarrativeEnginePanel />}
 {activeTab === 'experiments' && <ExperimentPanel />}
 {activeTab === 'issueBoard' && <IssueBoardPanel />}
 {activeTab === 'knowledgeBase' && <KnowledgeBasePanel agent={selectedAgent || { id: '', name: '', role: '', personality: '', instructions: '', avatar: '', is_active: false, created_at: '' }} />}
