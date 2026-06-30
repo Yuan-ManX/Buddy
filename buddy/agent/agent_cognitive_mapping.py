@@ -280,4 +280,164 @@ class CognitiveMap:
             "map_id": self.map_id,
             "agent_id": self.agent_id,
             "name": self.name,
-            "environment_type
+            "environment_type": self.environment_type.value
+            if isinstance(self.environment_type, EnvironmentType)
+            else str(self.environment_type),
+            "description": self.description,
+            "status": self.status.value
+            if isinstance(self.status, MapStatus)
+            else str(self.status),
+            "places": {
+                pid: p.to_dict() if hasattr(p, "to_dict") else dict(p)
+                for pid, p in self.places.items()
+            },
+            "edges": {
+                eid: e.to_dict() if hasattr(e, "to_dict") else dict(e)
+                for eid, e in self.edges.items()
+            },
+            "deltas": [
+                d.to_dict() if hasattr(d, "to_dict") else dict(d)
+                for d in self.deltas
+            ],
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+@dataclass
+class MappingStats:
+    """Aggregate statistics across the entire cognitive mapping engine.
+
+    Computed on demand by ``AgentCognitiveMapping.get_stats``. The
+    maps_by_environment dict maps environment type values to the number of
+    maps of that type currently registered.
+    """
+    total_maps: int = 0
+    active_maps: int = 0
+    total_places: int = 0
+    total_edges: int = 0
+    total_anchors: int = 0
+    total_deltas: int = 0
+    maps_by_environment: Dict[str, int] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize these stats to a plain dict."""
+        return {
+            "total_maps": self.total_maps,
+            "active_maps": self.active_maps,
+            "total_places": self.total_places,
+            "total_edges": self.total_edges,
+            "total_anchors": self.total_anchors,
+            "total_deltas": self.total_deltas,
+            "maps_by_environment": dict(self.maps_by_environment),
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Engine
+# ═══════════════════════════════════════════════════════════════════════════
+
+class AgentCognitiveMapping:
+    """Cognitive mapping engine with map/place/anchor/edge management.
+
+    Maintains a registry of cognitive maps keyed by map_id. Each map owns its
+    own places, edges, anchors, and deltas. All state mutations are guarded
+    by a single lock to ensure thread safety.
+
+    The engine supports a full map lifecycle: maps are created in DRAFT
+    status, transitioned to ACTIVE when ready for use, and eventually
+    ARCHIVED or marked STALE when no longer current. Places within a map are
+    connected by typed spatial relation edges and decorated with anchors that
+    the agent uses for self-localization.
+
+    Pathfinding uses breadth-first search over the directed edge graph, and
+    localization supports both coordinate matching (exact then nearest) and
+    anchor-label matching (with landmark/portal priority).
+    """
+
+    # Capacity limits to bound memory use per engine instance.
+    MAX_MAPS: int = 500
+    MAX_PLACES_PER_MAP: int = 2000
+    MAX_EDGES_PER_MAP: int = 5000
+    MAX_ANCHORS_PER_PLACE: int = 50
+    MAX_DELTAS_PER_MAP: int = 5000
+
+    # Localization tuning constants.
+    _LOCALIZE_COORD_TOLERANCE: float = 1e-6  # exact match tolerance for coords
+
+    def __init__(self) -> None:
+        self._maps: Dict[str, CognitiveMap] = {}
+        self._lock = threading.Lock()
+        # Internal engine creation time, used for diagnostics. Stored as a
+        # monotonic-ish float rather than an ISO string for easy comparison.
+        self._created_at: float = time.time()
+
+    # ── Map Management ──────────────────────────────────────────────
+
+    def create_map(
+        self,
+        agent_id: str,
+        name: str,
+        environment_type: EnvironmentType,
+        description: str = "",
+    ) -> CognitiveMap:
+        """Create a new cognitive map and register it with the engine.
+
+        Args:
+            agent_id: Agent that owns the map.
+            name: Human-readable map name.
+            environment_type: Type of environment the map describes. May be
+                passed as an ``EnvironmentType`` or its string value.
+            description: Optional longer description of the map's purpose.
+
+        Returns:
+            The newly created ``CognitiveMap`` in DRAFT status.
+
+        Raises:
+            RuntimeError: if the map registry is full and no map can be
+                evicted to make room.
+        """
+        if isinstance(environment_type, str):
+            environment_type = EnvironmentType(environment_type)
+        with self._lock:
+            if len(self._maps) >= self.MAX_MAPS:
+                # Evict the oldest STALE or ARCHIVED map if possible.
+                evicted = False
+                for candidate_id, candidate in list(self._maps.items()):
+                    if candidate.status in (MapStatus.STALE, MapStatus.ARCHIVED):
+                        del self._maps[candidate_id]
+                        evicted = True
+                        break
+                if not evicted:
+                    raise RuntimeError("cognitive map registry is full")
+            cmap = CognitiveMap(
+                agent_id=agent_id,
+                name=name,
+                environment_type=environment_type,
+                description=description,
+                status=MapStatus.DRAFT,
+            )
+            self._maps[cmap.map_id] = cmap
+            return cmap
+
+    def get_map(self, map_id: str) -> Optional[CognitiveMap]:
+        """Retrieve a cognitive map by its identifier.
+
+        Args:
+            map_id: Identifier of the map to retrieve.
+
+        Returns:
+            The matching ``CognitiveMap``, or ``None`` if not found.
+        """
+        with self._lock:
+            return self._maps.get(map_id)
+
+    def list_maps(
+        self,
+        agent_id: Optional[str] = None,
+        environment_type: Optional[EnvironmentType] = None,
+    ) -> List[CognitiveMap]:
+        """List cognitive maps, optionally filtered by agent or environment.
+
+        Args:
+            agent
