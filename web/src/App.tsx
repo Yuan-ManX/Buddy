@@ -196,6 +196,11 @@ import { AnalogyEnginePanel } from './components/AnalogyEnginePanel';
 import { CuriosityEnginePanel } from './components/CuriosityEnginePanel';
 import { MentalSimulationPanel } from './components/MentalSimulationPanel';
 import { NarrativeEnginePanel } from './components/NarrativeEnginePanel';
+import { CognitiveMappingPanel } from './components/CognitiveMappingPanel';
+import { BiasDetectorPanel } from './components/BiasDetectorPanel';
+import { CognitiveAffordancePanel } from './components/CognitiveAffordancePanel';
+import { CognitiveScaffoldingPanel } from './components/CognitiveScaffoldingPanel';
+import { AffectiveEnginePanel } from './components/AffectiveEnginePanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { CommandPalette } from './components/CommandPalette';
@@ -764,6 +769,11 @@ export default function App() {
           {activeTab === 'curiosityEngine' && <CuriosityEnginePanel />}
           {activeTab === 'mentalSimulation' && <MentalSimulationPanel />}
           {activeTab === 'narrativeEngine' && <NarrativeEnginePanel />}
+          {activeTab === 'cognitiveMapping' && <CognitiveMappingPanel />}
+          {activeTab === 'biasDetector' && <BiasDetectorPanel />}
+          {activeTab === 'cognitiveAffordance' && <CognitiveAffordancePanel />}
+          {activeTab === 'cognitiveScaffolding' && <CognitiveScaffoldingPanel />}
+          {activeTab === 'affectiveEngine' && <AffectiveEnginePanel />}
 {activeTab === 'experiments' && <ExperimentPanel />}
 {activeTab === 'issueBoard' && <IssueBoardPanel />}
 {activeTab === 'knowledgeBase' && <KnowledgeBasePanel agent={selectedAgent || { id: '', name: '', role: '', personality: '', instructions: '', avatar: '', is_active: false, created_at: '' }} />}
