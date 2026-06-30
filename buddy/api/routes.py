@@ -27401,3 +27401,3082 @@ async def belief_engine_stats():
     """Get overall belief engine statistics."""
     from agent.shared import belief_engine
     return belief_engine.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Tracing Pipeline Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TraceStartRequest(BaseModel):
+    agent_id: str = ""
+    root_span_name: str
+    resource: str = ""
+    attributes: dict = {}
+
+
+@router.post("/tracing/trace")
+async def tracing_start_trace(data: TraceStartRequest):
+    """Start a new distributed trace with a root span."""
+    from agent.shared import tracing_pipeline
+    trace = tracing_pipeline.start_trace(
+        agent_id=data.agent_id,
+        root_span_name=data.root_span_name,
+        resource=data.resource,
+        attributes=data.attributes,
+    )
+    return trace.to_dict()
+
+
+class SpanStartRequest(BaseModel):
+    name: str
+    parent_span_id: str | None = None
+    kind: str = "internal"
+    agent_id: str = ""
+    resource: str = ""
+    attributes: dict = {}
+
+
+@router.post("/tracing/trace/{trace_id}/span")
+async def tracing_start_span(trace_id: str, data: SpanStartRequest):
+    """Start a new span within a trace."""
+    from agent.shared import tracing_pipeline
+    from agent.agent_tracing_pipeline import SpanKind
+    span = tracing_pipeline.start_span(
+        trace_id=trace_id,
+        name=data.name,
+        parent_span_id=data.parent_span_id,
+        kind=SpanKind(data.kind),
+        agent_id=data.agent_id,
+        resource=data.resource,
+        attributes=data.attributes,
+    )
+    if span is None:
+        raise HTTPException(status_code=404, detail="Trace not found or span limit reached")
+    return span.to_dict()
+
+
+class SpanEndRequest(BaseModel):
+    status: str = "ok"
+    status_message: str = ""
+
+
+@router.post("/tracing/span/{span_id}/end")
+async def tracing_end_span(span_id: str, data: SpanEndRequest):
+    """End a span."""
+    from agent.shared import tracing_pipeline
+    from agent.agent_tracing_pipeline import SpanStatus
+    span = tracing_pipeline.end_span(span_id, status=SpanStatus(data.status), status_message=data.status_message)
+    if span is None:
+        raise HTTPException(status_code=404, detail="Span not found")
+    return span.to_dict()
+
+
+class SpanEventRequest(BaseModel):
+    name: str
+    payload: dict = {}
+    level: str = "info"
+
+
+@router.post("/tracing/span/{span_id}/event")
+async def tracing_add_event(span_id: str, data: SpanEventRequest):
+    """Add an event to a span."""
+    from agent.shared import tracing_pipeline
+    event = tracing_pipeline.add_span_event(span_id, data.name, data.payload, data.level)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Span not found")
+    return event.to_dict()
+
+
+class SpanAttributeRequest(BaseModel):
+    key: str
+    value: Any
+
+
+@router.post("/tracing/span/{span_id}/attribute")
+async def tracing_add_attribute(span_id: str, data: SpanAttributeRequest):
+    """Add or update an attribute on a span."""
+    from agent.shared import tracing_pipeline
+    success = tracing_pipeline.add_span_attribute(span_id, data.key, data.value)
+    if not success:
+        raise HTTPException(status_code=404, detail="Span not found")
+    return {"updated": True, "span_id": span_id, "key": data.key}
+
+
+class SpanLinkRequest(BaseModel):
+    linked_trace_id: str
+    linked_span_id: str
+    relationship: str = "follows_from"
+
+
+@router.post("/tracing/span/{span_id}/link")
+async def tracing_link_spans(span_id: str, data: SpanLinkRequest):
+    """Link a span to another trace's span."""
+    from agent.shared import tracing_pipeline
+    link = tracing_pipeline.link_spans(span_id, data.linked_trace_id, data.linked_span_id, data.relationship)
+    if link is None:
+        raise HTTPException(status_code=404, detail="Span not found")
+    return link.to_dict()
+
+
+@router.get("/tracing/trace/{trace_id}")
+async def tracing_get_trace(trace_id: str):
+    """Get a full trace by id."""
+    from agent.shared import tracing_pipeline
+    trace = tracing_pipeline.get_trace(trace_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail="Trace not found")
+    return trace.to_dict()
+
+
+@router.get("/tracing/span/{span_id}")
+async def tracing_get_span(span_id: str):
+    """Get a span by id."""
+    from agent.shared import tracing_pipeline
+    span = tracing_pipeline.get_span(span_id)
+    if span is None:
+        raise HTTPException(status_code=404, detail="Span not found")
+    return span.to_dict()
+
+
+@router.get("/tracing/traces")
+async def tracing_list_traces(agent_id: str | None = None, status: str | None = None, limit: int = 100):
+    """List traces with optional filters."""
+    from agent.shared import tracing_pipeline
+    from agent.agent_tracing_pipeline import SpanStatus
+    st = SpanStatus(status) if status else None
+    traces = tracing_pipeline.list_traces(agent_id=agent_id, status=st, limit=limit)
+    return {"traces": [t.to_dict() for t in traces], "total": len(traces)}
+
+
+@router.get("/tracing/trace/{trace_id}/summary")
+async def tracing_get_summary(trace_id: str):
+    """Get a trace summary including the critical path."""
+    from agent.shared import tracing_pipeline
+    summary = tracing_pipeline.get_trace_summary(trace_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Trace not found")
+    return summary
+
+
+@router.get("/tracing/stats")
+async def tracing_stats():
+    """Get overall tracing pipeline statistics."""
+    from agent.shared import tracing_pipeline
+    return tracing_pipeline.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Quota Manager Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class QuotaLimitRequest(BaseModel):
+    resource: str
+    quota_type: str = "request_count"
+    max_value: float = 100
+    window_seconds: float = 60.0
+    description: str = ""
+
+
+@router.post("/quota/limit")
+async def quota_register_limit(data: QuotaLimitRequest):
+    """Register a new quota limit for a resource."""
+    from agent.shared import quota_manager
+    from agent.agent_quota_manager import QuotaType
+    limit = quota_manager.register_limit(
+        resource=data.resource,
+        quota_type=QuotaType(data.quota_type),
+        max_value=data.max_value,
+        window_seconds=data.window_seconds,
+        description=data.description,
+    )
+    return limit.to_dict()
+
+
+@router.delete("/quota/limit/{limit_id}")
+async def quota_unregister_limit(limit_id: str):
+    """Remove a quota limit."""
+    from agent.shared import quota_manager
+    success = quota_manager.unregister_limit(limit_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Limit not found")
+    return {"deleted": True, "limit_id": limit_id}
+
+
+@router.get("/quota/limit/{limit_id}")
+async def quota_get_limit(limit_id: str):
+    """Get a specific quota limit."""
+    from agent.shared import quota_manager
+    limit = quota_manager.get_limit(limit_id)
+    if limit is None:
+        raise HTTPException(status_code=404, detail="Limit not found")
+    return limit.to_dict()
+
+
+@router.get("/quota/limits")
+async def quota_list_limits(resource: str | None = None):
+    """List quota limits."""
+    from agent.shared import quota_manager
+    limits = quota_manager.list_limits(resource=resource)
+    return {"limits": [l.to_dict() for l in limits], "total": len(limits)}
+
+
+class QuotaCheckRequest(BaseModel):
+    resource: str
+    quota_type: str = "request_count"
+    amount: float = 1.0
+
+
+@router.post("/quota/check")
+async def quota_check(data: QuotaCheckRequest):
+    """Check if a request would be within quota (does not consume)."""
+    from agent.shared import quota_manager
+    from agent.agent_quota_manager import QuotaType
+    allowed = quota_manager.check_quota(data.resource, QuotaType(data.quota_type), data.amount)
+    return {"allowed": allowed, "resource": data.resource}
+
+
+class QuotaConsumeRequest(BaseModel):
+    resource: str
+    quota_type: str = "request_count"
+    amount: float = 1.0
+
+
+@router.post("/quota/consume")
+async def quota_consume(data: QuotaConsumeRequest):
+    """Atomically check and consume quota."""
+    from agent.shared import quota_manager
+    from agent.agent_quota_manager import QuotaType
+    usage = quota_manager.consume_quota(data.resource, QuotaType(data.quota_type), data.amount)
+    if usage is None:
+        raise HTTPException(status_code=429, detail="Quota exhausted")
+    return usage.to_dict()
+
+
+class QuotaReleaseRequest(BaseModel):
+    resource: str
+    quota_type: str = "request_count"
+    amount: float = 1.0
+
+
+@router.post("/quota/release")
+async def quota_release(data: QuotaReleaseRequest):
+    """Release previously consumed quota."""
+    from agent.shared import quota_manager
+    from agent.agent_quota_manager import QuotaType
+    success = quota_manager.release_quota(data.resource, QuotaType(data.quota_type), data.amount)
+    return {"released": success, "resource": data.resource}
+
+
+@router.get("/quota/usage")
+async def quota_get_usage(resource: str, quota_type: str = "request_count"):
+    """Get current quota usage for a resource."""
+    from agent.shared import quota_manager
+    from agent.agent_quota_manager import QuotaType
+    usage = quota_manager.get_usage(resource, QuotaType(quota_type))
+    if usage is None:
+        raise HTTPException(status_code=404, detail="No usage recorded")
+    return usage.to_dict()
+
+
+@router.get("/quota/window")
+async def quota_get_window(resource: str):
+    """Get the rate-limit window for a resource."""
+    from agent.shared import quota_manager
+    window = quota_manager.get_window(resource)
+    if window is None:
+        raise HTTPException(status_code=404, detail="No window recorded")
+    return window.to_dict()
+
+
+class RetryPolicyRequest(BaseModel):
+    name: str
+    max_retries: int = 3
+    base_delay_ms: float = 100.0
+    max_delay_ms: float = 10000.0
+    strategy: str = "exponential_jitter"
+    retryable_status_codes: list[int] = []
+
+
+@router.post("/quota/retry-policy")
+async def quota_register_retry_policy(data: RetryPolicyRequest):
+    """Register a retry policy."""
+    from agent.shared import quota_manager
+    from agent.agent_quota_manager import RetryStrategy
+    policy = quota_manager.register_retry_policy(
+        name=data.name,
+        max_retries=data.max_retries,
+        base_delay_ms=data.base_delay_ms,
+        max_delay_ms=data.max_delay_ms,
+        strategy=RetryStrategy(data.strategy),
+        retryable_status_codes=data.retryable_status_codes,
+    )
+    return policy.to_dict()
+
+
+class RetryDelayRequest(BaseModel):
+    policy_id: str
+    attempt_number: int
+    last_status_code: int | None = None
+
+
+@router.post("/quota/retry-delay")
+async def quota_compute_retry_delay(data: RetryDelayRequest):
+    """Compute retry delay in milliseconds."""
+    from agent.shared import quota_manager
+    delay = quota_manager.compute_retry_delay(data.policy_id, data.attempt_number, data.last_status_code)
+    return {"delay_ms": delay, "will_retry": delay is not None}
+
+
+@router.get("/quota/backpressure")
+async def quota_backpressure():
+    """Get current backpressure level."""
+    from agent.shared import quota_manager
+    level = quota_manager.get_backpressure_level()
+    return {"backpressure_level": level.value if hasattr(level, 'value') else str(level)}
+
+
+@router.get("/quota/stats")
+async def quota_stats():
+    """Get overall quota manager statistics."""
+    from agent.shared import quota_manager
+    return quota_manager.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Causal Reasoning Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CausalGraphRequest(BaseModel):
+    name: str
+    description: str = ""
+
+
+@router.post("/causal/graph")
+async def causal_create_graph(data: CausalGraphRequest):
+    """Create a new causal graph."""
+    from agent.shared import causal_engine
+    graph = causal_engine.create_graph(name=data.name, description=data.description)
+    return graph.to_dict()
+
+
+@router.get("/causal/graph/{graph_id}")
+async def causal_get_graph(graph_id: str):
+    """Get a causal graph."""
+    from agent.shared import causal_engine
+    graph = causal_engine.get_graph(graph_id)
+    if graph is None:
+        raise HTTPException(status_code=404, detail="Graph not found")
+    return graph.to_dict()
+
+
+@router.get("/causal/graphs")
+async def causal_list_graphs():
+    """List all causal graphs."""
+    from agent.shared import causal_engine
+    graphs = causal_engine.list_graphs()
+    return {"graphs": [g.to_dict() for g in graphs], "total": len(graphs)}
+
+
+class CausalVariableRequest(BaseModel):
+    name: str
+    description: str = ""
+    variable_type: str = "observed"
+    domain: str = ""
+    current_value: Any = None
+    observable: bool = True
+
+
+@router.post("/causal/graph/{graph_id}/variable")
+async def causal_add_variable(graph_id: str, data: CausalVariableRequest):
+    """Add a variable to a causal graph."""
+    from agent.shared import causal_engine
+    from agent.agent_causal_reasoning import VariableType
+    var = causal_engine.add_variable(
+        graph_id=graph_id,
+        name=data.name,
+        description=data.description,
+        variable_type=VariableType(data.variable_type),
+        domain=data.domain,
+        current_value=data.current_value,
+        observable=data.observable,
+    )
+    if var is None:
+        raise HTTPException(status_code=404, detail="Graph not found")
+    return var.to_dict()
+
+
+@router.get("/causal/graph/{graph_id}/variable/{variable_id}")
+async def causal_get_variable(graph_id: str, variable_id: str):
+    """Get a specific variable."""
+    from agent.shared import causal_engine
+    var = causal_engine.get_variable(graph_id, variable_id)
+    if var is None:
+        raise HTTPException(status_code=404, detail="Variable not found")
+    return var.to_dict()
+
+
+@router.get("/causal/graph/{graph_id}/variables")
+async def causal_list_variables(graph_id: str, variable_type: str | None = None):
+    """List variables in a graph."""
+    from agent.shared import causal_engine
+    from agent.agent_causal_reasoning import VariableType
+    vt = VariableType(variable_type) if variable_type else None
+    variables = causal_engine.list_variables(graph_id, variable_type=vt)
+    return {"variables": [v.to_dict() for v in variables], "total": len(variables)}
+
+
+class CausalEdgeRequest(BaseModel):
+    source_id: str
+    target_id: str
+    relation: str = "causes"
+    strength: float = 0.5
+    evidence: str = "hypothetical"
+    description: str = ""
+    confidence: float = 0.5
+
+
+@router.post("/causal/graph/{graph_id}/edge")
+async def causal_add_edge(graph_id: str, data: CausalEdgeRequest):
+    """Add a causal edge between two variables."""
+    from agent.shared import causal_engine
+    from agent.agent_causal_reasoning import CausalRelation, EvidenceStrength
+    edge = causal_engine.add_edge(
+        graph_id=graph_id,
+        source_id=data.source_id,
+        target_id=data.target_id,
+        relation=CausalRelation(data.relation),
+        strength=data.strength,
+        evidence=EvidenceStrength(data.evidence),
+        description=data.description,
+        confidence=data.confidence,
+    )
+    if edge is None:
+        raise HTTPException(status_code=404, detail="Graph not found")
+    return edge.to_dict()
+
+
+@router.delete("/causal/graph/{graph_id}/edge/{edge_id}")
+async def causal_remove_edge(graph_id: str, edge_id: str):
+    """Remove a causal edge."""
+    from agent.shared import causal_engine
+    success = causal_engine.remove_edge(graph_id, edge_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Edge not found")
+    return {"deleted": True, "edge_id": edge_id}
+
+
+@router.get("/causal/graph/{graph_id}/edges")
+async def causal_list_edges(graph_id: str, source_id: str | None = None, target_id: str | None = None, relation: str | None = None):
+    """List edges in a graph."""
+    from agent.shared import causal_engine
+    from agent.agent_causal_reasoning import CausalRelation
+    rel = CausalRelation(relation) if relation else None
+    edges = causal_engine.list_edges(graph_id, source_id=source_id, target_id=target_id, relation=rel)
+    return {"edges": [e.to_dict() for e in edges], "total": len(edges)}
+
+
+@router.get("/causal/graph/{graph_id}/confounders")
+async def causal_find_confounders(graph_id: str):
+    """Find confounders in a causal graph."""
+    from agent.shared import causal_engine
+    report = causal_engine.find_confounders(graph_id)
+    if report is None:
+        return {"report": None, "message": "No confounders detected"}
+    return report.to_dict()
+
+
+@router.get("/causal/graph/{graph_id}/causes/{variable_id}")
+async def causal_get_causes(graph_id: str, variable_id: str):
+    """Get direct causes of a variable."""
+    from agent.shared import causal_engine
+    causes = causal_engine.get_direct_causes(graph_id, variable_id)
+    return {"variable_id": variable_id, "direct_causes": causes}
+
+
+@router.get("/causal/graph/{graph_id}/effects/{variable_id}")
+async def causal_get_effects(graph_id: str, variable_id: str):
+    """Get direct effects of a variable."""
+    from agent.shared import causal_engine
+    effects = causal_engine.get_effects(graph_id, variable_id)
+    return {"variable_id": variable_id, "direct_effects": effects}
+
+
+class CausalInterventionRequest(BaseModel):
+    variable_id: str
+    target_value: Any
+    rationale: str = ""
+    expected_effect: dict = {}
+
+
+@router.post("/causal/graph/{graph_id}/intervention")
+async def causal_propose_intervention(graph_id: str, data: CausalInterventionRequest):
+    """Propose a do-intervention on a variable."""
+    from agent.shared import causal_engine
+    intervention = causal_engine.propose_intervention(
+        graph_id=graph_id,
+        variable_id=data.variable_id,
+        target_value=data.target_value,
+        rationale=data.rationale,
+        expected_effect=data.expected_effect,
+    )
+    if intervention is None:
+        raise HTTPException(status_code=404, detail="Graph or variable not found")
+    return intervention.to_dict()
+
+
+class CausalInterventionUpdateRequest(BaseModel):
+    status: str = "active"
+    actual_effect: dict | None = None
+
+
+@router.put("/causal/intervention/{intervention_id}")
+async def causal_update_intervention(intervention_id: str, data: CausalInterventionUpdateRequest):
+    """Update intervention status."""
+    from agent.shared import causal_engine
+    from agent.agent_causal_reasoning import InterventionStatus
+    intervention = causal_engine.update_intervention_status(
+        intervention_id, InterventionStatus(data.status), data.actual_effect,
+    )
+    if intervention is None:
+        raise HTTPException(status_code=404, detail="Intervention not found")
+    return intervention.to_dict()
+
+
+@router.get("/causal/interventions")
+async def causal_list_interventions(graph_id: str | None = None, status: str | None = None):
+    """List interventions."""
+    from agent.shared import causal_engine
+    from agent.agent_causal_reasoning import InterventionStatus
+    st = InterventionStatus(status) if status else None
+    interventions = causal_engine.list_interventions(graph_id=graph_id, status=st)
+    return {"interventions": [i.to_dict() for i in interventions], "total": len(interventions)}
+
+
+@router.get("/causal/intervention/{intervention_id}/estimate")
+async def causal_estimate_effect(intervention_id: str):
+    """Estimate the effect of an intervention."""
+    from agent.shared import causal_engine
+    # Look up the intervention to get graph_id
+    all_interventions = causal_engine.list_interventions()
+    target = None
+    for inv in all_interventions:
+        if inv.intervention_id == intervention_id:
+            target = inv
+            break
+    if target is None:
+        raise HTTPException(status_code=404, detail="Intervention not found")
+    effect = causal_engine.estimate_effect(target.graph_id, intervention_id)
+    return {"intervention_id": intervention_id, "estimated_effect": effect}
+
+
+class CausalCounterfactualRequest(BaseModel):
+    premise: str
+    intervention_variable_id: str
+    observed_value: Any
+    hypothesized_value: Any
+    observed_outcome: dict
+    estimated_outcome: dict | None = None
+
+
+@router.post("/causal/graph/{graph_id}/counterfactual")
+async def causal_create_counterfactual(graph_id: str, data: CausalCounterfactualRequest):
+    """Create a counterfactual analysis."""
+    from agent.shared import causal_engine
+    cf = causal_engine.create_counterfactual(
+        graph_id=graph_id,
+        premise=data.premise,
+        intervention_variable_id=data.intervention_variable_id,
+        observed_value=data.observed_value,
+        hypothesized_value=data.hypothesized_value,
+        observed_outcome=data.observed_outcome,
+        estimated_outcome=data.estimated_outcome,
+    )
+    if cf is None:
+        raise HTTPException(status_code=404, detail="Graph not found")
+    return cf.to_dict()
+
+
+@router.get("/causal/counterfactuals")
+async def causal_list_counterfactuals(graph_id: str | None = None):
+    """List counterfactual analyses."""
+    from agent.shared import causal_engine
+    cfs = causal_engine.list_counterfactuals(graph_id=graph_id)
+    return {"counterfactuals": [c.to_dict() for c in cfs], "total": len(cfs)}
+
+
+@router.get("/causal/graph/{graph_id}/path")
+async def causal_get_path(graph_id: str, source_id: str, target_id: str):
+    """Find a causal path from source to target."""
+    from agent.shared import causal_engine
+    path = causal_engine.get_causal_path(graph_id, source_id, target_id)
+    return {"source_id": source_id, "target_id": target_id, "path": path}
+
+
+@router.get("/causal/stats")
+async def causal_stats():
+    """Get overall causal engine statistics."""
+    from agent.shared import causal_engine
+    return causal_engine.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Temporal Reasoning Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TemporalPlanRequest(BaseModel):
+    name: str
+    description: str = ""
+
+
+@router.post("/temporal/plan")
+async def temporal_create_plan(data: TemporalPlanRequest):
+    """Create a new temporal plan."""
+    from agent.shared import temporal_engine
+    plan = temporal_engine.create_plan(name=data.name, description=data.description)
+    return plan.to_dict()
+
+
+@router.get("/temporal/plan/{plan_id}")
+async def temporal_get_plan(plan_id: str):
+    """Get a temporal plan."""
+    from agent.shared import temporal_engine
+    plan = temporal_engine.get_plan(plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return plan.to_dict()
+
+
+@router.get("/temporal/plans")
+async def temporal_list_plans():
+    """List all temporal plans."""
+    from agent.shared import temporal_engine
+    plans = temporal_engine.list_plans()
+    return {"plans": [p.to_dict() for p in plans], "total": len(plans)}
+
+
+class TemporalEventRequest(BaseModel):
+    name: str
+    description: str = ""
+    start: float | None = None
+    end: float | None = None
+    duration: float | None = None
+    priority: int = 2
+    agent_id: str = ""
+    tags: list[str] = []
+    metadata: dict = {}
+
+
+@router.post("/temporal/plan/{plan_id}/event")
+async def temporal_add_event(plan_id: str, data: TemporalEventRequest):
+    """Add an event to a temporal plan."""
+    from agent.shared import temporal_engine
+    event = temporal_engine.add_event(
+        plan_id=plan_id,
+        name=data.name,
+        description=data.description,
+        start=data.start,
+        end=data.end,
+        duration=data.duration,
+        priority=data.priority,
+        agent_id=data.agent_id,
+        tags=data.tags,
+        metadata=data.metadata,
+    )
+    if event is None:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return event.to_dict()
+
+
+@router.get("/temporal/plan/{plan_id}/event/{event_id}")
+async def temporal_get_event(plan_id: str, event_id: str):
+    """Get a specific event."""
+    from agent.shared import temporal_engine
+    event = temporal_engine.get_event(plan_id, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return event.to_dict()
+
+
+@router.get("/temporal/plan/{plan_id}/events")
+async def temporal_list_events(plan_id: str, status: str | None = None):
+    """List events in a plan."""
+    from agent.shared import temporal_engine
+    from agent.agent_temporal_reasoning import EventStatus
+    st = EventStatus(status) if status else None
+    events = temporal_engine.list_events(plan_id, status=st)
+    return {"events": [e.to_dict() for e in events], "total": len(events)}
+
+
+class TemporalEventStatusRequest(BaseModel):
+    status: str
+
+
+@router.put("/temporal/plan/{plan_id}/event/{event_id}/status")
+async def temporal_update_event_status(plan_id: str, event_id: str, data: TemporalEventStatusRequest):
+    """Update event status."""
+    from agent.shared import temporal_engine
+    from agent.agent_temporal_reasoning import EventStatus
+    event = temporal_engine.update_event_status(plan_id, event_id, EventStatus(data.status))
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event or plan not found")
+    return event.to_dict()
+
+
+class TemporalConstraintRequest(BaseModel):
+    event_id: str | None = None
+    constraint_type: str = "ordering"
+    relation: str | None = None
+    target_event_id: str | None = None
+    min_value: float | None = None
+    max_value: float | None = None
+    deadline: float | None = None
+    description: str = ""
+
+
+@router.post("/temporal/plan/{plan_id}/constraint")
+async def temporal_add_constraint(plan_id: str, data: TemporalConstraintRequest):
+    """Add a temporal constraint."""
+    from agent.shared import temporal_engine
+    from agent.agent_temporal_reasoning import TemporalConstraintType, TemporalRelation
+    ct = TemporalConstraintType(data.constraint_type)
+    rel = TemporalRelation(data.relation) if data.relation else None
+    constraint = temporal_engine.add_constraint(
+        plan_id=plan_id,
+        event_id=data.event_id,
+        constraint_type=ct,
+        relation=rel,
+        target_event_id=data.target_event_id,
+        min_value=data.min_value,
+        max_value=data.max_value,
+        deadline=data.deadline,
+        description=data.description,
+    )
+    if constraint is None:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return constraint.to_dict()
+
+
+@router.get("/temporal/plan/{plan_id}/constraints")
+async def temporal_list_constraints(plan_id: str, constraint_type: str | None = None):
+    """List constraints in a plan."""
+    from agent.shared import temporal_engine
+    from agent.agent_temporal_reasoning import TemporalConstraintType
+    ct = TemporalConstraintType(constraint_type) if constraint_type else None
+    constraints = temporal_engine.list_constraints(plan_id, constraint_type=ct)
+    return {"constraints": [c.to_dict() for c in constraints], "total": len(constraints)}
+
+
+@router.get("/temporal/plan/{plan_id}/consistency")
+async def temporal_check_consistency(plan_id: str):
+    """Check temporal consistency of a plan."""
+    from agent.shared import temporal_engine
+    report = temporal_engine.check_consistency(plan_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return report.to_dict()
+
+
+class TemporalRelationRequest(BaseModel):
+    start_a: float
+    end_a: float | None = None
+    duration_a: float | None = None
+    start_b: float
+    end_b: float | None = None
+    duration_b: float | None = None
+
+
+@router.post("/temporal/relation")
+async def temporal_compute_relation(data: TemporalRelationRequest):
+    """Compute Allen's temporal relation between two intervals."""
+    from agent.shared import temporal_engine
+    from agent.agent_temporal_reasoning import TimeInterval
+    a = TimeInterval(start=data.start_a, end=data.end_a, duration=data.duration_a)
+    b = TimeInterval(start=data.start_b, end=data.end_b, duration=data.duration_b)
+    relation = temporal_engine.compute_relation(a, b)
+    return {"relation": relation.value if hasattr(relation, 'value') else str(relation)}
+
+
+@router.get("/temporal/plan/{plan_id}/order")
+async def temporal_get_order(plan_id: str):
+    """Get topological event ordering."""
+    from agent.shared import temporal_engine
+    order = temporal_engine.get_event_order(plan_id)
+    return {"plan_id": plan_id, "event_order": order}
+
+
+@router.get("/temporal/plan/{plan_id}/conflicts")
+async def temporal_find_conflicts(plan_id: str):
+    """Find temporal conflicts in a plan."""
+    from agent.shared import temporal_engine
+    conflicts = temporal_engine.find_conflicts(plan_id)
+    return {"plan_id": plan_id, "conflicts": [list(c) for c in conflicts]}
+
+
+@router.get("/temporal/plan/{plan_id}/critical-path")
+async def temporal_get_critical_path(plan_id: str):
+    """Get the critical path of a plan."""
+    from agent.shared import temporal_engine
+    path = temporal_engine.get_critical_path(plan_id)
+    return {"plan_id": plan_id, "critical_path": path}
+
+
+@router.get("/temporal/plan/{plan_id}/deadlines")
+async def temporal_check_deadlines(plan_id: str, current_time: float | None = None):
+    """Check for missed deadlines."""
+    from agent.shared import temporal_engine
+    missed = temporal_engine.check_deadlines(plan_id, current_time=current_time)
+    return {"plan_id": plan_id, "missed_deadlines": missed}
+
+
+@router.get("/temporal/stats")
+async def temporal_stats():
+    """Get overall temporal engine statistics."""
+    from agent.shared import temporal_engine
+    return temporal_engine.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Anomaly Detector Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class BaselineCreateRequest(BaseModel):
+    agent_id: str
+    sample_window: int = 100
+    min_samples: int = 30
+
+
+@router.post("/anomaly/baseline")
+async def anomaly_create_baseline(data: BaselineCreateRequest):
+    """Create a behavior baseline for an agent."""
+    from agent.shared import anomaly_detector
+    baseline = anomaly_detector.create_baseline(
+        agent_id=data.agent_id,
+        sample_window=data.sample_window,
+        min_samples=data.min_samples,
+    )
+    return baseline.to_dict()
+
+
+@router.get("/anomaly/baseline/{agent_id}")
+async def anomaly_get_baseline(agent_id: str):
+    """Get an agent's behavior baseline."""
+    from agent.shared import anomaly_detector
+    baseline = anomaly_detector.get_baseline(agent_id)
+    if baseline is None:
+        raise HTTPException(status_code=404, detail="Baseline not found")
+    return baseline.to_dict()
+
+
+@router.get("/anomaly/baselines")
+async def anomaly_list_baselines():
+    """List all behavior baselines."""
+    from agent.shared import anomaly_detector
+    baselines = anomaly_detector.list_baselines()
+    return {"baselines": [b.to_dict() for b in baselines], "total": len(baselines)}
+
+
+class MetricRegisterRequest(BaseModel):
+    name: str
+    description: str = ""
+    direction: str = "bidirectional"
+    unit: str = ""
+
+
+@router.post("/anomaly/baseline/{agent_id}/metric")
+async def anomaly_register_metric(agent_id: str, data: MetricRegisterRequest):
+    """Register a metric to track for anomaly detection."""
+    from agent.shared import anomaly_detector
+    from agent.agent_anomaly_detector import MetricDirection
+    metric = anomaly_detector.register_metric(
+        agent_id=agent_id,
+        name=data.name,
+        description=data.description,
+        direction=MetricDirection(data.direction),
+        unit=data.unit,
+    )
+    if metric is None:
+        raise HTTPException(status_code=404, detail="Baseline not found")
+    return metric.to_dict()
+
+
+class ObservationRequest(BaseModel):
+    metric_name: str
+    value: float
+    context: dict = {}
+
+
+@router.post("/anomaly/baseline/{agent_id}/observe")
+async def anomaly_record_observation(agent_id: str, data: ObservationRequest):
+    """Record an observation and detect anomalies."""
+    from agent.shared import anomaly_detector
+    anomaly = anomaly_detector.record_observation(
+        agent_id=agent_id,
+        metric_name=data.metric_name,
+        value=data.value,
+        context=data.context,
+    )
+    if anomaly is None:
+        return {"anomaly_detected": False, "agent_id": agent_id, "metric": data.metric_name}
+    return {"anomaly_detected": True, "anomaly": anomaly.to_dict()}
+
+
+class DriftDetectRequest(BaseModel):
+    window_size: int = 20
+
+
+@router.post("/anomaly/baseline/{agent_id}/drift")
+async def anomaly_detect_drift(agent_id: str, data: DriftDetectRequest):
+    """Detect behavioral drift."""
+    from agent.shared import anomaly_detector
+    report = anomaly_detector.detect_drift(agent_id, window_size=data.window_size)
+    if report is None:
+        return {"drift_detected": False, "agent_id": agent_id}
+    return {"drift_detected": True, "report": report.to_dict()}
+
+
+@router.get("/anomaly/anomalies")
+async def anomaly_list(agent_id: str | None = None, severity: str | None = None, resolved: bool | None = None, limit: int = 100):
+    """List anomaly events."""
+    from agent.shared import anomaly_detector
+    from agent.agent_anomaly_detector import AnomalySeverity
+    sev = AnomalySeverity(severity) if severity else None
+    anomalies = anomaly_detector.list_anomalies(agent_id=agent_id, severity=sev, resolved=resolved, limit=limit)
+    return {"anomalies": [a.to_dict() for a in anomalies], "total": len(anomalies)}
+
+
+@router.post("/anomaly/anomaly/{anomaly_id}/acknowledge")
+async def anomaly_acknowledge(anomaly_id: str):
+    """Acknowledge an anomaly."""
+    from agent.shared import anomaly_detector
+    success = anomaly_detector.acknowledge_anomaly(anomaly_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Anomaly not found")
+    return {"acknowledged": True, "anomaly_id": anomaly_id}
+
+
+@router.post("/anomaly/anomaly/{anomaly_id}/resolve")
+async def anomaly_resolve(anomaly_id: str):
+    """Resolve an anomaly."""
+    from agent.shared import anomaly_detector
+    success = anomaly_detector.resolve_anomaly(anomaly_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Anomaly not found")
+    return {"resolved": True, "anomaly_id": anomaly_id}
+
+
+@router.post("/anomaly/anomaly/{anomaly_id}/diagnose")
+async def anomaly_start_diagnosis(anomaly_id: str):
+    """Start a diagnosis for an anomaly."""
+    from agent.shared import anomaly_detector
+    report = anomaly_detector.start_diagnosis(anomaly_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Anomaly not found")
+    return report.to_dict()
+
+
+class DiagnosisUpdateRequest(BaseModel):
+    root_cause: str = ""
+    contributing_factors: list[str] = []
+    recommended_actions: list[str] = []
+    confidence: float = 0.0
+    status: str = "investigating"
+
+
+@router.put("/anomaly/diagnosis/{diagnosis_id}")
+async def anomaly_update_diagnosis(diagnosis_id: str, data: DiagnosisUpdateRequest):
+    """Update a diagnosis report."""
+    from agent.shared import anomaly_detector
+    from agent.agent_anomaly_detector import DiagnosisStatus
+    report = anomaly_detector.update_diagnosis(
+        diagnosis_id,
+        root_cause=data.root_cause,
+        contributing_factors=data.contributing_factors,
+        recommended_actions=data.recommended_actions,
+        confidence=data.confidence,
+        status=DiagnosisStatus(data.status),
+    )
+    if report is None:
+        raise HTTPException(status_code=404, detail="Diagnosis not found")
+    return report.to_dict()
+
+
+class DiagnosisResolveRequest(BaseModel):
+    resolution: str = ""
+
+
+@router.post("/anomaly/diagnosis/{diagnosis_id}/resolve")
+async def anomaly_resolve_diagnosis(diagnosis_id: str, data: DiagnosisResolveRequest):
+    """Resolve a diagnosis."""
+    from agent.shared import anomaly_detector
+    report = anomaly_detector.resolve_diagnosis(diagnosis_id, resolution=data.resolution)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Diagnosis not found")
+    return report.to_dict()
+
+
+@router.get("/anomaly/baseline/{agent_id}/summary")
+async def anomaly_baseline_summary(agent_id: str):
+    """Get a summary of an agent's baseline health."""
+    from agent.shared import anomaly_detector
+    summary = anomaly_detector.get_baseline_summary(agent_id)
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Baseline not found")
+    return summary
+
+
+@router.get("/anomaly/stats")
+async def anomaly_stats():
+    """Get overall anomaly detector statistics."""
+    from agent.shared import anomaly_detector
+    return anomaly_detector.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Scenario Simulator Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ScenarioCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    scenario_type: str = "stochastic"
+    max_steps: int = 20
+    num_simulations: int = 100
+    seed: int | None = None
+
+
+@router.post("/scenario")
+async def scenario_create(data: ScenarioCreateRequest):
+    """Create a new simulation scenario."""
+    from agent.shared import scenario_simulator
+    from agent.agent_scenario_simulator import ScenarioType
+    scenario = scenario_simulator.create_scenario(
+        name=data.name,
+        description=data.description,
+        scenario_type=ScenarioType(data.scenario_type),
+        max_steps=data.max_steps,
+        num_simulations=data.num_simulations,
+        seed=data.seed,
+    )
+    return scenario.to_dict()
+
+
+@router.get("/scenario/{scenario_id}")
+async def scenario_get(scenario_id: str):
+    """Get a scenario by ID."""
+    from agent.shared import scenario_simulator
+    scenario = scenario_simulator.get_scenario(scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    return scenario.to_dict()
+
+
+@router.get("/scenarios")
+async def scenario_list():
+    """List all scenarios."""
+    from agent.shared import scenario_simulator
+    scenarios = scenario_simulator.list_scenarios()
+    return {"scenarios": [s.to_dict() for s in scenarios], "total": len(scenarios)}
+
+
+@router.delete("/scenario/{scenario_id}")
+async def scenario_delete(scenario_id: str):
+    """Delete a scenario."""
+    from agent.shared import scenario_simulator
+    deleted = scenario_simulator.delete_scenario(scenario_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    return {"deleted": True, "scenario_id": scenario_id}
+
+
+class VariableAddRequest(BaseModel):
+    name: str
+    description: str = ""
+    variable_type: str = "continuous"
+    distribution: str = "uniform"
+    min_value: float | None = None
+    max_value: float | None = None
+    mean: float | None = None
+    std: float | None = None
+    categories: list[str] | None = None
+
+
+@router.post("/scenario/{scenario_id}/variable")
+async def scenario_add_variable(scenario_id: str, data: VariableAddRequest):
+    """Add a variable to a scenario."""
+    from agent.shared import scenario_simulator
+    from agent.agent_scenario_simulator import VariableType, DistributionType
+    variable = scenario_simulator.add_variable(
+        scenario_id,
+        name=data.name,
+        description=data.description,
+        variable_type=VariableType(data.variable_type),
+        distribution=DistributionType(data.distribution),
+        min_value=data.min_value,
+        max_value=data.max_value,
+        mean=data.mean,
+        std=data.std,
+        categories=data.categories,
+    )
+    if variable is None:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    return variable.to_dict()
+
+
+@router.get("/scenario/{scenario_id}/variables")
+async def scenario_list_variables(scenario_id: str):
+    """List variables in a scenario."""
+    from agent.shared import scenario_simulator
+    variables = scenario_simulator.list_variables(scenario_id)
+    return {"variables": [v.to_dict() for v in variables], "total": len(variables)}
+
+
+class ActionAddRequest(BaseModel):
+    name: str
+    description: str = ""
+    preconditions: list[str] | None = None
+    effects: dict[str, float] | None = None
+    probability: float = 1.0
+    cost: float = 0.0
+    duration: float = 1.0
+
+
+@router.post("/scenario/{scenario_id}/action")
+async def scenario_add_action(scenario_id: str, data: ActionAddRequest):
+    """Add an action to a scenario."""
+    from agent.shared import scenario_simulator
+    action = scenario_simulator.add_action(
+        scenario_id,
+        name=data.name,
+        description=data.description,
+        preconditions=data.preconditions,
+        effects=data.effects,
+        probability=data.probability,
+        cost=data.cost,
+        duration=data.duration,
+    )
+    if action is None:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    return action.to_dict()
+
+
+@router.get("/scenario/{scenario_id}/actions")
+async def scenario_list_actions(scenario_id: str):
+    """List actions in a scenario."""
+    from agent.shared import scenario_simulator
+    actions = scenario_simulator.list_actions(scenario_id)
+    return {"actions": [a.to_dict() for a in actions], "total": len(actions)}
+
+
+@router.post("/scenario/{scenario_id}/simulate")
+async def scenario_run_simulation(scenario_id: str):
+    """Run Monte Carlo simulation for a scenario."""
+    from agent.shared import scenario_simulator
+    report = scenario_simulator.run_simulation(scenario_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    return report.to_dict()
+
+
+@router.get("/scenario/{scenario_id}/report")
+async def scenario_get_report(scenario_id: str):
+    """Get the simulation report for a scenario."""
+    from agent.shared import scenario_simulator
+    report = scenario_simulator.get_report(scenario_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="No report found for scenario")
+    return report.to_dict()
+
+
+@router.get("/scenario/{scenario_id}/outcomes")
+async def scenario_list_outcomes(scenario_id: str):
+    """List simulation outcomes for a scenario."""
+    from agent.shared import scenario_simulator
+    outcomes = scenario_simulator.list_outcomes(scenario_id)
+    return {"outcomes": [o.to_dict() for o in outcomes], "total": len(outcomes)}
+
+
+class ScenarioCompareRequest(BaseModel):
+    scenario_ids: list[str]
+
+
+@router.post("/scenario/compare")
+async def scenario_compare(data: ScenarioCompareRequest):
+    """Compare multiple scenarios."""
+    from agent.shared import scenario_simulator
+    result = scenario_simulator.compare_scenarios(data.scenario_ids)
+    return result
+
+
+@router.get("/scenarios/stats")
+async def scenario_stats():
+    """Get scenario simulator statistics."""
+    from agent.shared import scenario_simulator
+    return scenario_simulator.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Explanation Synthesizer Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ExplanationRequestCreate(BaseModel):
+    decision_id: str
+    explanation_type: str = "decision"
+    audience: str = "technical"
+    context: dict | None = None
+    question: str = ""
+
+
+@router.post("/explanation/request")
+async def explanation_request(data: ExplanationRequestCreate):
+    """Request an explanation for a decision."""
+    from agent.shared import explanation_synthesizer
+    from agent.agent_explanation_synthesizer import ExplanationType, AudienceLevel
+    req = explanation_synthesizer.request_explanation(
+        decision_id=data.decision_id,
+        explanation_type=ExplanationType(data.explanation_type),
+        audience=AudienceLevel(data.audience),
+        context=data.context,
+        question=data.question,
+    )
+    return req.to_dict()
+
+
+@router.get("/explanation/request/{request_id}")
+async def explanation_get_request(request_id: str):
+    """Get an explanation request by ID."""
+    from agent.shared import explanation_synthesizer
+    req = explanation_synthesizer.get_request(request_id)
+    if req is None:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return req.to_dict()
+
+
+@router.get("/explanation/requests")
+async def explanation_list_requests():
+    """List all explanation requests."""
+    from agent.shared import explanation_synthesizer
+    requests = explanation_synthesizer.list_requests()
+    return {"requests": [r.to_dict() for r in requests], "total": len(requests)}
+
+
+@router.post("/explanation/{request_id}/generate")
+async def explanation_generate(request_id: str):
+    """Generate an explanation for a request."""
+    from agent.shared import explanation_synthesizer
+    explanation = explanation_synthesizer.generate_explanation(request_id)
+    if explanation is None:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return explanation.to_dict()
+
+
+@router.get("/explanation/traces")
+async def explanation_list_traces(agent_id: str | None = None):
+    """List decision traces, optionally filtered by agent ID."""
+    from agent.shared import explanation_synthesizer
+    traces = explanation_synthesizer.list_traces(agent_id=agent_id)
+    return {"traces": [t.to_dict() for t in traces], "total": len(traces)}
+
+
+@router.get("/explanation/{explanation_id}")
+async def explanation_get(explanation_id: str):
+    """Get an explanation by ID."""
+    from agent.shared import explanation_synthesizer
+    explanation = explanation_synthesizer.get_explanation(explanation_id)
+    if explanation is None:
+        raise HTTPException(status_code=404, detail="Explanation not found")
+    return explanation.to_dict()
+
+
+@router.get("/explanations")
+async def explanation_list(decision_id: str | None = None):
+    """List explanations, optionally filtered by decision ID."""
+    from agent.shared import explanation_synthesizer
+    explanations = explanation_synthesizer.list_explanations(decision_id=decision_id)
+    return {"explanations": [e.to_dict() for e in explanations], "total": len(explanations)}
+
+
+class TraceDecisionRequest(BaseModel):
+    agent_id: str
+    decision_id: str
+    action_taken: str
+    inputs: dict | None = None
+    reasoning_steps: list[str] | None = None
+    alternatives: list[str] | None = None
+
+
+@router.post("/explanation/trace")
+async def explanation_trace(data: TraceDecisionRequest):
+    """Trace a decision."""
+    from agent.shared import explanation_synthesizer
+    trace = explanation_synthesizer.trace_decision(
+        agent_id=data.agent_id,
+        decision_id=data.decision_id,
+        action_taken=data.action_taken,
+        inputs=data.inputs,
+        reasoning_steps=data.reasoning_steps,
+        alternatives=data.alternatives,
+    )
+    return trace.to_dict()
+
+
+@router.get("/explanation/trace/{trace_id}")
+async def explanation_get_trace(trace_id: str):
+    """Get a decision trace by ID."""
+    from agent.shared import explanation_synthesizer
+    trace = explanation_synthesizer.get_trace(trace_id)
+    if trace is None:
+        raise HTTPException(status_code=404, detail="Trace not found")
+    return trace.to_dict()
+
+
+class EvidenceAddRequest(BaseModel):
+    evidence_type: str = "data"
+    content: str
+    source: str = ""
+    weight: float = 0.5
+
+
+@router.post("/explanation/{explanation_id}/evidence")
+async def explanation_add_evidence(explanation_id: str, data: EvidenceAddRequest):
+    """Add evidence to an explanation."""
+    from agent.shared import explanation_synthesizer
+    from agent.agent_explanation_synthesizer import EvidenceType
+    evidence = explanation_synthesizer.add_evidence(
+        explanation_id,
+        evidence_type=EvidenceType(data.evidence_type),
+        content=data.content,
+        source=data.source,
+        weight=data.weight,
+    )
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="Explanation not found")
+    return evidence.to_dict()
+
+
+@router.get("/explanations/stats")
+async def explanation_stats():
+    """Get explanation synthesizer statistics."""
+    from agent.shared import explanation_synthesizer
+    return explanation_synthesizer.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Knowledge Distiller Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class SourceRegisterRequest(BaseModel):
+    source_type: str = "experience"
+    agent_id: str = ""
+    content: str
+    metadata: dict | None = None
+    relevance_score: float = 0.5
+
+
+@router.post("/knowledge/source")
+async def knowledge_register_source(data: SourceRegisterRequest):
+    """Register a knowledge source."""
+    from agent.shared import knowledge_distiller
+    from agent.agent_knowledge_distiller import SourceType
+    source = knowledge_distiller.register_source(
+        source_type=SourceType(data.source_type),
+        agent_id=data.agent_id,
+        content=data.content,
+        metadata=data.metadata,
+        relevance_score=data.relevance_score,
+    )
+    return source.to_dict()
+
+
+@router.get("/knowledge/source/{source_id}")
+async def knowledge_get_source(source_id: str):
+    """Get a knowledge source by ID."""
+    from agent.shared import knowledge_distiller
+    source = knowledge_distiller.get_source(source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return source.to_dict()
+
+
+@router.get("/knowledge/sources")
+async def knowledge_list_sources(agent_id: str | None = None):
+    """List knowledge sources, optionally filtered by agent ID."""
+    from agent.shared import knowledge_distiller
+    sources = knowledge_distiller.list_sources(agent_id=agent_id)
+    return {"sources": [s.to_dict() for s in sources], "total": len(sources)}
+
+
+class DistillRequest(BaseModel):
+    source_ids: list[str]
+    knowledge_type: str = "factual"
+    compression_level: str = "moderate"
+    title: str = ""
+    tags: list[str] | None = None
+
+
+@router.post("/knowledge/distill")
+async def knowledge_distill(data: DistillRequest):
+    """Distill knowledge from multiple sources."""
+    from agent.shared import knowledge_distiller
+    from agent.agent_knowledge_distiller import KnowledgeType, CompressionLevel
+    knowledge = knowledge_distiller.distill(
+        source_ids=data.source_ids,
+        knowledge_type=KnowledgeType(data.knowledge_type),
+        compression_level=CompressionLevel(data.compression_level),
+        title=data.title,
+        tags=data.tags,
+    )
+    return knowledge.to_dict()
+
+
+@router.get("/knowledge/{knowledge_id}")
+async def knowledge_get(knowledge_id: str):
+    """Get distilled knowledge by ID."""
+    from agent.shared import knowledge_distiller
+    knowledge = knowledge_distiller.get_knowledge(knowledge_id)
+    if knowledge is None:
+        raise HTTPException(status_code=404, detail="Knowledge not found")
+    return knowledge.to_dict()
+
+
+@router.get("/knowledge")
+async def knowledge_list(knowledge_type: str | None = None, agent_id: str | None = None):
+    """List distilled knowledge, optionally filtered."""
+    from agent.shared import knowledge_distiller
+    from agent.agent_knowledge_distiller import KnowledgeType
+    kt = KnowledgeType(knowledge_type) if knowledge_type else None
+    items = knowledge_distiller.list_knowledge(knowledge_type=kt, agent_id=agent_id)
+    return {"knowledge": [k.to_dict() for k in items], "total": len(items)}
+
+
+class TransferRequest(BaseModel):
+    knowledge_id: str
+    source_agent_id: str
+    target_agent_id: str
+
+
+@router.post("/knowledge/transfer")
+async def knowledge_transfer(data: TransferRequest):
+    """Transfer knowledge between agents."""
+    from agent.shared import knowledge_distiller
+    transfer = knowledge_distiller.transfer_knowledge(
+        knowledge_id=data.knowledge_id,
+        source_agent_id=data.source_agent_id,
+        target_agent_id=data.target_agent_id,
+    )
+    return transfer.to_dict()
+
+
+@router.get("/knowledge/transfer/{transfer_id}")
+async def knowledge_get_transfer(transfer_id: str):
+    """Get a knowledge transfer by ID."""
+    from agent.shared import knowledge_distiller
+    transfer = knowledge_distiller.get_transfer(transfer_id)
+    if transfer is None:
+        raise HTTPException(status_code=404, detail="Transfer not found")
+    return transfer.to_dict()
+
+
+@router.get("/knowledge-distiller/transfers")
+async def knowledge_list_transfers(source_agent_id: str | None = None, target_agent_id: str | None = None):
+    """List knowledge transfers."""
+    from agent.shared import knowledge_distiller
+    transfers = knowledge_distiller.list_transfers(source_agent_id=source_agent_id, target_agent_id=target_agent_id)
+    return {"transfers": [t.to_dict() for t in transfers], "total": len(transfers)}
+
+
+@router.post("/knowledge/transfer/{transfer_id}/acknowledge")
+async def knowledge_acknowledge_transfer(transfer_id: str):
+    """Acknowledge a knowledge transfer."""
+    from agent.shared import knowledge_distiller
+    transfer = knowledge_distiller.acknowledge_transfer(transfer_id)
+    if transfer is None:
+        raise HTTPException(status_code=404, detail="Transfer not found")
+    return transfer.to_dict()
+
+
+class KnowledgeQueryRequest(BaseModel):
+    agent_id: str = ""
+    query_text: str
+    top_k: int = 5
+
+
+@router.post("/knowledge/query")
+async def knowledge_query(data: KnowledgeQueryRequest):
+    """Query distilled knowledge."""
+    from agent.shared import knowledge_distiller
+    result = knowledge_distiller.query_knowledge(
+        agent_id=data.agent_id,
+        query_text=data.query_text,
+        top_k=data.top_k,
+    )
+    return result.to_dict()
+
+
+@router.get("/knowledge-distiller/stats")
+async def knowledge_stats():
+    """Get knowledge distiller statistics."""
+    from agent.shared import knowledge_distiller
+    return knowledge_distiller.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Attention Allocator Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class BudgetCreateRequest(BaseModel):
+    agent_id: str
+    total_budget: float = 100.0
+    mode: str = "divided"
+    max_concurrent_targets: int = 5
+
+
+@router.post("/attention/budget")
+async def attention_create_budget(data: BudgetCreateRequest):
+    """Create an attention budget for an agent."""
+    from agent.shared import attention_allocator
+    from agent.agent_attention_allocator import AttentionMode
+    budget = attention_allocator.create_budget(
+        agent_id=data.agent_id,
+        total_budget=data.total_budget,
+        mode=AttentionMode(data.mode),
+        max_concurrent_targets=data.max_concurrent_targets,
+    )
+    return budget.to_dict()
+
+
+@router.get("/attention/budget/{budget_id}")
+async def attention_get_budget(budget_id: str):
+    """Get an attention budget by ID."""
+    from agent.shared import attention_allocator
+    budget = attention_allocator.get_budget(budget_id)
+    if budget is None:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    return budget.to_dict()
+
+
+@router.get("/attention/budgets")
+async def attention_list_budgets():
+    """List all attention budgets."""
+    from agent.shared import attention_allocator
+    budgets = attention_allocator.list_budgets()
+    return {"budgets": [b.to_dict() for b in budgets], "total": len(budgets)}
+
+
+class ModeSetRequest(BaseModel):
+    mode: str
+
+
+@router.put("/attention/budget/{budget_id}/mode")
+async def attention_set_mode(budget_id: str, data: ModeSetRequest):
+    """Set the attention mode for a budget."""
+    from agent.shared import attention_allocator
+    from agent.agent_attention_allocator import AttentionMode
+    budget = attention_allocator.set_mode(budget_id, AttentionMode(data.mode))
+    if budget is None:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    return budget.to_dict()
+
+
+class TargetRegisterRequest(BaseModel):
+    name: str
+    description: str = ""
+    focus_type: str = "task"
+    priority: str = "medium"
+    base_weight: float = 0.5
+    urgency: float = 0.0
+    importance: float = 0.5
+    deadline: float | None = None
+    decay_function: str = "linear"
+    decay_rate: float = 0.01
+    metadata: dict | None = None
+
+
+@router.post("/attention/budget/{budget_id}/target")
+async def attention_register_target(budget_id: str, data: TargetRegisterRequest):
+    """Register an attention target."""
+    from agent.shared import attention_allocator
+    from agent.agent_attention_allocator import FocusType, PriorityLevel, DecayFunction
+    target = attention_allocator.register_target(
+        budget_id,
+        name=data.name,
+        description=data.description,
+        focus_type=FocusType(data.focus_type),
+        priority=PriorityLevel(data.priority),
+        base_weight=data.base_weight,
+        urgency=data.urgency,
+        importance=data.importance,
+        deadline=data.deadline,
+        decay_function=DecayFunction(data.decay_function),
+        decay_rate=data.decay_rate,
+        metadata=data.metadata,
+    )
+    if target is None:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    return target.to_dict()
+
+
+@router.get("/attention/budget/{budget_id}/target/{target_id}")
+async def attention_get_target(budget_id: str, target_id: str):
+    """Get an attention target."""
+    from agent.shared import attention_allocator
+    target = attention_allocator.get_target(budget_id, target_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Target not found")
+    return target.to_dict()
+
+
+@router.get("/attention/budget/{budget_id}/targets")
+async def attention_list_targets(budget_id: str, active_only: bool = False):
+    """List attention targets in a budget."""
+    from agent.shared import attention_allocator
+    targets = attention_allocator.list_targets(budget_id, active_only=active_only)
+    return {"targets": [t.to_dict() for t in targets], "total": len(targets)}
+
+
+class TargetUpdateRequest(BaseModel):
+    urgency: float | None = None
+    importance: float | None = None
+    priority: str | None = None
+    deadline: float | None = None
+
+
+@router.put("/attention/budget/{budget_id}/target/{target_id}")
+async def attention_update_target(budget_id: str, target_id: str, data: TargetUpdateRequest):
+    """Update an attention target."""
+    from agent.shared import attention_allocator
+    from agent.agent_attention_allocator import PriorityLevel
+    priority = PriorityLevel(data.priority) if data.priority else None
+    target = attention_allocator.update_target(
+        budget_id, target_id,
+        urgency=data.urgency,
+        importance=data.importance,
+        priority=priority,
+        deadline=data.deadline,
+    )
+    if target is None:
+        raise HTTPException(status_code=404, detail="Target not found")
+    return target.to_dict()
+
+
+@router.delete("/attention/budget/{budget_id}/target/{target_id}")
+async def attention_remove_target(budget_id: str, target_id: str):
+    """Remove an attention target."""
+    from agent.shared import attention_allocator
+    deleted = attention_allocator.remove_target(budget_id, target_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Target not found")
+    return {"deleted": True, "target_id": target_id}
+
+
+class AllocateRequest(BaseModel):
+    target_id: str
+    allocated_weight: float | None = None
+
+
+@router.post("/attention/budget/{budget_id}/allocate")
+async def attention_allocate(budget_id: str, data: AllocateRequest):
+    """Allocate attention to a target."""
+    from agent.shared import attention_allocator
+    allocation = attention_allocator.allocate(budget_id, data.target_id, allocated_weight=data.allocated_weight)
+    if allocation is None:
+        raise HTTPException(status_code=404, detail="Budget or target not found")
+    return allocation.to_dict()
+
+
+@router.delete("/attention/budget/{budget_id}/allocate/{target_id}")
+async def attention_deallocate(budget_id: str, target_id: str):
+    """Deallocate attention from a target."""
+    from agent.shared import attention_allocator
+    deleted = attention_allocator.deallocate(budget_id, target_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Allocation not found")
+    return {"deallocated": True, "target_id": target_id}
+
+
+@router.get("/attention/budget/{budget_id}/allocations")
+async def attention_get_allocations(budget_id: str, status: str | None = None):
+    """List allocations for a budget."""
+    from agent.shared import attention_allocator
+    from agent.agent_attention_allocator import AllocationStatus
+    st = AllocationStatus(status) if status else None
+    allocations = attention_allocator.get_allocations(budget_id, status=st)
+    return {"allocations": [a.to_dict() for a in allocations], "total": len(allocations)}
+
+
+@router.post("/attention/budget/{budget_id}/rebalance")
+async def attention_rebalance(budget_id: str):
+    """Rebalance attention allocations."""
+    from agent.shared import attention_allocator
+    allocations = attention_allocator.rebalance(budget_id)
+    return {"allocations": [a.to_dict() for a in allocations], "total": len(allocations)}
+
+
+@router.get("/attention/budget/{budget_id}/snapshot")
+async def attention_get_snapshot(budget_id: str):
+    """Get an attention snapshot."""
+    from agent.shared import attention_allocator
+    snapshot = attention_allocator.get_snapshot(budget_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    return snapshot.to_dict()
+
+
+@router.get("/attention/budget/{budget_id}/events")
+async def attention_get_events(budget_id: str, limit: int = 100):
+    """List attention events for a budget."""
+    from agent.shared import attention_allocator
+    events = attention_allocator.get_events(budget_id=budget_id, limit=limit)
+    return {"events": [e.to_dict() for e in events], "total": len(events)}
+
+
+@router.get("/attention/stats")
+async def attention_stats():
+    """Get attention allocator statistics."""
+    from agent.shared import attention_allocator
+    return attention_allocator.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Ethical Deliberator Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class PrincipleRegisterRequest(BaseModel):
+    name: str
+    category: str
+    description: str = ""
+    weight: float = 1.0
+    framework: str
+
+
+@router.post("/ethics/principle")
+async def ethics_register_principle(data: PrincipleRegisterRequest):
+    """Register an ethical principle."""
+    from agent.shared import ethical_deliberator
+    from agent.agent_ethical_deliberation import PrincipleCategory, EthicalFramework
+    principle = ethical_deliberator.register_principle(
+        name=data.name,
+        category=PrincipleCategory(data.category),
+        description=data.description,
+        weight=data.weight,
+        framework=EthicalFramework(data.framework),
+    )
+    return principle.to_dict()
+
+
+@router.get("/ethics/principle/{principle_id}")
+async def ethics_get_principle(principle_id: str):
+    """Get an ethical principle by ID."""
+    from agent.shared import ethical_deliberator
+    principle = ethical_deliberator.get_principle(principle_id)
+    if principle is None:
+        raise HTTPException(status_code=404, detail="Principle not found")
+    return principle.to_dict()
+
+
+@router.get("/ethics/principles")
+async def ethics_list_principles(framework: str | None = None):
+    """List ethical principles."""
+    from agent.shared import ethical_deliberator
+    from agent.agent_ethical_deliberation import EthicalFramework
+    fw = EthicalFramework(framework) if framework else None
+    principles = ethical_deliberator.list_principles(framework=fw)
+    return {"principles": [p.to_dict() for p in principles], "total": len(principles)}
+
+
+class DilemmaSubmitRequest(BaseModel):
+    title: str
+    description: str
+    proposed_action: str
+
+
+@router.post("/ethics/dilemma")
+async def ethics_submit_dilemma(data: DilemmaSubmitRequest):
+    """Submit an ethical dilemma."""
+    from agent.shared import ethical_deliberator
+    dilemma = ethical_deliberator.submit_dilemma(
+        title=data.title,
+        description=data.description,
+        proposed_action=data.proposed_action,
+    )
+    return dilemma.to_dict()
+
+
+@router.get("/ethics/dilemma/{dilemma_id}")
+async def ethics_get_dilemma(dilemma_id: str):
+    """Get an ethical dilemma by ID."""
+    from agent.shared import ethical_deliberator
+    dilemma = ethical_deliberator.get_dilemma(dilemma_id)
+    if dilemma is None:
+        raise HTTPException(status_code=404, detail="Dilemma not found")
+    return dilemma.to_dict()
+
+
+@router.get("/ethics/dilemmas")
+async def ethics_list_dilemmas(status: str | None = None):
+    """List ethical dilemmas."""
+    from agent.shared import ethical_deliberator
+    from agent.agent_ethical_deliberation import DeliberationStatus
+    st = DeliberationStatus(status) if status else None
+    dilemmas = ethical_deliberator.list_dilemmas(status=st)
+    return {"dilemmas": [d.to_dict() for d in dilemmas], "total": len(dilemmas)}
+
+
+class StakeholderAddRequest(BaseModel):
+    name: str
+    role: str = ""
+    interests: list[str] | None = None
+    vulnerability: float = 0.5
+
+
+@router.post("/ethics/dilemma/{dilemma_id}/stakeholder")
+async def ethics_add_stakeholder(dilemma_id: str, data: StakeholderAddRequest):
+    """Add a stakeholder to a dilemma."""
+    from agent.shared import ethical_deliberator
+    stakeholder = ethical_deliberator.add_stakeholder(
+        dilemma_id,
+        name=data.name,
+        role=data.role,
+        interests=data.interests,
+        vulnerability=data.vulnerability,
+    )
+    if stakeholder is None:
+        raise HTTPException(status_code=404, detail="Dilemma not found")
+    return stakeholder.to_dict()
+
+
+class ConsequenceAddRequest(BaseModel):
+    stakeholder_id: str
+    stakeholder_name: str = ""
+    impact: str = "neutral"
+    magnitude: float = 0.5
+    probability: float = 0.8
+    description: str = ""
+
+
+@router.post("/ethics/dilemma/{dilemma_id}/consequence")
+async def ethics_add_consequence(dilemma_id: str, data: ConsequenceAddRequest):
+    """Add a consequence to a dilemma."""
+    from agent.shared import ethical_deliberator
+    from agent.agent_ethical_deliberation import StakeholderImpact
+    consequence = ethical_deliberator.add_consequence(
+        dilemma_id,
+        stakeholder_id=data.stakeholder_id,
+        stakeholder_name=data.stakeholder_name,
+        impact=StakeholderImpact(data.impact),
+        magnitude=data.magnitude,
+        probability=data.probability,
+        description=data.description,
+    )
+    if consequence is None:
+        raise HTTPException(status_code=404, detail="Dilemma not found")
+    return consequence.to_dict()
+
+
+@router.post("/ethics/dilemma/{dilemma_id}/deliberate")
+async def ethics_deliberate(dilemma_id: str):
+    """Deliberate on an ethical dilemma."""
+    from agent.shared import ethical_deliberator
+    verdict = ethical_deliberator.deliberate(dilemma_id)
+    if verdict is None:
+        raise HTTPException(status_code=404, detail="Dilemma not found")
+    return verdict.to_dict()
+
+
+@router.get("/ethics/verdict/{verdict_id}")
+async def ethics_get_verdict(verdict_id: str):
+    """Get an ethical verdict by ID."""
+    from agent.shared import ethical_deliberator
+    verdict = ethical_deliberator.get_verdict(verdict_id)
+    if verdict is None:
+        raise HTTPException(status_code=404, detail="Verdict not found")
+    return verdict.to_dict()
+
+
+@router.get("/ethics/verdict")
+async def ethics_get_verdict_for_dilemma(dilemma_id: str):
+    """Get the verdict for a dilemma."""
+    from agent.shared import ethical_deliberator
+    verdict = ethical_deliberator.get_verdict_for_dilemma(dilemma_id)
+    if verdict is None:
+        raise HTTPException(status_code=404, detail="Verdict not found for dilemma")
+    return verdict.to_dict()
+
+
+@router.get("/ethics/verdicts")
+async def ethics_list_verdicts(verdict_type: str | None = None):
+    """List ethical verdicts."""
+    from agent.shared import ethical_deliberator
+    from agent.agent_ethical_deliberation import VerdictType
+    vt = VerdictType(verdict_type) if verdict_type else None
+    verdicts = ethical_deliberator.list_verdicts(verdict_type=vt)
+    return {"verdicts": [v.to_dict() for v in verdicts], "total": len(verdicts)}
+
+
+class AssessActionRequest(BaseModel):
+    action_description: str
+
+
+@router.post("/ethics/assess")
+async def ethics_assess_action(data: AssessActionRequest):
+    """Quick ethical assessment of an action."""
+    from agent.shared import ethical_deliberator
+    verdict = ethical_deliberator.assess_action(data.action_description)
+    return verdict.to_dict()
+
+
+@router.get("/ethics/stats")
+async def ethics_stats():
+    """Get ethical deliberator statistics."""
+    from agent.shared import ethical_deliberator
+    return ethical_deliberator.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Concept Formation Engine Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ConceptInstanceRegisterRequest(BaseModel):
+    agent_id: str
+    features: dict
+    source: str = ""
+    confidence: float = 0.5
+
+
+@router.post("/concept/instance")
+async def concept_register_instance(req: ConceptInstanceRegisterRequest):
+    """Register a concept instance."""
+    from agent.shared import concept_formation_engine
+    instance = concept_formation_engine.register_instance(
+        agent_id=req.agent_id, features=req.features, source=req.source, confidence=req.confidence
+    )
+    return instance.to_dict()
+
+
+@router.get("/concept/instance/{instance_id}")
+async def concept_get_instance(instance_id: str):
+    """Get a concept instance by ID."""
+    from agent.shared import concept_formation_engine
+    instance = concept_formation_engine.get_instance(instance_id)
+    if instance is None:
+        raise HTTPException(status_code=404, detail="Concept instance not found")
+    return instance.to_dict()
+
+
+@router.get("/concept/instances")
+async def concept_list_instances(concept_id: str | None = None, agent_id: str | None = None):
+    """List concept instances, optionally filtered by concept or agent."""
+    from agent.shared import concept_formation_engine
+    instances = concept_formation_engine.list_instances(concept_id=concept_id, agent_id=agent_id)
+    return {"instances": [i.to_dict() for i in instances], "total": len(instances)}
+
+
+class ConceptFormRequest(BaseModel):
+    name: str
+    description: str = ""
+    concept_type: str = "concrete"
+    instance_ids: list[str] = []
+    abstraction_level: str = "prototype"
+    parent_id: str = ""
+
+
+@router.post("/concept/form")
+async def concept_form_concept(req: ConceptFormRequest):
+    """Form a new concept from registered instances."""
+    from agent.shared import concept_formation_engine
+    concept = concept_formation_engine.form_concept(
+        name=req.name,
+        description=req.description,
+        concept_type=req.concept_type,
+        instance_ids=req.instance_ids,
+        abstraction_level=req.abstraction_level,
+        parent_id=req.parent_id,
+    )
+    return concept.to_dict()
+
+
+class ConceptClusterRequest(BaseModel):
+    instance_ids: list[str]
+    method: str = "kmeans"
+    num_clusters: int = 2
+
+
+@router.post("/concept/cluster")
+async def concept_cluster_instances(req: ConceptClusterRequest):
+    """Cluster instances into groups."""
+    from agent.shared import concept_formation_engine
+    clusters = concept_formation_engine.cluster_instances(
+        instance_ids=req.instance_ids, method=req.method, num_clusters=req.num_clusters
+    )
+    return {"clusters": [c.to_dict() for c in clusters], "total": len(clusters)}
+
+
+@router.get("/concept/cluster/{cluster_id}")
+async def concept_get_cluster(cluster_id: str):
+    """Get a concept cluster by ID."""
+    from agent.shared import concept_formation_engine
+    cluster = concept_formation_engine.get_cluster(cluster_id)
+    if cluster is None:
+        raise HTTPException(status_code=404, detail="Concept cluster not found")
+    return cluster.to_dict()
+
+
+class ConceptHierarchyRequest(BaseModel):
+    root_concept_id: str
+
+
+@router.post("/concept/hierarchy")
+async def concept_build_hierarchy(req: ConceptHierarchyRequest):
+    """Build an abstraction hierarchy rooted at the given concept."""
+    from agent.shared import concept_formation_engine
+    hierarchy = concept_formation_engine.build_hierarchy(root_concept_id=req.root_concept_id)
+    if hierarchy is None:
+        raise HTTPException(status_code=404, detail="Root concept not found")
+    return hierarchy.to_dict()
+
+
+@router.get("/concept/hierarchy/{hierarchy_id}")
+async def concept_get_hierarchy(hierarchy_id: str):
+    """Get a concept hierarchy by ID."""
+    from agent.shared import concept_formation_engine
+    hierarchy = concept_formation_engine.get_hierarchy(hierarchy_id)
+    if hierarchy is None:
+        raise HTTPException(status_code=404, detail="Concept hierarchy not found")
+    return hierarchy.to_dict()
+
+
+@router.get("/concept/hierarchies")
+async def concept_list_hierarchies():
+    """List all stored concept hierarchies."""
+    from agent.shared import concept_formation_engine
+    hierarchies = concept_formation_engine.list_hierarchies()
+    return {"hierarchies": [h.to_dict() for h in hierarchies], "total": len(hierarchies)}
+
+
+class ConceptSimilarRequest(BaseModel):
+    features: dict
+    metric: str = "cosine"
+    top_k: int = 5
+
+
+@router.post("/concept/similar")
+async def concept_find_similar(req: ConceptSimilarRequest):
+    """Find concepts most similar to a feature vector."""
+    from agent.shared import concept_formation_engine
+    results = concept_formation_engine.find_similar_concepts(
+        features=req.features, metric=req.metric, top_k=req.top_k
+    )
+    return {
+        "results": [{"concept": c.to_dict(), "similarity": s} for c, s in results],
+        "total": len(results),
+    }
+
+
+@router.get("/concepts")
+async def concept_list_concepts(
+    concept_type: str | None = None,
+    abstraction_level: str | None = None,
+    status: str | None = None,
+):
+    """List concepts, optionally filtered by type, level, or status."""
+    from agent.shared import concept_formation_engine
+    concepts = concept_formation_engine.list_concepts(
+        concept_type=concept_type, abstraction_level=abstraction_level, status=status
+    )
+    return {"concepts": [c.to_dict() for c in concepts], "total": len(concepts)}
+
+
+@router.get("/concepts/stats")
+async def concept_stats():
+    """Get concept formation engine statistics."""
+    from agent.shared import concept_formation_engine
+    return concept_formation_engine.get_stats().to_dict()
+
+
+@router.get("/concept/{concept_id}")
+async def concept_get_concept(concept_id: str):
+    """Get a concept by ID."""
+    from agent.shared import concept_formation_engine
+    concept = concept_formation_engine.get_concept(concept_id)
+    if concept is None:
+        raise HTTPException(status_code=404, detail="Concept not found")
+    return concept.to_dict()
+
+
+class ConceptUpdateRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    status: str | None = None
+
+
+@router.put("/concept/{concept_id}")
+async def concept_update_concept(concept_id: str, req: ConceptUpdateRequest):
+    """Update mutable fields of a concept."""
+    from agent.shared import concept_formation_engine
+    concept = concept_formation_engine.update_concept(
+        concept_id=concept_id, name=req.name, description=req.description, status=req.status
+    )
+    if concept is None:
+        raise HTTPException(status_code=404, detail="Concept not found")
+    return concept.to_dict()
+
+
+@router.delete("/concept/{concept_id}")
+async def concept_delete_concept(concept_id: str):
+    """Delete a concept."""
+    from agent.shared import concept_formation_engine
+    if not concept_formation_engine.delete_concept(concept_id):
+        raise HTTPException(status_code=404, detail="Concept not found")
+    return {"deleted": True, "concept_id": concept_id}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Analogy Engine Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class AnalogyDomainRegisterRequest(BaseModel):
+    name: str
+    description: str = ""
+    domain_type: str = "conceptual"
+
+
+@router.post("/analogy/domain")
+async def analogy_register_domain(req: AnalogyDomainRegisterRequest):
+    """Register a new analogy domain."""
+    from agent.shared import analogy_engine
+    from agent.agent_analogy_engine import DomainType
+    domain = analogy_engine.register_domain(
+        name=req.name, description=req.description, domain_type=DomainType(req.domain_type)
+    )
+    return domain.to_dict()
+
+
+@router.get("/analogy/domain/{domain_id}")
+async def analogy_get_domain(domain_id: str):
+    """Get an analogy domain by ID."""
+    from agent.shared import analogy_engine
+    domain = analogy_engine.get_domain(domain_id)
+    if domain is None:
+        raise HTTPException(status_code=404, detail="Analogy domain not found")
+    return domain.to_dict()
+
+
+@router.get("/analogy/domains")
+async def analogy_list_domains(domain_type: str | None = None):
+    """List registered domains, optionally filtered by type."""
+    from agent.shared import analogy_engine
+    from agent.agent_analogy_engine import DomainType
+    dt = DomainType(domain_type) if domain_type else None
+    domains = analogy_engine.list_domains(domain_type=dt)
+    return {"domains": [d.to_dict() for d in domains], "total": len(domains)}
+
+
+class AnalogyEntityAddRequest(BaseModel):
+    name: str
+    entity_type: str = ""
+    attributes: dict | None = None
+
+
+@router.post("/analogy/domain/{domain_id}/entity")
+async def analogy_add_entity(domain_id: str, req: AnalogyEntityAddRequest):
+    """Add an entity to a domain."""
+    from agent.shared import analogy_engine
+    entity = analogy_engine.add_entity(
+        domain_id=domain_id, name=req.name, entity_type=req.entity_type, attributes=req.attributes
+    )
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Analogy domain not found or capacity reached")
+    return entity.to_dict()
+
+
+@router.get("/analogy/domain/{domain_id}/entity/{entity_id}")
+async def analogy_get_entity(domain_id: str, entity_id: str):
+    """Get an entity from a domain by ID."""
+    from agent.shared import analogy_engine
+    entity = analogy_engine.get_entity(domain_id=domain_id, entity_id=entity_id)
+    if entity is None:
+        raise HTTPException(status_code=404, detail="Analogy entity not found")
+    return entity.to_dict()
+
+
+@router.get("/analogy/domain/{domain_id}/entities")
+async def analogy_list_entities(domain_id: str):
+    """List all entities in a domain."""
+    from agent.shared import analogy_engine
+    entities = analogy_engine.list_entities(domain_id=domain_id)
+    return {"entities": [e.to_dict() for e in entities], "total": len(entities)}
+
+
+class AnalogyRelationAddRequest(BaseModel):
+    source_id: str
+    target_id: str
+    relation_type: str
+    weight: float = 0.5
+
+
+@router.post("/analogy/domain/{domain_id}/relation")
+async def analogy_add_relation(domain_id: str, req: AnalogyRelationAddRequest):
+    """Add a relation between two entities in a domain."""
+    from agent.shared import analogy_engine
+    relation = analogy_engine.add_relation(
+        domain_id=domain_id,
+        source_id=req.source_id,
+        target_id=req.target_id,
+        relation_type=req.relation_type,
+        weight=req.weight,
+    )
+    if relation is None:
+        raise HTTPException(status_code=404, detail="Analogy domain or endpoint entity not found")
+    return relation.to_dict()
+
+
+@router.get("/analogy/domain/{domain_id}/relations")
+async def analogy_list_relations(domain_id: str):
+    """List all relations in a domain."""
+    from agent.shared import analogy_engine
+    relations = analogy_engine.list_relations(domain_id=domain_id)
+    return {"relations": [r.to_dict() for r in relations], "total": len(relations)}
+
+
+class AnalogyCreateRequest(BaseModel):
+    source_domain_id: str
+    target_domain_id: str
+
+
+@router.post("/analogy/create")
+async def analogy_create_analogy(req: AnalogyCreateRequest):
+    """Create an analogy by mapping source entities to target entities."""
+    from agent.shared import analogy_engine
+    analogy = analogy_engine.create_analogy(
+        source_domain_id=req.source_domain_id, target_domain_id=req.target_domain_id
+    )
+    if analogy is None:
+        raise HTTPException(status_code=404, detail="Source or target domain not found")
+    return analogy.to_dict()
+
+
+class AnalogyFindSimilarDomainsRequest(BaseModel):
+    source_domain_id: str
+    top_k: int = 5
+
+
+@router.post("/analogy/domains/similar")
+async def analogy_find_analogous_domains(req: AnalogyFindSimilarDomainsRequest):
+    """Rank domains by structural analogy to a source domain."""
+    from agent.shared import analogy_engine
+    results = analogy_engine.find_analogous_domains(
+        source_domain_id=req.source_domain_id, top_k=req.top_k
+    )
+    return {"results": results, "total": len(results)}
+
+
+class AnalogyValidateRequest(BaseModel):
+    validation_scores: dict[str, float]
+
+
+@router.put("/analogy/{analogy_id}/validate")
+async def analogy_validate_analogy(analogy_id: str, req: AnalogyValidateRequest):
+    """Validate an analogy with external scores."""
+    from agent.shared import analogy_engine
+    analogy = analogy_engine.validate_analogy(
+        analogy_id=analogy_id, validation_scores=req.validation_scores
+    )
+    if analogy is None:
+        raise HTTPException(status_code=404, detail="Analogy not found")
+    return analogy.to_dict()
+
+
+class AnalogyRefineRequest(BaseModel):
+    adjustments: dict[str, dict]
+
+
+@router.put("/analogy/{analogy_id}/refine")
+async def analogy_refine_analogy(analogy_id: str, req: AnalogyRefineRequest):
+    """Refine an analogy's mappings with targeted adjustments."""
+    from agent.shared import analogy_engine
+    analogy = analogy_engine.refine_analogy(analogy_id=analogy_id, adjustments=req.adjustments)
+    if analogy is None:
+        raise HTTPException(status_code=404, detail="Analogy not found")
+    return analogy.to_dict()
+
+
+class AnalogyTransferRequest(BaseModel):
+    knowledge_items: list[dict]
+
+
+@router.post("/analogy/{analogy_id}/transfer")
+async def analogy_transfer_knowledge(analogy_id: str, req: AnalogyTransferRequest):
+    """Transfer knowledge items from source to target along an analogy."""
+    from agent.shared import analogy_engine
+    result = analogy_engine.transfer_knowledge(
+        analogy_id=analogy_id, knowledge_items=req.knowledge_items
+    )
+    return result
+
+
+@router.get("/analogies")
+async def analogy_list_analogies(status: str | None = None):
+    """List analogies, optionally filtered by status."""
+    from agent.shared import analogy_engine
+    from agent.agent_analogy_engine import AnalogyStatus
+    st = AnalogyStatus(status) if status else None
+    analogies = analogy_engine.list_analogies(status=st)
+    return {"analogies": [a.to_dict() for a in analogies], "total": len(analogies)}
+
+
+@router.get("/analogies/stats")
+async def analogy_stats():
+    """Get analogy engine statistics."""
+    from agent.shared import analogy_engine
+    return analogy_engine.get_stats().to_dict()
+
+
+@router.get("/analogy/{analogy_id}")
+async def analogy_get_analogy(analogy_id: str):
+    """Get an analogy by ID."""
+    from agent.shared import analogy_engine
+    analogy = analogy_engine.get_analogy(analogy_id)
+    if analogy is None:
+        raise HTTPException(status_code=404, detail="Analogy not found")
+    return analogy.to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Curiosity Engine Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CuriosityProfileRegisterRequest(BaseModel):
+    agent_id: str
+    mode: str = "balanced"
+    baseline_curiosity: float = 0.5
+
+
+@router.post("/curiosity/profile")
+async def curiosity_register_profile(req: CuriosityProfileRegisterRequest):
+    """Register a curiosity profile for an agent."""
+    from agent.shared import curiosity_engine
+    from agent.agent_curiosity_engine import ExplorationMode
+    try:
+        profile = curiosity_engine.register_profile(
+            agent_id=req.agent_id,
+            mode=ExplorationMode(req.mode),
+            baseline_curiosity=req.baseline_curiosity,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return profile.to_dict()
+
+
+@router.get("/curiosity/profile/{agent_id}")
+async def curiosity_get_profile(agent_id: str):
+    """Get a curiosity profile by agent ID."""
+    from agent.shared import curiosity_engine
+    profile = curiosity_engine.get_profile(agent_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Curiosity profile not found")
+    return profile.to_dict()
+
+
+class CuriositySetModeRequest(BaseModel):
+    mode: str
+
+
+@router.put("/curiosity/profile/{agent_id}/mode")
+async def curiosity_set_mode(agent_id: str, req: CuriositySetModeRequest):
+    """Change an agent's exploration mode."""
+    from agent.shared import curiosity_engine
+    from agent.agent_curiosity_engine import ExplorationMode
+    try:
+        profile = curiosity_engine.set_mode(agent_id=agent_id, mode=ExplorationMode(req.mode))
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Curiosity profile not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return profile.to_dict()
+
+
+class CuriosityNoveltyRequest(BaseModel):
+    agent_id: str
+    item_id: str
+    features: list[float] | dict[str, float]
+    metric: str = "euclidean"
+
+
+@router.post("/curiosity/novelty")
+async def curiosity_detect_novelty(req: CuriosityNoveltyRequest):
+    """Detect how novel an item is for an agent."""
+    from agent.shared import curiosity_engine
+    from agent.agent_curiosity_engine import NoveltyMetric
+    try:
+        novelty = curiosity_engine.detect_novelty(
+            agent_id=req.agent_id,
+            item_id=req.item_id,
+            features=req.features,
+            metric=NoveltyMetric(req.metric),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return novelty.to_dict()
+
+
+class CuriosityGapRequest(BaseModel):
+    agent_id: str
+    topic: str
+    gap_type: str
+    description: str
+    estimated_value: float = 0.5
+    urgency: float = 0.0
+
+
+@router.post("/curiosity/gap")
+async def curiosity_identify_gap(req: CuriosityGapRequest):
+    """Record a new information gap for an agent."""
+    from agent.shared import curiosity_engine
+    from agent.agent_curiosity_engine import InformationGapType
+    try:
+        gap = curiosity_engine.identify_gap(
+            agent_id=req.agent_id,
+            topic=req.topic,
+            gap_type=InformationGapType(req.gap_type),
+            description=req.description,
+            estimated_value=req.estimated_value,
+            urgency=req.urgency,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return gap.to_dict()
+
+
+@router.get("/curiosity/gap/{gap_id}")
+async def curiosity_get_gap(gap_id: str):
+    """Get an information gap by ID."""
+    from agent.shared import curiosity_engine
+    gap = curiosity_engine.get_gap(gap_id)
+    if gap is None:
+        raise HTTPException(status_code=404, detail="Information gap not found")
+    return gap.to_dict()
+
+
+@router.get("/curiosity/gaps")
+async def curiosity_list_gaps(agent_id: str | None = None, status: str | None = None):
+    """List information gaps for an agent, optionally filtered by status."""
+    from agent.shared import curiosity_engine
+    if agent_id is None:
+        return {"gaps": [], "total": 0}
+    gaps = curiosity_engine.list_gaps(agent_id=agent_id, status=status)
+    return {"gaps": [g.to_dict() for g in gaps], "total": len(gaps)}
+
+
+class CuriosityGapResolveRequest(BaseModel):
+    resolution: str
+
+
+@router.put("/curiosity/gap/{gap_id}/resolve")
+async def curiosity_resolve_gap(gap_id: str, req: CuriosityGapResolveRequest):
+    """Mark an information gap as resolved."""
+    from agent.shared import curiosity_engine
+    try:
+        gap = curiosity_engine.resolve_gap(gap_id=gap_id, resolution=req.resolution)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Information gap not found")
+    return gap.to_dict()
+
+
+class CuriosityTargetRequest(BaseModel):
+    agent_id: str
+    topic: str
+    curiosity_type: str = "epistemic"
+    novelty_score: float = 0.0
+    information_value: float = 0.0
+    estimated_cost: float = 0.0
+
+
+@router.post("/curiosity/target")
+async def curiosity_propose_target(req: CuriosityTargetRequest):
+    """Propose a new exploration target for an agent."""
+    from agent.shared import curiosity_engine
+    from agent.agent_curiosity_engine import CuriosityType
+    try:
+        target = curiosity_engine.propose_target(
+            agent_id=req.agent_id,
+            topic=req.topic,
+            curiosity_type=CuriosityType(req.curiosity_type),
+            novelty_score=req.novelty_score,
+            information_value=req.information_value,
+            estimated_cost=req.estimated_cost,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return target.to_dict()
+
+
+@router.get("/curiosity/target/{target_id}")
+async def curiosity_get_target(target_id: str):
+    """Get an exploration target by ID."""
+    from agent.shared import curiosity_engine
+    target = curiosity_engine.get_target(target_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Exploration target not found")
+    return target.to_dict()
+
+
+@router.get("/curiosity/targets")
+async def curiosity_list_targets(agent_id: str | None = None, status: str | None = None):
+    """List exploration targets for an agent, optionally filtered by status."""
+    from agent.shared import curiosity_engine
+    from agent.agent_curiosity_engine import CuriosityStatus
+    if agent_id is None:
+        return {"targets": [], "total": 0}
+    st = CuriosityStatus(status) if status else None
+    targets = curiosity_engine.list_targets(agent_id=agent_id, status=st)
+    return {"targets": [t.to_dict() for t in targets], "total": len(targets)}
+
+
+@router.get("/curiosity/select/{agent_id}")
+async def curiosity_select_target(agent_id: str):
+    """Select the best pending exploration target for an agent."""
+    from agent.shared import curiosity_engine
+    target = curiosity_engine.select_target(agent_id=agent_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="No pending exploration target available")
+    return target.to_dict()
+
+
+class CuriosityResultRequest(BaseModel):
+    target_id: str
+    findings: str
+    knowledge_gained: float
+    satisfaction_score: float
+    duration: float
+    success: bool
+
+
+@router.post("/curiosity/result")
+async def curiosity_record_result(req: CuriosityResultRequest):
+    """Record the outcome of exploring a target."""
+    from agent.shared import curiosity_engine
+    try:
+        result = curiosity_engine.record_result(
+            target_id=req.target_id,
+            findings=req.findings,
+            knowledge_gained=req.knowledge_gained,
+            satisfaction_score=req.satisfaction_score,
+            duration=req.duration,
+            success=req.success,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Exploration target not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return result.to_dict()
+
+
+@router.get("/curiosity/results")
+async def curiosity_list_results(agent_id: str | None = None, target_id: str | None = None):
+    """List exploration results for an agent, optionally filtered by target."""
+    from agent.shared import curiosity_engine
+    if agent_id is None:
+        return {"results": [], "total": 0}
+    results = curiosity_engine.list_results(agent_id=agent_id, target_id=target_id)
+    return {"results": [r.to_dict() for r in results], "total": len(results)}
+
+
+@router.get("/curiosity/stats")
+async def curiosity_stats():
+    """Get curiosity engine statistics."""
+    from agent.shared import curiosity_engine
+    return curiosity_engine.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Mental Simulation Engine Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class MentalModelCreateRequest(BaseModel):
+    agent_id: str
+    name: str
+    model_type: str
+    initial_state: dict | None = None
+    transition_rules: list[str] | None = None
+
+
+@router.post("/mental-simulation/model")
+async def mental_sim_create_model(req: MentalModelCreateRequest):
+    """Create and register a new mental model."""
+    from agent.shared import mental_simulation_engine
+    from agent.agent_mental_simulation import ModelType
+    try:
+        model = mental_simulation_engine.create_model(
+            agent_id=req.agent_id,
+            name=req.name,
+            model_type=ModelType(req.model_type),
+            initial_state=req.initial_state,
+            transition_rules=req.transition_rules,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return model.to_dict()
+
+
+@router.get("/mental-simulation/model/{model_id}")
+async def mental_sim_get_model(model_id: str):
+    """Get a mental model by ID."""
+    from agent.shared import mental_simulation_engine
+    model = mental_simulation_engine.get_model(model_id)
+    if model is None:
+        raise HTTPException(status_code=404, detail="Mental model not found")
+    return model.to_dict()
+
+
+@router.get("/mental-simulation/models")
+async def mental_sim_list_models(agent_id: str | None = None):
+    """List registered mental models, optionally filtered by agent."""
+    from agent.shared import mental_simulation_engine
+    models = mental_simulation_engine.list_models(agent_id=agent_id)
+    return {"models": [m.to_dict() for m in models], "total": len(models)}
+
+
+class MentalModelUpdateRequest(BaseModel):
+    initial_state: dict | None = None
+    transition_rules: list[str] | None = None
+
+
+@router.put("/mental-simulation/model/{model_id}")
+async def mental_sim_update_model(model_id: str, req: MentalModelUpdateRequest):
+    """Update a mental model's initial state and/or transition rules."""
+    from agent.shared import mental_simulation_engine
+    try:
+        model = mental_simulation_engine.update_model(
+            model_id=model_id,
+            initial_state=req.initial_state,
+            transition_rules=req.transition_rules,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Mental model not found")
+    return model.to_dict()
+
+
+@router.delete("/mental-simulation/model/{model_id}")
+async def mental_sim_delete_model(model_id: str):
+    """Delete a mental model."""
+    from agent.shared import mental_simulation_engine
+    if not mental_simulation_engine.delete_model(model_id):
+        raise HTTPException(status_code=404, detail="Mental model not found")
+    return {"deleted": True, "model_id": model_id}
+
+
+class MentalSimulationCreateRequest(BaseModel):
+    model_id: str
+    agent_id: str
+    simulation_type: str
+    config: dict | None = None
+
+
+@router.post("/mental-simulation/simulation")
+async def mental_sim_create_simulation(req: MentalSimulationCreateRequest):
+    """Create and register a new simulation against an existing model."""
+    from agent.shared import mental_simulation_engine
+    from agent.agent_mental_simulation import SimulationType
+    try:
+        simulation = mental_simulation_engine.create_simulation(
+            model_id=req.model_id,
+            agent_id=req.agent_id,
+            simulation_type=SimulationType(req.simulation_type),
+            config=req.config,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Mental model not found")
+    return simulation.to_dict()
+
+
+@router.get("/mental-simulation/simulation/{simulation_id}")
+async def mental_sim_get_simulation(simulation_id: str):
+    """Get a simulation by ID."""
+    from agent.shared import mental_simulation_engine
+    simulation = mental_simulation_engine.get_simulation(simulation_id)
+    if simulation is None:
+        raise HTTPException(status_code=404, detail="Mental simulation not found")
+    return simulation.to_dict()
+
+
+@router.get("/mental-simulation/simulations")
+async def mental_sim_list_simulations(
+    agent_id: str | None = None, status: str | None = None
+):
+    """List simulations, optionally filtered by agent and/or status."""
+    from agent.shared import mental_simulation_engine
+    from agent.agent_mental_simulation import SimulationStatus
+    st = SimulationStatus(status) if status else None
+    simulations = mental_simulation_engine.list_simulations(agent_id=agent_id, status=st)
+    return {"simulations": [s.to_dict() for s in simulations], "total": len(simulations)}
+
+
+class MentalSimulationStepRequest(BaseModel):
+    action: str
+    pre_state: dict | None = None
+    post_state: dict | None = None
+    probability: float = 1.0
+    description: str = ""
+
+
+@router.post("/mental-simulation/simulation/{simulation_id}/step")
+async def mental_sim_add_step(simulation_id: str, req: MentalSimulationStepRequest):
+    """Append a step to a simulation."""
+    from agent.shared import mental_simulation_engine
+    try:
+        step = mental_simulation_engine.add_step(
+            simulation_id=simulation_id,
+            action=req.action,
+            pre_state=req.pre_state,
+            post_state=req.post_state,
+            probability=req.probability,
+            description=req.description,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Mental simulation not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return step.to_dict()
+
+
+@router.get("/mental-simulation/simulation/{simulation_id}/steps")
+async def mental_sim_list_steps(simulation_id: str):
+    """List all steps in a simulation."""
+    from agent.shared import mental_simulation_engine
+    steps = mental_simulation_engine.list_steps(simulation_id=simulation_id)
+    return {"steps": [s.to_dict() for s in steps], "total": len(steps)}
+
+
+class MentalSimulationOutcomeRequest(BaseModel):
+    final_state: dict | None = None
+    valence: str = "neutral"
+    utility: float = 0.0
+    probability: float = 1.0
+    confidence: str = "medium"
+    key_events: list[str] | None = None
+    summary: str = ""
+
+
+@router.post("/mental-simulation/simulation/{simulation_id}/outcome")
+async def mental_sim_record_outcome(simulation_id: str, req: MentalSimulationOutcomeRequest):
+    """Record an outcome for a simulation."""
+    from agent.shared import mental_simulation_engine
+    from agent.agent_mental_simulation import OutcomeValence, ConfidenceLevel
+    try:
+        outcome = mental_simulation_engine.record_outcome(
+            simulation_id=simulation_id,
+            final_state=req.final_state,
+            valence=OutcomeValence(req.valence),
+            utility=req.utility,
+            probability=req.probability,
+            confidence=ConfidenceLevel(req.confidence),
+            key_events=req.key_events,
+            summary=req.summary,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Mental simulation not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return outcome.to_dict()
+
+
+@router.get("/mental-simulation/simulation/{simulation_id}/outcomes")
+async def mental_sim_list_outcomes(simulation_id: str):
+    """List all outcomes for a simulation."""
+    from agent.shared import mental_simulation_engine
+    outcomes = mental_simulation_engine.list_outcomes(simulation_id=simulation_id)
+    return {"outcomes": [o.to_dict() for o in outcomes], "total": len(outcomes)}
+
+
+@router.get("/mental-simulation/simulation/{simulation_id}/compare")
+async def mental_sim_compare_outcomes(simulation_id: str):
+    """Compare and rank all outcomes recorded for a simulation."""
+    from agent.shared import mental_simulation_engine
+    return mental_simulation_engine.compare_outcomes(simulation_id=simulation_id)
+
+
+@router.put("/mental-simulation/simulation/{simulation_id}/cancel")
+async def mental_sim_cancel_simulation(simulation_id: str):
+    """Cancel a simulation."""
+    from agent.shared import mental_simulation_engine
+    try:
+        simulation = mental_simulation_engine.cancel_simulation(simulation_id=simulation_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Mental simulation not found")
+    return simulation.to_dict()
+
+
+@router.get("/mental-simulations/stats")
+async def mental_sim_stats():
+    """Get mental simulation engine statistics."""
+    from agent.shared import mental_simulation_engine
+    return mental_simulation_engine.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Narrative Engine Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class NarrativeCreateRequest(BaseModel):
+    agent_id: str
+    title: str
+    narrative_type: str = "personal"
+    perspective: str = "first_person"
+    tense: str = "past"
+
+
+@router.post("/narrative")
+async def narrative_create_narrative(req: NarrativeCreateRequest):
+    """Create and register a new narrative."""
+    from agent.shared import narrative_engine
+    from agent.agent_narrative_engine import NarrativeType, PerspectiveType, NarrativeTense
+    narrative = narrative_engine.create_narrative(
+        agent_id=req.agent_id,
+        title=req.title,
+        narrative_type=NarrativeType(req.narrative_type),
+        perspective=PerspectiveType(req.perspective),
+        tense=NarrativeTense(req.tense),
+    )
+    return narrative.to_dict()
+
+
+@router.get("/narrative/{narrative_id}")
+async def narrative_get_narrative(narrative_id: str):
+    """Get a narrative by ID."""
+    from agent.shared import narrative_engine
+    narrative = narrative_engine.get_narrative(narrative_id)
+    if narrative is None:
+        raise HTTPException(status_code=404, detail="Narrative not found")
+    return narrative.to_dict()
+
+
+@router.get("/narratives")
+async def narrative_list_narratives(
+    agent_id: str | None = None,
+    status: str | None = None,
+    narrative_type: str | None = None,
+):
+    """List narratives, optionally filtered by owner, status, and type."""
+    from agent.shared import narrative_engine
+    from agent.agent_narrative_engine import NarrativeStatus, NarrativeType
+    st = NarrativeStatus(status) if status else None
+    nt = NarrativeType(narrative_type) if narrative_type else None
+    narratives = narrative_engine.list_narratives(
+        agent_id=agent_id, status=st, narrative_type=nt
+    )
+    return {"narratives": [n.to_dict() for n in narratives], "total": len(narratives)}
+
+
+class NarrativeUpdateRequest(BaseModel):
+    title: str | None = None
+    summary: str | None = None
+    status: str | None = None
+
+
+@router.put("/narrative/{narrative_id}")
+async def narrative_update_narrative(narrative_id: str, req: NarrativeUpdateRequest):
+    """Update mutable fields of a narrative."""
+    from agent.shared import narrative_engine
+    from agent.agent_narrative_engine import NarrativeStatus
+    st = NarrativeStatus(req.status) if req.status else None
+    try:
+        narrative = narrative_engine.update_narrative(
+            narrative_id=narrative_id, title=req.title, summary=req.summary, status=st
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Narrative not found")
+    return narrative.to_dict()
+
+
+@router.delete("/narrative/{narrative_id}")
+async def narrative_delete_narrative(narrative_id: str):
+    """Delete a narrative."""
+    from agent.shared import narrative_engine
+    if not narrative_engine.delete_narrative(narrative_id):
+        raise HTTPException(status_code=404, detail="Narrative not found")
+    return {"deleted": True, "narrative_id": narrative_id}
+
+
+class NarrativeEventAddRequest(BaseModel):
+    description: str
+    participants: list[str] | None = None
+    location: str = ""
+    significance: float = 0.5
+    emotional_tone: str = ""
+    causal_predecessors: list[str] | None = None
+
+
+@router.post("/narrative/{narrative_id}/event")
+async def narrative_add_event(narrative_id: str, req: NarrativeEventAddRequest):
+    """Append a new event to a narrative."""
+    from agent.shared import narrative_engine
+    try:
+        event = narrative_engine.add_event(
+            narrative_id=narrative_id,
+            description=req.description,
+            participants=req.participants,
+            location=req.location,
+            significance=req.significance,
+            emotional_tone=req.emotional_tone,
+            causal_predecessors=req.causal_predecessors,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Narrative not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return event.to_dict()
+
+
+@router.get("/narrative/event/{event_id}")
+async def narrative_get_event(event_id: str):
+    """Get a narrative event by ID."""
+    from agent.shared import narrative_engine
+    event = narrative_engine.get_event(event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Narrative event not found")
+    return event.to_dict()
+
+
+@router.get("/narrative/{narrative_id}/events")
+async def narrative_list_events(narrative_id: str):
+    """List all events in a narrative."""
+    from agent.shared import narrative_engine
+    events = narrative_engine.list_events(narrative_id=narrative_id)
+    return {"events": [e.to_dict() for e in events], "total": len(events)}
+
+
+class NarrativeCharacterAddRequest(BaseModel):
+    name: str
+    role: str = ""
+    description: str = ""
+    motivations: list[str] | None = None
+
+
+@router.post("/narrative/{narrative_id}/character")
+async def narrative_add_character(narrative_id: str, req: NarrativeCharacterAddRequest):
+    """Add a character to a narrative."""
+    from agent.shared import narrative_engine
+    try:
+        character = narrative_engine.add_character(
+            narrative_id=narrative_id,
+            name=req.name,
+            role=req.role,
+            description=req.description,
+            motivations=req.motivations,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Narrative not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return character.to_dict()
+
+
+@router.get("/narrative/{narrative_id}/characters")
+async def narrative_list_characters(narrative_id: str):
+    """List all characters in a narrative."""
+    from agent.shared import narrative_engine
+    characters = narrative_engine.list_characters(narrative_id=narrative_id)
+    return {"characters": [c.to_dict() for c in characters], "total": len(characters)}
+
+
+class NarrativeThemeAddRequest(BaseModel):
+    name: str
+    description: str = ""
+    relevance_score: float = 0.5
+
+
+@router.post("/narrative/{narrative_id}/theme")
+async def narrative_add_theme(narrative_id: str, req: NarrativeThemeAddRequest):
+    """Add a theme to a narrative."""
+    from agent.shared import narrative_engine
+    try:
+        theme = narrative_engine.add_theme(
+            narrative_id=narrative_id,
+            name=req.name,
+            description=req.description,
+            relevance_score=req.relevance_score,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Narrative not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return theme.to_dict()
+
+
+@router.get("/narrative/{narrative_id}/themes")
+async def narrative_list_themes(narrative_id: str):
+    """List all themes in a narrative."""
+    from agent.shared import narrative_engine
+    themes = narrative_engine.list_themes(narrative_id=narrative_id)
+    return {"themes": [t.to_dict() for t in themes], "total": len(themes)}
+
+
+class NarrativeThreadCreateRequest(BaseModel):
+    name: str
+    description: str = ""
+    event_ids: list[str] | None = None
+    arc_type: str = "setup"
+
+
+@router.post("/narrative/{narrative_id}/thread")
+async def narrative_create_thread(narrative_id: str, req: NarrativeThreadCreateRequest):
+    """Create a sub-plot thread that links a set of events."""
+    from agent.shared import narrative_engine
+    from agent.agent_narrative_engine import PlotArc
+    try:
+        thread = narrative_engine.create_thread(
+            narrative_id=narrative_id,
+            name=req.name,
+            description=req.description,
+            event_ids=req.event_ids,
+            arc_type=PlotArc(req.arc_type),
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Narrative not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return thread.to_dict()
+
+
+@router.get("/narrative/{narrative_id}/threads")
+async def narrative_list_threads(narrative_id: str):
+    """List all threads in a narrative."""
+    from agent.shared import narrative_engine
+    threads = narrative_engine.list_threads(narrative_id=narrative_id)
+    return {"threads": [t.to_dict() for t in threads], "total": len(threads)}
+
+
+class NarrativeThreadResolveRequest(BaseModel):
+    resolution: str
+
+
+@router.put("/narrative/thread/{thread_id}/resolve")
+async def narrative_resolve_thread(thread_id: str, req: NarrativeThreadResolveRequest):
+    """Mark a thread as resolved."""
+    from agent.shared import narrative_engine
+    try:
+        thread = narrative_engine.resolve_thread(thread_id=thread_id, resolution=req.resolution)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Narrative thread not found")
+    return thread.to_dict()
+
+
+@router.get("/narrative/{narrative_id}/summary")
+async def narrative_generate_summary(narrative_id: str):
+    """Auto-generate a prose summary for a narrative."""
+    from agent.shared import narrative_engine
+    try:
+        summary = narrative_engine.generate_summary(narrative_id=narrative_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Narrative not found")
+    return {"summary": summary}
+
+
+@router.get("/narratives/stats")
+async def narrative_stats():
+    """Get narrative engine statistics."""
+    from agent.shared import narrative_engine
+    return narrative_engine.get_stats().to_dict()
