@@ -3208,4 +3208,378 @@ export const api = {
       request<any>(`/belief-engine/network/${networkId}/most-confident${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
     stats: () => request<any>('/belief-engine/stats'),
   },
+
+  // Tracing Pipeline API
+  tracingPipeline: {
+    startTrace: (data: { root_span_name: string; agent_id?: string; resource?: string; attributes?: any }) =>
+      request<any>('/tracing/trace', { method: 'POST', body: JSON.stringify(data) }),
+    startSpan: (traceId: string, data: { name: string; parent_span_id?: string | null; kind?: string; agent_id?: string; resource?: string; attributes?: any }) =>
+      request<any>(`/tracing/trace/${traceId}/span`, { method: 'POST', body: JSON.stringify(data) }),
+    endSpan: (spanId: string, data: { status?: string; status_message?: string }) =>
+      request<any>(`/tracing/span/${spanId}/end`, { method: 'POST', body: JSON.stringify(data) }),
+    addEvent: (spanId: string, data: { name: string; payload?: any; level?: string }) =>
+      request<any>(`/tracing/span/${spanId}/event`, { method: 'POST', body: JSON.stringify(data) }),
+    addAttribute: (spanId: string, key: string, value: any) =>
+      request<any>(`/tracing/span/${spanId}/attribute`, { method: 'POST', body: JSON.stringify({ key, value }) }),
+    linkSpans: (spanId: string, data: { linked_trace_id: string; linked_span_id: string; relationship?: string }) =>
+      request<any>(`/tracing/span/${spanId}/link`, { method: 'POST', body: JSON.stringify(data) }),
+    getTrace: (traceId: string) => request<any>(`/tracing/trace/${traceId}`),
+    getSpan: (spanId: string) => request<any>(`/tracing/span/${spanId}`),
+    listTraces: (params?: { agent_id?: string; status?: string; limit?: number }) =>
+      request<any>(`/tracing/traces${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    getSummary: (traceId: string) => request<any>(`/tracing/trace/${traceId}/summary`),
+    stats: () => request<any>('/tracing/stats'),
+  },
+
+  // Quota Manager API
+  quotaManager: {
+    registerLimit: (data: { resource: string; quota_type?: string; max_value?: number; window_seconds?: number; description?: string }) =>
+      request<any>('/quota/limit', { method: 'POST', body: JSON.stringify(data) }),
+    unregisterLimit: (limitId: string) => request<any>(`/quota/limit/${limitId}`, { method: 'DELETE' }),
+    getLimit: (limitId: string) => request<any>(`/quota/limit/${limitId}`),
+    listLimits: (quotaType?: string) => request<any>(`/quota/limits${quotaType ? '?quota_type=' + quotaType : ''}`),
+    check: (data: { resource: string; quota_type?: string; amount?: number }) =>
+      request<any>('/quota/check', { method: 'POST', body: JSON.stringify(data) }),
+    consume: (data: { resource: string; quota_type?: string; amount?: number }) =>
+      request<any>('/quota/consume', { method: 'POST', body: JSON.stringify(data) }),
+    release: (data: { resource: string; quota_type?: string; amount?: number }) =>
+      request<any>('/quota/release', { method: 'POST', body: JSON.stringify(data) }),
+    getUsage: (resource: string, quotaType?: string) =>
+      request<any>(`/quota/usage?resource=${encodeURIComponent(resource)}&quota_type=${quotaType || 'request_count'}`),
+    getWindow: (resource: string) => request<any>(`/quota/window?resource=${encodeURIComponent(resource)}`),
+    registerRetryPolicy: (data: { name: string; max_retries?: number; base_delay_ms?: number; max_delay_ms?: number; strategy?: string; retryable_status_codes?: number[] }) =>
+      request<any>('/quota/retry-policy', { method: 'POST', body: JSON.stringify(data) }),
+    computeRetryDelay: (data: { policy_id: string; attempt_number: number; last_status_code?: number | null }) =>
+      request<any>('/quota/retry-delay', { method: 'POST', body: JSON.stringify(data) }),
+    backpressure: () => request<any>('/quota/backpressure'),
+    stats: () => request<any>('/quota/stats'),
+  },
+
+  // Causal Engine API
+  causalEngine: {
+    createGraph: (data: { name: string; description?: string }) =>
+      request<any>('/causal/graph', { method: 'POST', body: JSON.stringify(data) }),
+    getGraph: (graphId: string) => request<any>(`/causal/graph/${graphId}`),
+    listGraphs: () => request<any>('/causal/graphs'),
+    addVariable: (graphId: string, data: { name: string; description?: string; variable_type?: string; domain?: string; current_value?: any; observable?: boolean }) =>
+      request<any>(`/causal/graph/${graphId}/variable`, { method: 'POST', body: JSON.stringify(data) }),
+    getVariable: (graphId: string, variableId: string) => request<any>(`/causal/graph/${graphId}/variable/${variableId}`),
+    listVariables: (graphId: string, variableType?: string) =>
+      request<any>(`/causal/graph/${graphId}/variables${variableType ? '?variable_type=' + variableType : ''}`),
+    addEdge: (graphId: string, data: { source_id: string; target_id: string; relation?: string; strength?: number; evidence?: string; description?: string; confidence?: number }) =>
+      request<any>(`/causal/graph/${graphId}/edge`, { method: 'POST', body: JSON.stringify(data) }),
+    removeEdge: (graphId: string, edgeId: string) => request<any>(`/causal/graph/${graphId}/edge/${edgeId}`, { method: 'DELETE' }),
+    listEdges: (graphId: string, params?: { source_id?: string; target_id?: string; relation?: string }) =>
+      request<any>(`/causal/graph/${graphId}/edges${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    findConfounders: (graphId: string) => request<any>(`/causal/graph/${graphId}/confounders`),
+    getCauses: (graphId: string, variableId: string) => request<any>(`/causal/graph/${graphId}/causes/${variableId}`),
+    getEffects: (graphId: string, variableId: string) => request<any>(`/causal/graph/${graphId}/effects/${variableId}`),
+    proposeIntervention: (graphId: string, data: { variable_id: string; target_value: any; rationale?: string; expected_effect?: any }) =>
+      request<any>(`/causal/graph/${graphId}/intervention`, { method: 'POST', body: JSON.stringify(data) }),
+    updateIntervention: (interventionId: string, data: { status?: string; actual_effect?: any }) =>
+      request<any>(`/causal/intervention/${interventionId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    listInterventions: (params?: { graph_id?: string; status?: string }) =>
+      request<any>(`/causal/interventions${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    estimateEffect: (interventionId: string) => request<any>(`/causal/intervention/${interventionId}/estimate`),
+    createCounterfactual: (graphId: string, data: { premise: string; intervention_variable_id: string; observed_value: any; hypothesized_value: any; observed_outcome: any; estimated_outcome?: any }) =>
+      request<any>(`/causal/graph/${graphId}/counterfactual`, { method: 'POST', body: JSON.stringify(data) }),
+    listCounterfactuals: (graphId?: string) =>
+      request<any>(`/causal/counterfactuals${graphId ? '?graph_id=' + graphId : ''}`),
+    getPath: (graphId: string, sourceId: string, targetId: string) =>
+      request<any>(`/causal/graph/${graphId}/path?source_id=${sourceId}&target_id=${targetId}`),
+    stats: () => request<any>('/causal/stats'),
+  },
+
+  // Temporal Engine API
+  temporalEngine: {
+    createPlan: (data: { name: string; description?: string }) =>
+      request<any>('/temporal/plan', { method: 'POST', body: JSON.stringify(data) }),
+    getPlan: (planId: string) => request<any>(`/temporal/plan/${planId}`),
+    listPlans: () => request<any>('/temporal/plans'),
+    addEvent: (planId: string, data: { name: string; description?: string; start?: number | null; end?: number | null; duration?: number | null; priority?: number; agent_id?: string; tags?: string[]; metadata?: any }) =>
+      request<any>(`/temporal/plan/${planId}/event`, { method: 'POST', body: JSON.stringify(data) }),
+    getEvent: (planId: string, eventId: string) => request<any>(`/temporal/plan/${planId}/event/${eventId}`),
+    listEvents: (planId: string, status?: string) =>
+      request<any>(`/temporal/plan/${planId}/events${status ? '?status=' + status : ''}`),
+    updateEventStatus: (planId: string, eventId: string, status: string) =>
+      request<any>(`/temporal/plan/${planId}/event/${eventId}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+    addConstraint: (planId: string, data: { event_id?: string | null; constraint_type?: string; relation?: string | null; target_event_id?: string | null; min_value?: number | null; max_value?: number | null; deadline?: number | null; description?: string }) =>
+      request<any>(`/temporal/plan/${planId}/constraint`, { method: 'POST', body: JSON.stringify(data) }),
+    listConstraints: (planId: string, constraintType?: string) =>
+      request<any>(`/temporal/plan/${planId}/constraints${constraintType ? '?constraint_type=' + constraintType : ''}`),
+    checkConsistency: (planId: string) => request<any>(`/temporal/plan/${planId}/consistency`),
+    computeRelation: (data: { start_a: number; end_a?: number | null; duration_a?: number | null; start_b: number; end_b?: number | null; duration_b?: number | null }) =>
+      request<any>('/temporal/relation', { method: 'POST', body: JSON.stringify(data) }),
+    getOrder: (planId: string) => request<any>(`/temporal/plan/${planId}/order`),
+    findConflicts: (planId: string) => request<any>(`/temporal/plan/${planId}/conflicts`),
+    getCriticalPath: (planId: string) => request<any>(`/temporal/plan/${planId}/critical-path`),
+    checkDeadlines: (planId: string, currentTime?: number) =>
+      request<any>(`/temporal/plan/${planId}/deadlines${currentTime !== undefined ? '?current_time=' + currentTime : ''}`),
+    stats: () => request<any>('/temporal/stats'),
+  },
+
+  // Anomaly Detector API
+  anomalyDetector: {
+    createBaseline: (data: { agent_id: string; sample_window?: number; min_samples?: number }) =>
+      request<any>('/anomaly/baseline', { method: 'POST', body: JSON.stringify(data) }),
+    getBaseline: (agentId: string) => request<any>(`/anomaly/baseline/${agentId}`),
+    listBaselines: () => request<any>('/anomaly/baselines'),
+    registerMetric: (agentId: string, data: { name: string; description?: string; direction?: string; unit?: string }) =>
+      request<any>(`/anomaly/baseline/${agentId}/metric`, { method: 'POST', body: JSON.stringify(data) }),
+    recordObservation: (agentId: string, data: { metric_name: string; value: number; context?: any }) =>
+      request<any>(`/anomaly/baseline/${agentId}/observe`, { method: 'POST', body: JSON.stringify(data) }),
+    detectDrift: (agentId: string, windowSize?: number) =>
+      request<any>(`/anomaly/baseline/${agentId}/drift`, { method: 'POST', body: JSON.stringify({ window_size: windowSize || 20 }) }),
+    listAnomalies: (params?: { agent_id?: string; severity?: string; resolved?: boolean; limit?: number }) =>
+      request<any>(`/anomaly/anomalies${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    acknowledge: (anomalyId: string) => request<any>(`/anomaly/anomaly/${anomalyId}/acknowledge`, { method: 'POST' }),
+    resolve: (anomalyId: string) => request<any>(`/anomaly/anomaly/${anomalyId}/resolve`, { method: 'POST' }),
+    startDiagnosis: (anomalyId: string) => request<any>(`/anomaly/anomaly/${anomalyId}/diagnose`, { method: 'POST' }),
+    updateDiagnosis: (diagnosisId: string, data: { root_cause?: string; contributing_factors?: string[]; recommended_actions?: string[]; confidence?: number; status?: string }) =>
+      request<any>(`/anomaly/diagnosis/${diagnosisId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    resolveDiagnosis: (diagnosisId: string, resolution?: string) =>
+      request<any>(`/anomaly/diagnosis/${diagnosisId}/resolve`, { method: 'POST', body: JSON.stringify({ resolution: resolution || '' }) }),
+    baselineSummary: (agentId: string) => request<any>(`/anomaly/baseline/${agentId}/summary`),
+    stats: () => request<any>('/anomaly/stats'),
+  },
+
+  // Scenario Simulator API
+  scenarioSimulator: {
+    createScenario: (data: { name: string; description?: string; scenario_type?: string; max_steps?: number; num_simulations?: number; seed?: number | null }) =>
+      request<any>('/scenario', { method: 'POST', body: JSON.stringify(data) }),
+    getScenario: (scenarioId: string) => request<any>(`/scenario/${scenarioId}`),
+    listScenarios: () => request<any>('/scenarios'),
+    deleteScenario: (scenarioId: string) => request<any>(`/scenario/${scenarioId}`, { method: 'DELETE' }),
+    addVariable: (scenarioId: string, data: { name: string; description?: string; variable_type?: string; distribution?: string; min_value?: number | null; max_value?: number | null; mean?: number | null; std?: number | null; categories?: string[] | null }) =>
+      request<any>(`/scenario/${scenarioId}/variable`, { method: 'POST', body: JSON.stringify(data) }),
+    listVariables: (scenarioId: string) => request<any>(`/scenario/${scenarioId}/variables`),
+    addAction: (scenarioId: string, data: { name: string; description?: string; preconditions?: string[] | null; effects?: Record<string, number> | null; probability?: number; cost?: number; duration?: number }) =>
+      request<any>(`/scenario/${scenarioId}/action`, { method: 'POST', body: JSON.stringify(data) }),
+    listActions: (scenarioId: string) => request<any>(`/scenario/${scenarioId}/actions`),
+    runSimulation: (scenarioId: string) => request<any>(`/scenario/${scenarioId}/simulate`, { method: 'POST' }),
+    getReport: (scenarioId: string) => request<any>(`/scenario/${scenarioId}/report`),
+    listOutcomes: (scenarioId: string) => request<any>(`/scenario/${scenarioId}/outcomes`),
+    compareScenarios: (scenarioIds: string[]) => request<any>('/scenario/compare', { method: 'POST', body: JSON.stringify({ scenario_ids: scenarioIds }) }),
+    stats: () => request<any>('/scenarios/stats'),
+  },
+
+  // Explanation Synthesizer API
+  explanationSynthesizer: {
+    requestExplanation: (data: { decision_id: string; explanation_type?: string; audience?: string; context?: any; question?: string }) =>
+      request<any>('/explanation/request', { method: 'POST', body: JSON.stringify(data) }),
+    getRequest: (requestId: string) => request<any>(`/explanation/request/${requestId}`),
+    listRequests: () => request<any>('/explanation/requests'),
+    generateExplanation: (requestId: string) => request<any>(`/explanation/${requestId}/generate`, { method: 'POST' }),
+    getExplanation: (explanationId: string) => request<any>(`/explanation/${explanationId}`),
+    listExplanations: (decisionId?: string) => request<any>(`/explanations${decisionId ? '?decision_id=' + decisionId : ''}`),
+    traceDecision: (data: { agent_id: string; decision_id: string; action_taken: string; inputs?: any; reasoning_steps?: string[] | null; alternatives?: string[] | null }) =>
+      request<any>('/explanation/trace', { method: 'POST', body: JSON.stringify(data) }),
+    getTrace: (traceId: string) => request<any>(`/explanation/trace/${traceId}`),
+    listTraces: (agentId?: string) => request<any>(`/explanation/traces${agentId ? '?agent_id=' + agentId : ''}`),
+    addEvidence: (explanationId: string, data: { evidence_type?: string; content: string; source?: string; weight?: number }) =>
+      request<any>(`/explanation/${explanationId}/evidence`, { method: 'POST', body: JSON.stringify(data) }),
+    stats: () => request<any>('/explanations/stats'),
+  },
+
+  // Knowledge Distiller API
+  knowledgeDistiller: {
+    registerSource: (data: { source_type?: string; agent_id?: string; content: string; metadata?: any; relevance_score?: number }) =>
+      request<any>('/knowledge/source', { method: 'POST', body: JSON.stringify(data) }),
+    getSource: (sourceId: string) => request<any>(`/knowledge/source/${sourceId}`),
+    listSources: (agentId?: string) => request<any>(`/knowledge/sources${agentId ? '?agent_id=' + agentId : ''}`),
+    distill: (data: { source_ids: string[]; knowledge_type?: string; compression_level?: string; title?: string; tags?: string[] | null }) =>
+      request<any>('/knowledge/distill', { method: 'POST', body: JSON.stringify(data) }),
+    getKnowledge: (knowledgeId: string) => request<any>(`/knowledge/${knowledgeId}`),
+    listKnowledge: (params?: { knowledge_type?: string; agent_id?: string }) =>
+      request<any>(`/knowledge${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    transferKnowledge: (data: { knowledge_id: string; source_agent_id: string; target_agent_id: string }) =>
+      request<any>('/knowledge/transfer', { method: 'POST', body: JSON.stringify(data) }),
+    getTransfer: (transferId: string) => request<any>(`/knowledge/transfer/${transferId}`),
+    listTransfers: (params?: { source_agent_id?: string; target_agent_id?: string }) =>
+      request<any>(`/knowledge-distiller/transfers${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+    acknowledgeTransfer: (transferId: string) => request<any>(`/knowledge/transfer/${transferId}/acknowledge`, { method: 'POST' }),
+    queryKnowledge: (data: { agent_id?: string; query_text: string; top_k?: number }) =>
+      request<any>('/knowledge/query', { method: 'POST', body: JSON.stringify(data) }),
+    stats: () => request<any>('/knowledge-distiller/stats'),
+  },
+
+  // Attention Allocator API
+  attentionAllocator: {
+    createBudget: (data: { agent_id: string; total_budget?: number; mode?: string; max_concurrent_targets?: number }) =>
+      request<any>('/attention/budget', { method: 'POST', body: JSON.stringify(data) }),
+    getBudget: (budgetId: string) => request<any>(`/attention/budget/${budgetId}`),
+    listBudgets: () => request<any>('/attention/budgets'),
+    setMode: (budgetId: string, mode: string) => request<any>(`/attention/budget/${budgetId}/mode`, { method: 'PUT', body: JSON.stringify({ mode }) }),
+    registerTarget: (budgetId: string, data: { name: string; description?: string; focus_type?: string; priority?: string; base_weight?: number; urgency?: number; importance?: number; deadline?: number | null; decay_function?: string; decay_rate?: number; metadata?: any }) =>
+      request<any>(`/attention/budget/${budgetId}/target`, { method: 'POST', body: JSON.stringify(data) }),
+    getTarget: (budgetId: string, targetId: string) => request<any>(`/attention/budget/${budgetId}/target/${targetId}`),
+    listTargets: (budgetId: string, activeOnly?: boolean) => request<any>(`/attention/budget/${budgetId}/targets${activeOnly ? '?active_only=true' : ''}`),
+    updateTarget: (budgetId: string, targetId: string, data: { urgency?: number; importance?: number; priority?: string; deadline?: number | null }) =>
+      request<any>(`/attention/budget/${budgetId}/target/${targetId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    removeTarget: (budgetId: string, targetId: string) => request<any>(`/attention/budget/${budgetId}/target/${targetId}`, { method: 'DELETE' }),
+    allocate: (budgetId: string, data: { target_id: string; allocated_weight?: number | null }) =>
+      request<any>(`/attention/budget/${budgetId}/allocate`, { method: 'POST', body: JSON.stringify(data) }),
+    deallocate: (budgetId: string, targetId: string) => request<any>(`/attention/budget/${budgetId}/allocate/${targetId}`, { method: 'DELETE' }),
+    getAllocations: (budgetId: string, status?: string) => request<any>(`/attention/budget/${budgetId}/allocations${status ? '?status=' + status : ''}`),
+    rebalance: (budgetId: string) => request<any>(`/attention/budget/${budgetId}/rebalance`, { method: 'POST' }),
+    getSnapshot: (budgetId: string) => request<any>(`/attention/budget/${budgetId}/snapshot`),
+    getEvents: (budgetId: string, limit?: number) => request<any>(`/attention/budget/${budgetId}/events${limit ? '?limit=' + limit : ''}`),
+    stats: () => request<any>('/attention/stats'),
+  },
+
+  // Ethical Deliberator API
+  ethicalDeliberator: {
+    registerPrinciple: (data: { name: string; category: string; description?: string; weight?: number; framework: string }) =>
+      request<any>('/ethics/principle', { method: 'POST', body: JSON.stringify(data) }),
+    getPrinciple: (principleId: string) => request<any>(`/ethics/principle/${principleId}`),
+    listPrinciples: (framework?: string) => request<any>(`/ethics/principles${framework ? '?framework=' + framework : ''}`),
+    submitDilemma: (data: { title: string; description: string; proposed_action: string }) =>
+      request<any>('/ethics/dilemma', { method: 'POST', body: JSON.stringify(data) }),
+    getDilemma: (dilemmaId: string) => request<any>(`/ethics/dilemma/${dilemmaId}`),
+    listDilemmas: (status?: string) => request<any>(`/ethics/dilemmas${status ? '?status=' + status : ''}`),
+    addStakeholder: (dilemmaId: string, data: { name: string; role?: string; interests?: string[] | null; vulnerability?: number }) =>
+      request<any>(`/ethics/dilemma/${dilemmaId}/stakeholder`, { method: 'POST', body: JSON.stringify(data) }),
+    addConsequence: (dilemmaId: string, data: { stakeholder_id: string; stakeholder_name?: string; impact?: string; magnitude?: number; probability?: number; description?: string }) =>
+      request<any>(`/ethics/dilemma/${dilemmaId}/consequence`, { method: 'POST', body: JSON.stringify(data) }),
+    deliberate: (dilemmaId: string) => request<any>(`/ethics/dilemma/${dilemmaId}/deliberate`, { method: 'POST' }),
+    getVerdict: (verdictId: string) => request<any>(`/ethics/verdict/${verdictId}`),
+    getVerdictForDilemma: (dilemmaId: string) => request<any>(`/ethics/verdict?dilemma_id=${dilemmaId}`),
+    listVerdicts: (verdictType?: string) => request<any>(`/ethics/verdicts${verdictType ? '?verdict_type=' + verdictType : ''}`),
+    assessAction: (actionDescription: string) => request<any>('/ethics/assess', { method: 'POST', body: JSON.stringify({ action_description: actionDescription }) }),
+    stats: () => request<any>('/ethics/stats'),
+  },
+
+  // ── Concept Formation Engine ──
+  conceptFormation: {
+    registerInstance: (data: { agent_id: string; features: Record<string, unknown>; source?: string; confidence?: number }) =>
+      request<any>('/concept/instance', { method: 'POST', body: JSON.stringify(data) }),
+    getInstance: (instanceId: string) => request<any>(`/concept/instance/${instanceId}`),
+    listInstances: (conceptId?: string, agentId?: string) =>
+      request<any>(`/concept/instances${[conceptId && 'concept_id=' + conceptId, agentId && 'agent_id=' + agentId].filter(Boolean).join('&') ? '?' + [conceptId && 'concept_id=' + conceptId, agentId && 'agent_id=' + agentId].filter(Boolean).join('&') : ''}`),
+    formConcept: (data: { name: string; description: string; concept_type: string; instance_ids?: string[]; abstraction_level?: string; parent_id?: string | null }) =>
+      request<any>('/concept/form', { method: 'POST', body: JSON.stringify(data) }),
+    getConcept: (conceptId: string) => request<any>(`/concept/${conceptId}`),
+    listConcepts: (conceptType?: string, abstractionLevel?: string, status?: string) =>
+      request<any>(`/concepts${[conceptType && 'concept_type=' + conceptType, abstractionLevel && 'abstraction_level=' + abstractionLevel, status && 'status=' + status].filter(Boolean).join('&') ? '?' + [conceptType && 'concept_type=' + conceptType, abstractionLevel && 'abstraction_level=' + abstractionLevel, status && 'status=' + status].filter(Boolean).join('&') : ''}`),
+    updateConcept: (conceptId: string, data: { name?: string; description?: string; status?: string }) =>
+      request<any>(`/concept/${conceptId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteConcept: (conceptId: string) => request<any>(`/concept/${conceptId}`, { method: 'DELETE' }),
+    clusterInstances: (data: { instance_ids: string[]; method?: string; num_clusters?: number }) =>
+      request<any>('/concept/cluster', { method: 'POST', body: JSON.stringify(data) }),
+    getCluster: (clusterId: string) => request<any>(`/concept/cluster/${clusterId}`),
+    buildHierarchy: (rootConceptId: string) => request<any>('/concept/hierarchy', { method: 'POST', body: JSON.stringify({ root_concept_id: rootConceptId }) }),
+    getHierarchy: (hierarchyId: string) => request<any>(`/concept/hierarchy/${hierarchyId}`),
+    listHierarchies: () => request<any>('/concept/hierarchies'),
+    findSimilarConcepts: (data: { features: Record<string, unknown>; metric?: string; top_k?: number }) =>
+      request<any>('/concept/similar', { method: 'POST', body: JSON.stringify(data) }),
+    stats: () => request<any>('/concepts/stats'),
+  },
+
+  // ── Analogy Engine ──
+  analogyEngine: {
+    registerDomain: (data: { name: string; description: string; domain_type: string }) =>
+      request<any>('/analogy/domain', { method: 'POST', body: JSON.stringify(data) }),
+    getDomain: (domainId: string) => request<any>(`/analogy/domain/${domainId}`),
+    listDomains: (domainType?: string) => request<any>(`/analogy/domains${domainType ? '?domain_type=' + domainType : ''}`),
+    addEntity: (domainId: string, data: { name: string; entity_type: string; attributes?: Record<string, unknown> }) =>
+      request<any>(`/analogy/domain/${domainId}/entity`, { method: 'POST', body: JSON.stringify(data) }),
+    getEntity: (domainId: string, entityId: string) => request<any>(`/analogy/domain/${domainId}/entity/${entityId}`),
+    listEntities: (domainId: string) => request<any>(`/analogy/domain/${domainId}/entities`),
+    addRelation: (domainId: string, data: { source_id: string; target_id: string; relation_type: string; weight?: number }) =>
+      request<any>(`/analogy/domain/${domainId}/relation`, { method: 'POST', body: JSON.stringify(data) }),
+    listRelations: (domainId: string) => request<any>(`/analogy/domain/${domainId}/relations`),
+    createAnalogy: (data: { source_domain_id: string; target_domain_id: string }) =>
+      request<any>('/analogy/create', { method: 'POST', body: JSON.stringify(data) }),
+    getAnalogy: (analogyId: string) => request<any>(`/analogy/${analogyId}`),
+    listAnalogies: (status?: string) => request<any>(`/analogies${status ? '?status=' + status : ''}`),
+    validateAnalogy: (analogyId: string, validationScores: Record<string, number>) =>
+      request<any>(`/analogy/${analogyId}/validate`, { method: 'PUT', body: JSON.stringify({ validation_scores: validationScores }) }),
+    refineAnalogy: (analogyId: string, adjustments: Record<string, unknown>) =>
+      request<any>(`/analogy/${analogyId}/refine`, { method: 'PUT', body: JSON.stringify({ adjustments }) }),
+    transferKnowledge: (analogyId: string, knowledgeItems: unknown[]) =>
+      request<any>(`/analogy/${analogyId}/transfer`, { method: 'POST', body: JSON.stringify({ knowledge_items: knowledgeItems }) }),
+    findAnalogousDomains: (sourceDomainId: string, topK?: number) =>
+      request<any>('/analogy/domains/similar', { method: 'POST', body: JSON.stringify({ source_domain_id: sourceDomainId, top_k: topK }) }),
+    stats: () => request<any>('/analogies/stats'),
+  },
+
+  // ── Curiosity Engine ──
+  curiosityEngine: {
+    registerProfile: (data: { agent_id: string; mode?: string; baseline_curiosity?: number }) =>
+      request<any>('/curiosity/profile', { method: 'POST', body: JSON.stringify(data) }),
+    getProfile: (agentId: string) => request<any>(`/curiosity/profile/${agentId}`),
+    setMode: (agentId: string, mode: string) => request<any>(`/curiosity/profile/${agentId}/mode`, { method: 'PUT', body: JSON.stringify({ mode }) }),
+    detectNovelty: (data: { agent_id: string; item_id: string; features: Record<string, unknown>; metric?: string }) =>
+      request<any>('/curiosity/novelty', { method: 'POST', body: JSON.stringify(data) }),
+    identifyGap: (data: { agent_id: string; topic: string; gap_type: string; description: string; estimated_value?: number }) =>
+      request<any>('/curiosity/gap', { method: 'POST', body: JSON.stringify(data) }),
+    getGap: (gapId: string) => request<any>(`/curiosity/gap/${gapId}`),
+    listGaps: (agentId?: string, status?: string) =>
+      request<any>(`/curiosity/gaps${[agentId && 'agent_id=' + agentId, status && 'status=' + status].filter(Boolean).join('&') ? '?' + [agentId && 'agent_id=' + agentId, status && 'status=' + status].filter(Boolean).join('&') : ''}`),
+    resolveGap: (gapId: string, resolution: string) => request<any>(`/curiosity/gap/${gapId}/resolve`, { method: 'PUT', body: JSON.stringify({ resolution }) }),
+    proposeTarget: (data: { agent_id: string; topic: string; curiosity_type: string; novelty_score?: number; information_value?: number; estimated_cost?: number }) =>
+      request<any>('/curiosity/target', { method: 'POST', body: JSON.stringify(data) }),
+    getTarget: (targetId: string) => request<any>(`/curiosity/target/${targetId}`),
+    listTargets: (agentId?: string, status?: string) =>
+      request<any>(`/curiosity/targets${[agentId && 'agent_id=' + agentId, status && 'status=' + status].filter(Boolean).join('&') ? '?' + [agentId && 'agent_id=' + agentId, status && 'status=' + status].filter(Boolean).join('&') : ''}`),
+    selectTarget: (agentId: string) => request<any>(`/curiosity/select/${agentId}`),
+    recordResult: (data: { target_id: string; findings: string; knowledge_gained?: number; satisfaction_score?: number; duration?: number; success?: boolean }) =>
+      request<any>('/curiosity/result', { method: 'POST', body: JSON.stringify(data) }),
+    listResults: (agentId?: string, targetId?: string) =>
+      request<any>(`/curiosity/results${[agentId && 'agent_id=' + agentId, targetId && 'target_id=' + targetId].filter(Boolean).join('&') ? '?' + [agentId && 'agent_id=' + agentId, targetId && 'target_id=' + targetId].filter(Boolean).join('&') : ''}`),
+    stats: () => request<any>('/curiosity/stats'),
+  },
+
+  // ── Mental Simulation Engine ──
+  mentalSimulation: {
+    createModel: (data: { agent_id: string; name: string; model_type: string; initial_state: Record<string, unknown>; transition_rules?: unknown[] }) =>
+      request<any>('/mental-simulation/model', { method: 'POST', body: JSON.stringify(data) }),
+    getModel: (modelId: string) => request<any>(`/mental-simulation/model/${modelId}`),
+    listModels: (agentId?: string) => request<any>(`/mental-simulation/models${agentId ? '?agent_id=' + agentId : ''}`),
+    updateModel: (modelId: string, data: { initial_state?: Record<string, unknown>; transition_rules?: unknown[] }) =>
+      request<any>(`/mental-simulation/model/${modelId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteModel: (modelId: string) => request<any>(`/mental-simulation/model/${modelId}`, { method: 'DELETE' }),
+    createSimulation: (data: { model_id: string; agent_id: string; simulation_type: string; config?: Record<string, unknown> }) =>
+      request<any>('/mental-simulation/simulation', { method: 'POST', body: JSON.stringify(data) }),
+    getSimulation: (simulationId: string) => request<any>(`/mental-simulation/simulation/${simulationId}`),
+    listSimulations: (agentId?: string, status?: string) =>
+      request<any>(`/mental-simulation/simulations${[agentId && 'agent_id=' + agentId, status && 'status=' + status].filter(Boolean).join('&') ? '?' + [agentId && 'agent_id=' + agentId, status && 'status=' + status].filter(Boolean).join('&') : ''}`),
+    addStep: (simulationId: string, data: { action: string; pre_state?: Record<string, unknown>; post_state?: Record<string, unknown>; probability?: number; description?: string }) =>
+      request<any>(`/mental-simulation/simulation/${simulationId}/step`, { method: 'POST', body: JSON.stringify(data) }),
+    listSteps: (simulationId: string) => request<any>(`/mental-simulation/simulation/${simulationId}/steps`),
+    recordOutcome: (simulationId: string, data: { final_state?: Record<string, unknown>; valence?: string; utility?: number; probability?: number; confidence?: string; key_events?: string[]; summary?: string }) =>
+      request<any>(`/mental-simulation/simulation/${simulationId}/outcome`, { method: 'POST', body: JSON.stringify(data) }),
+    listOutcomes: (simulationId: string) => request<any>(`/mental-simulation/simulation/${simulationId}/outcomes`),
+    compareOutcomes: (simulationId: string) => request<any>(`/mental-simulation/simulation/${simulationId}/compare`),
+    cancelSimulation: (simulationId: string) => request<any>(`/mental-simulation/simulation/${simulationId}/cancel`, { method: 'PUT' }),
+    stats: () => request<any>('/mental-simulations/stats'),
+  },
+
+  // ── Narrative Engine ──
+  narrativeEngine: {
+    createNarrative: (data: { agent_id: string; title: string; narrative_type: string; perspective?: string; tense?: string }) =>
+      request<any>('/narrative', { method: 'POST', body: JSON.stringify(data) }),
+    getNarrative: (narrativeId: string) => request<any>(`/narrative/${narrativeId}`),
+    listNarratives: (agentId?: string, status?: string, narrativeType?: string) =>
+      request<any>(`/narratives${[agentId && 'agent_id=' + agentId, status && 'status=' + status, narrativeType && 'narrative_type=' + narrativeType].filter(Boolean).join('&') ? '?' + [agentId && 'agent_id=' + agentId, status && 'status=' + status, narrativeType && 'narrative_type=' + narrativeType].filter(Boolean).join('&') : ''}`),
+    updateNarrative: (narrativeId: string, data: { title?: string; summary?: string; status?: string }) =>
+      request<any>(`/narrative/${narrativeId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteNarrative: (narrativeId: string) => request<any>(`/narrative/${narrativeId}`, { method: 'DELETE' }),
+    addEvent: (narrativeId: string, data: { description: string; participants?: string[]; location?: string; significance?: number; emotional_tone?: string; causal_predecessors?: string[] }) =>
+      request<any>(`/narrative/${narrativeId}/event`, { method: 'POST', body: JSON.stringify(data) }),
+    getEvent: (eventId: string) => request<any>(`/narrative/event/${eventId}`),
+    listEvents: (narrativeId: string) => request<any>(`/narrative/${narrativeId}/events`),
+    addCharacter: (narrativeId: string, data: { name: string; role?: string; description?: string; motivations?: string[] }) =>
+      request<any>(`/narrative/${narrativeId}/character`, { method: 'POST', body: JSON.stringify(data) }),
+    listCharacters: (narrativeId: string) => request<any>(`/narrative/${narrativeId}/characters`),
+    addTheme: (narrativeId: string, data: { name: string; description?: string; relevance_score?: number }) =>
+      request<any>(`/narrative/${narrativeId}/theme`, { method: 'POST', body: JSON.stringify(data) }),
+    listThemes: (narrativeId: string) => request<any>(`/narrative/${narrativeId}/themes`),
+    createThread: (narrativeId: string, data: { name: string; description?: string; event_ids?: string[]; arc_type?: string }) =>
+      request<any>(`/narrative/${narrativeId}/thread`, { method: 'POST', body: JSON.stringify(data) }),
+    listThreads: (narrativeId: string) => request<any>(`/narrative/${narrativeId}/threads`),
+    resolveThread: (threadId: string, resolution: string) => request<any>(`/narrative/thread/${threadId}/resolve`, { method: 'PUT', body: JSON.stringify({ resolution }) }),
+    generateSummary: (narrativeId: string) => request<any>(`/narrative/${narrativeId}/summary`),
+    stats: () => request<any>('/narratives/stats'),
+  },
 };
