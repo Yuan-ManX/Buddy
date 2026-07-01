@@ -189,6 +189,19 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'cognitiveAffordance', label: 'Afford', icon: '🎯' },
   { id: 'cognitiveScaffolding', label: 'Scaffold', icon: '🏗️' },
   { id: 'affectiveEngine', label: 'Affect', icon: '💖' },
+  { id: 'cognitiveStyleTransfer', label: 'Style', icon: '🎨' },
+  { id: 'cognitivePrime', label: 'Prime', icon: '⚡' },
+  { id: 'cognitivePhaseTransition', label: 'Phase', icon: '🔄' },
+  { id: 'cognitiveGravity', label: 'Gravity', icon: '🪐' },
+  { id: 'cognitiveResonance', label: 'Resonance', icon: '🌊' },
+  { id: 'cognitiveWorkload', label: 'Workload', icon: '⚖️' },
+  { id: 'cognitiveEntropy', label: 'Entropy', icon: '🔀' },
+  { id: 'cognitiveHorizon', label: 'Horizon', icon: '🌅' },
+  { id: 'cognitiveMomentum', label: 'Momentum', icon: '🚀' },
+  { id: 'cognitiveFriction', label: 'Friction', icon: '🧱' },
+  { id: 'cognitiveTension', label: 'Tension', icon: '⚡' },
+  { id: 'cognitiveDepth', label: 'Depth', icon: '🌊' },
+  { id: 'cognitiveCoherence', label: 'Coherence', icon: '🔗' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
