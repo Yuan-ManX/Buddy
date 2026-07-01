@@ -30480,3 +30480,4787 @@ async def narrative_stats():
     """Get narrative engine statistics."""
     from agent.shared import narrative_engine
     return narrative_engine.get_stats().to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Cognitive Mapping Engine Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CognitiveMapCreateRequest(BaseModel):
+    agent_id: str
+    name: str
+    environment_type: str
+    description: str = ""
+
+
+@router.post("/cognitive-mapping/map")
+async def cognitive_mapping_create_map(req: CognitiveMapCreateRequest):
+    """Create and register a new cognitive map."""
+    from agent.shared import cognitive_mapping_engine
+    try:
+        cmap = cognitive_mapping_engine.create_map(
+            agent_id=req.agent_id,
+            name=req.name,
+            environment_type=req.environment_type,
+            description=req.description,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return cmap.to_dict()
+
+
+@router.get("/cognitive-mapping/maps")
+async def cognitive_mapping_list_maps(
+    agent_id: str | None = None, environment_type: str | None = None
+):
+    """List cognitive maps, optionally filtered by agent and/or environment type."""
+    from agent.shared import cognitive_mapping_engine
+    maps = cognitive_mapping_engine.list_maps(
+        agent_id=agent_id, environment_type=environment_type
+    )
+    return {"items": [m.to_dict() for m in maps], "total": len(maps)}
+
+
+@router.get("/cognitive-maps/stats")
+async def cognitive_mapping_stats():
+    """Get cognitive mapping engine statistics."""
+    from agent.shared import cognitive_mapping_engine
+    return cognitive_mapping_engine.get_stats().to_dict()
+
+
+@router.get("/cognitive-mapping/map/{map_id}")
+async def cognitive_mapping_get_map(map_id: str):
+    """Get a cognitive map by ID."""
+    from agent.shared import cognitive_mapping_engine
+    cmap = cognitive_mapping_engine.get_map(map_id)
+    if cmap is None:
+        raise HTTPException(status_code=404, detail="Cognitive map not found")
+    return cmap.to_dict()
+
+
+class CognitiveMapUpdateRequest(BaseModel):
+    name: str | None = None
+    status: str | None = None
+
+
+@router.put("/cognitive-mapping/map/{map_id}")
+async def cognitive_mapping_update_map(map_id: str, req: CognitiveMapUpdateRequest):
+    """Update the name and/or status of a cognitive map."""
+    from agent.shared import cognitive_mapping_engine
+    try:
+        cmap = cognitive_mapping_engine.update_map(
+            map_id=map_id, name=req.name, status=req.status
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Cognitive map not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return cmap.to_dict()
+
+
+@router.delete("/cognitive-mapping/map/{map_id}")
+async def cognitive_mapping_delete_map(map_id: str):
+    """Delete a cognitive map and all of its places/edges/anchors/deltas."""
+    from agent.shared import cognitive_mapping_engine
+    if not cognitive_mapping_engine.delete_map(map_id):
+        raise HTTPException(status_code=404, detail="Cognitive map not found")
+    return {"deleted": True, "map_id": map_id}
+
+
+class MapPlaceAddRequest(BaseModel):
+    name: str
+    place_type: str = "node"
+    coordinates: dict | None = None
+    properties: dict | None = None
+
+
+@router.post("/cognitive-mapping/map/{map_id}/place")
+async def cognitive_mapping_add_place(map_id: str, req: MapPlaceAddRequest):
+    """Add a new place to a cognitive map."""
+    from agent.shared import cognitive_mapping_engine
+    try:
+        place = cognitive_mapping_engine.add_place(
+            map_id=map_id,
+            name=req.name,
+            place_type=req.place_type,
+            coordinates=req.coordinates,
+            properties=req.properties,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Cognitive map not found")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return place.to_dict()
+
+
+@router.get("/cognitive-mapping/map/{map_id}/places")
+async def cognitive_mapping_list_places(map_id: str, place_type: str | None = None):
+    """List places in a map, optionally filtered by place type."""
+    from agent.shared import cognitive_mapping_engine
+    places = cognitive_mapping_engine.list_places(
+        map_id=map_id, place_type=place_type
+    )
+    return {"items": [p.to_dict() for p in places], "total": len(places)}
+
+
+@router.get("/cognitive-mapping/map/{map_id}/place/{place_id}")
+async def cognitive_mapping_get_place(map_id: str, place_id: str):
+    """Get a place within a map by ID."""
+    from agent.shared import cognitive_mapping_engine
+    place = cognitive_mapping_engine.get_place(map_id=map_id, place_id=place_id)
+    if place is None:
+        raise HTTPException(status_code=404, detail="Map place not found")
+    return place.to_dict()
+
+
+class MapAnchorAddRequest(BaseModel):
+    anchor_type: str
+    label: str
+    salience: float = 0.5
+
+
+@router.post("/cognitive-mapping/map/{map_id}/place/{place_id}/anchor")
+async def cognitive_mapping_add_anchor(
+    map_id: str, place_id: str, req: MapAnchorAddRequest
+):
+    """Attach a spatial anchor to a place."""
+    from agent.shared import cognitive_mapping_engine
+    try:
+        anchor = cognitive_mapping_engine.add_anchor(
+            map_id=map_id,
+            place_id=place_id,
+            anchor_type=req.anchor_type,
+            label=req.label,
+            salience=req.salience,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Map or place not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return anchor.to_dict()
+
+
+@router.get("/cognitive-mapping/map/{map_id}/anchors")
+async def cognitive_mapping_list_anchors(map_id: str, place_id: str | None = None):
+    """List anchors in a map, optionally filtered by place."""
+    from agent.shared import cognitive_mapping_engine
+    anchors = cognitive_mapping_engine.list_anchors(map_id=map_id, place_id=place_id)
+    return {"items": [a.to_dict() for a in anchors], "total": len(anchors)}
+
+
+class MapEdgeAddRequest(BaseModel):
+    source_place_id: str
+    target_place_id: str
+    relation: str
+    weight: float = 1.0
+    properties: dict | None = None
+
+
+@router.post("/cognitive-mapping/map/{map_id}/edge")
+async def cognitive_mapping_add_edge(map_id: str, req: MapEdgeAddRequest):
+    """Add a directed, typed spatial relation edge between two places."""
+    from agent.shared import cognitive_mapping_engine
+    try:
+        edge = cognitive_mapping_engine.add_edge(
+            map_id=map_id,
+            source_place_id=req.source_place_id,
+            target_place_id=req.target_place_id,
+            relation=req.relation,
+            weight=req.weight,
+            properties=req.properties,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Map or endpoint place not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return edge.to_dict()
+
+
+@router.get("/cognitive-mapping/map/{map_id}/edges")
+async def cognitive_mapping_list_edges(
+    map_id: str, source_place_id: str | None = None
+):
+    """List edges in a map, optionally filtered by source place."""
+    from agent.shared import cognitive_mapping_engine
+    edges = cognitive_mapping_engine.list_edges(
+        map_id=map_id, source_place_id=source_place_id
+    )
+    return {"items": [e.to_dict() for e in edges], "total": len(edges)}
+
+
+@router.get("/cognitive-mapping/map/{map_id}/path")
+async def cognitive_mapping_find_path(
+    map_id: str, source_place_id: str, target_place_id: str
+):
+    """Find a shortest path between two places in a map."""
+    from agent.shared import cognitive_mapping_engine
+    path = cognitive_mapping_engine.find_path(
+        map_id=map_id,
+        source_place_id=source_place_id,
+        target_place_id=target_place_id,
+    )
+    return {"path": path, "total": len(path)}
+
+
+class MapLocalizeRequest(BaseModel):
+    coordinates: dict | None = None
+    anchor_label: str | None = None
+
+
+@router.post("/cognitive-mapping/map/{map_id}/localize")
+async def cognitive_mapping_localize(map_id: str, req: MapLocalizeRequest):
+    """Localize the agent within a map by coordinates or anchor label."""
+    from agent.shared import cognitive_mapping_engine
+    place = cognitive_mapping_engine.localize(
+        map_id=map_id,
+        coordinates=req.coordinates,
+        anchor_label=req.anchor_label,
+    )
+    if place is None:
+        raise HTTPException(status_code=404, detail="No matching place found for localization")
+    return place.to_dict()
+
+
+class MapDeltaRequest(BaseModel):
+    delta_type: str
+    place_id: str | None = None
+    place_data: dict | None = None
+
+
+@router.post("/cognitive-mapping/map/{map_id}/delta")
+async def cognitive_mapping_apply_delta(map_id: str, req: MapDeltaRequest):
+    """Apply a typed change (ADD/UPDATE/REMOVE/MERGE) to a map."""
+    from agent.shared import cognitive_mapping_engine
+    try:
+        delta = cognitive_mapping_engine.apply_delta(
+            map_id=map_id,
+            delta_type=req.delta_type,
+            place_id=req.place_id,
+            place_data=req.place_data,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Map or referenced place not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return delta.to_dict()
+
+
+@router.get("/cognitive-mapping/map/{map_id}/deltas")
+async def cognitive_mapping_list_deltas(map_id: str):
+    """List deltas recorded against a map in application order."""
+    from agent.shared import cognitive_mapping_engine
+    deltas = cognitive_mapping_engine.list_deltas(map_id=map_id)
+    return {"items": [d.to_dict() for d in deltas], "total": len(deltas)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Cognitive Bias Detector Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class BiasAuditSubmitRequest(BaseModel):
+    agent_id: str
+    reasoning_trace: str
+    context: dict | None = None
+
+
+@router.post("/bias/audit")
+async def bias_submit_audit(req: BiasAuditSubmitRequest):
+    """Submit a reasoning trace for bias analysis."""
+    from agent.shared import bias_detector
+    audit = bias_detector.submit_reasoning(
+        agent_id=req.agent_id,
+        reasoning_trace=req.reasoning_trace,
+        context=req.context,
+    )
+    return audit.to_dict()
+
+
+@router.get("/bias/audits")
+async def bias_list_audits(agent_id: str | None = None, status: str | None = None):
+    """List reasoning audits, optionally filtered by agent and/or status."""
+    from agent.shared import bias_detector
+    from agent.agent_cognitive_bias_detector import AuditStatus
+    st = AuditStatus(status) if status else None
+    audits = bias_detector.list_audits(agent_id=agent_id, status=st)
+    return {"items": [a.to_dict() for a in audits], "total": len(audits)}
+
+
+@router.get("/biases/stats")
+async def bias_detector_stats():
+    """Get cognitive bias detector statistics."""
+    from agent.shared import bias_detector
+    return bias_detector.get_stats().to_dict()
+
+
+@router.get("/bias/audit/{audit_id}")
+async def bias_get_audit(audit_id: str):
+    """Get a reasoning audit by ID."""
+    from agent.shared import bias_detector
+    audit = bias_detector.get_audit(audit_id)
+    if audit is None:
+        raise HTTPException(status_code=404, detail="Reasoning audit not found")
+    return audit.to_dict()
+
+
+@router.post("/bias/audit/{audit_id}/detect")
+async def bias_detect_biases(audit_id: str):
+    """Run heuristic bias detection against a stored audit."""
+    from agent.shared import bias_detector
+    audit = bias_detector.get_audit(audit_id)
+    if audit is None:
+        raise HTTPException(status_code=404, detail="Reasoning audit not found")
+    detections = bias_detector.detect_biases(audit_id=audit_id)
+    return {"items": [d.to_dict() for d in detections], "total": len(detections)}
+
+
+@router.get("/bias/audit/{audit_id}/detections")
+async def bias_list_detections(audit_id: str):
+    """List all detections currently attached to an audit."""
+    from agent.shared import bias_detector
+    detections = bias_detector.list_detections(audit_id=audit_id)
+    return {"items": [d.to_dict() for d in detections], "total": len(detections)}
+
+
+@router.get("/bias/detection/{detection_id}")
+async def bias_get_detection(detection_id: str):
+    """Get a bias detection by ID."""
+    from agent.shared import bias_detector
+    detection = bias_detector.get_detection(detection_id)
+    if detection is None:
+        raise HTTPException(status_code=404, detail="Bias detection not found")
+    return detection.to_dict()
+
+
+class BiasDebiasRequest(BaseModel):
+    strategy: str
+
+
+@router.post("/bias/detection/{detection_id}/debias")
+async def bias_apply_debias(detection_id: str, req: BiasDebiasRequest):
+    """Apply a debiasing strategy to a detection."""
+    from agent.shared import bias_detector
+    from agent.agent_cognitive_bias_detector import DebiasingStrategy
+    try:
+        strategy = DebiasingStrategy(req.strategy)
+    except ValueError:
+        try:
+            strategy = DebiasingStrategy[req.strategy]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown debiasing strategy: {req.strategy}")
+    try:
+        action = bias_detector.apply_debiasing(
+            detection_id=detection_id, strategy=strategy
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Bias detection not found")
+    return action.to_dict()
+
+
+@router.get("/bias/detection/{detection_id}/actions")
+async def bias_list_detection_actions(detection_id: str):
+    """List debiasing actions applied to a specific detection."""
+    from agent.shared import bias_detector
+    detection = bias_detector.get_detection(detection_id)
+    if detection is None:
+        raise HTTPException(status_code=404, detail="Bias detection not found")
+    actions = bias_detector.list_debiasing_actions(audit_id=detection.audit_id)
+    filtered = [a for a in actions if a.detection_id == detection_id]
+    return {"items": [a.to_dict() for a in filtered], "total": len(filtered)}
+
+
+class BiasDetectionResolveRequest(BaseModel):
+    resolution_note: str = ""
+
+
+@router.put("/bias/detection/{detection_id}/resolve")
+async def bias_resolve_detection(
+    detection_id: str, req: BiasDetectionResolveRequest
+):
+    """Mark a bias detection as resolved and attach an optional note."""
+    from agent.shared import bias_detector
+    try:
+        detection = bias_detector.resolve_detection(
+            detection_id=detection_id, resolution_note=req.resolution_note
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Bias detection not found")
+    return detection.to_dict()
+
+
+@router.get("/bias/debiasing-actions")
+async def bias_list_debiasing_actions(audit_id: str | None = None):
+    """List all debiasing actions, optionally filtered by audit."""
+    from agent.shared import bias_detector
+    actions = bias_detector.list_debiasing_actions(audit_id=audit_id)
+    return {"items": [a.to_dict() for a in actions], "total": len(actions)}
+
+
+@router.get("/bias/profile/{agent_id}")
+async def bias_get_profile(agent_id: str):
+    """Get the bias profile for an agent."""
+    from agent.shared import bias_detector
+    profile = bias_detector.get_profile(agent_id=agent_id)
+    return profile.to_dict()
+
+
+@router.get("/bias/profiles")
+async def bias_list_profiles():
+    """List all known per-agent bias profiles."""
+    from agent.shared import bias_detector
+    profiles = bias_detector.list_profiles()
+    return {"items": [p.to_dict() for p in profiles], "total": len(profiles)}
+
+
+class BiasProfileUpdateRequest(BaseModel):
+    bias_type: str
+    tendency_delta: float
+
+
+@router.put("/bias/profile/{agent_id}")
+async def bias_update_profile(agent_id: str, req: BiasProfileUpdateRequest):
+    """Adjust an agent's tendency score for a specific bias type."""
+    from agent.shared import bias_detector
+    from agent.agent_cognitive_bias_detector import BiasType
+    try:
+        bias_type = BiasType(req.bias_type)
+    except ValueError:
+        try:
+            bias_type = BiasType[req.bias_type]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown bias type: {req.bias_type}")
+    profile = bias_detector.update_profile(
+        agent_id=agent_id,
+        bias_type=bias_type,
+        tendency_delta=req.tendency_delta,
+    )
+    return profile.to_dict()
+
+
+class BiasEvidenceAnalyzeRequest(BaseModel):
+    evidence_items: list
+
+
+@router.post("/bias/evidence/analyze")
+async def bias_analyze_evidence(req: BiasEvidenceAnalyzeRequest):
+    """Analyze a set of evidence items for symmetry statistics."""
+    from agent.shared import bias_detector
+    return bias_detector.analyze_evidence(evidence_items=req.evidence_items)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Cognitive Affordance Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class AffordanceContextCreateRequest(BaseModel):
+    agent_id: str
+    environment_id: str
+    description: str = ""
+    cues: list | None = None
+
+
+@router.post("/affordance/context")
+async def affordance_register_context(req: AffordanceContextCreateRequest):
+    """Register a new perception context."""
+    from agent.shared import affordance_engine
+    try:
+        context = affordance_engine.register_context(
+            agent_id=req.agent_id,
+            environment_id=req.environment_id,
+            description=req.description,
+            cues=req.cues,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return context.to_dict()
+
+
+@router.get("/affordance/contexts")
+async def affordance_list_contexts(agent_id: str | None = None):
+    """List perception contexts, optionally filtered by agent."""
+    from agent.shared import affordance_engine
+    contexts = affordance_engine.list_contexts(agent_id=agent_id)
+    return {"items": [c.to_dict() for c in contexts], "total": len(contexts)}
+
+
+@router.get("/affordances/stats")
+async def affordance_stats():
+    """Get cognitive affordance engine statistics."""
+    from agent.shared import affordance_engine
+    return affordance_engine.get_stats().to_dict()
+
+
+@router.get("/affordance/context/{context_id}")
+async def affordance_get_context(context_id: str):
+    """Get a perception context by ID."""
+    from agent.shared import affordance_engine
+    context = affordance_engine.get_context(context_id)
+    if context is None:
+        raise HTTPException(status_code=404, detail="Affordance context not found")
+    return context.to_dict()
+
+
+class AffordancePerceiveRequest(BaseModel):
+    name: str
+    source: str
+    description: str = ""
+    constraints: list | None = None
+    signatures: list | None = None
+    effects: list | None = None
+    effort: float = 0.5
+    utility: float = 0.5
+    risk: float = 0.0
+
+
+@router.post("/affordance/context/{context_id}/perceive")
+async def affordance_perceive(context_id: str, req: AffordancePerceiveRequest):
+    """Perceive a new affordance within a context."""
+    from agent.shared import affordance_engine
+    try:
+        affordance = affordance_engine.perceive_affordance(
+            context_id=context_id,
+            name=req.name,
+            source=req.source,
+            description=req.description,
+            constraints=req.constraints,
+            signatures=req.signatures,
+            effects=req.effects,
+            effort=req.effort,
+            utility=req.utility,
+            risk=req.risk,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Affordance context not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return affordance.to_dict()
+
+
+@router.get("/affordance/context/{context_id}/affordances")
+async def affordance_list_for_context(
+    context_id: str, source: str | None = None, status: str | None = None
+):
+    """List affordances in a context, optionally filtered by source/status."""
+    from agent.shared import affordance_engine
+    affordances = affordance_engine.list_affordances(
+        context_id=context_id, source=source, status=status
+    )
+    return {"items": [a.to_dict() for a in affordances], "total": len(affordances)}
+
+
+@router.get("/affordance/affordance/{affordance_id}")
+async def affordance_get_affordance(affordance_id: str):
+    """Get an affordance by ID."""
+    from agent.shared import affordance_engine
+    affordance = affordance_engine.get_affordance(affordance_id)
+    if affordance is None:
+        raise HTTPException(status_code=404, detail="Affordance not found")
+    return affordance.to_dict()
+
+
+class AffordanceValidateRequest(BaseModel):
+    validation_result: bool = True
+    notes: str = ""
+
+
+@router.put("/affordance/affordance/{affordance_id}/validate")
+async def affordance_validate(affordance_id: str, req: AffordanceValidateRequest):
+    """Validate an affordance against its constraints."""
+    from agent.shared import affordance_engine
+    try:
+        affordance = affordance_engine.validate_affordance(
+            affordance_id=affordance_id,
+            validation_result=req.validation_result,
+            notes=req.notes,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Affordance not found")
+    return affordance.to_dict()
+
+
+class AffordanceExecuteRequest(BaseModel):
+    execution_data: dict | None = None
+
+
+@router.post("/affordance/affordance/{affordance_id}/execute")
+async def affordance_execute(affordance_id: str, req: AffordanceExecuteRequest):
+    """Mark an affordance as executed, recording optional payload data."""
+    from agent.shared import affordance_engine
+    try:
+        affordance = affordance_engine.execute_affordance(
+            affordance_id=affordance_id,
+            execution_data=req.execution_data,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Affordance not found")
+    return affordance.to_dict()
+
+
+@router.get("/affordance/context/{context_id}/rank")
+async def affordance_rank(
+    context_id: str, metric: str = "utility", top_k: int = 10
+):
+    """Rank affordances within a context by the selected metric."""
+    from agent.shared import affordance_engine
+    affordances = affordance_engine.rank_affordances(
+        context_id=context_id, metric=metric, top_k=top_k
+    )
+    return {"items": [a.to_dict() for a in affordances], "total": len(affordances)}
+
+
+class AffordanceConstraintAddRequest(BaseModel):
+    constraint_type: str
+    description: str
+    satisfied: bool = False
+
+
+@router.post("/affordance/affordance/{affordance_id}/constraint")
+async def affordance_add_constraint(
+    affordance_id: str, req: AffordanceConstraintAddRequest
+):
+    """Attach a new constraint to an affordance."""
+    from agent.shared import affordance_engine
+    try:
+        constraint = affordance_engine.add_constraint(
+            affordance_id=affordance_id,
+            constraint_type=req.constraint_type,
+            description=req.description,
+            satisfied=req.satisfied,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Affordance not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return constraint.to_dict()
+
+
+@router.get("/affordance/affordance/{affordance_id}/constraints")
+async def affordance_list_constraints(affordance_id: str):
+    """List the constraints attached to an affordance."""
+    from agent.shared import affordance_engine
+    constraints = affordance_engine.list_constraints(affordance_id=affordance_id)
+    return {"items": [c.to_dict() for c in constraints], "total": len(constraints)}
+
+
+class AffordanceSignatureAddRequest(BaseModel):
+    signature_type: str
+    pattern: str
+    confidence: float = 0.5
+
+
+@router.post("/affordance/affordance/{affordance_id}/signature")
+async def affordance_add_signature(
+    affordance_id: str, req: AffordanceSignatureAddRequest
+):
+    """Attach a new perceptual signature to an affordance."""
+    from agent.shared import affordance_engine
+    try:
+        signature = affordance_engine.add_signature(
+            affordance_id=affordance_id,
+            signature_type=req.signature_type,
+            pattern=req.pattern,
+            confidence=req.confidence,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Affordance not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return signature.to_dict()
+
+
+@router.get("/affordance/affordance/{affordance_id}/signatures")
+async def affordance_list_signatures(affordance_id: str):
+    """List the signatures attached to an affordance."""
+    from agent.shared import affordance_engine
+    signatures = affordance_engine.list_signatures(affordance_id=affordance_id)
+    return {"items": [s.to_dict() for s in signatures], "total": len(signatures)}
+
+
+@router.get("/affordance/context/{context_id}/map")
+async def affordance_build_map(context_id: str):
+    """Build a summary map of all affordances in a context."""
+    from agent.shared import affordance_engine
+    return affordance_engine.build_map(context_id=context_id).to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Cognitive Scaffolding Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ScaffoldingLearnerRegisterRequest(BaseModel):
+    learner_id: str
+    name: str = ""
+    initial_competence: dict | None = None
+
+
+@router.post("/scaffolding/learner")
+async def scaffolding_register_learner(req: ScaffoldingLearnerRegisterRequest):
+    """Register a new learner and return its profile."""
+    from agent.shared import scaffolding_engine
+    try:
+        profile = scaffolding_engine.register_learner(
+            learner_id=req.learner_id,
+            name=req.name,
+            initial_competence=req.initial_competence,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return profile.to_dict()
+
+
+@router.get("/scaffolding/learners")
+async def scaffolding_list_learners():
+    """List all registered learner profiles."""
+    from agent.shared import scaffolding_engine
+    learners = scaffolding_engine.list_learners()
+    return {"items": [l.to_dict() for l in learners], "total": len(learners)}
+
+
+@router.get("/scaffolding/stats")
+async def scaffolding_stats():
+    """Get cognitive scaffolding engine statistics."""
+    from agent.shared import scaffolding_engine
+    return scaffolding_engine.get_stats().to_dict()
+
+
+@router.get("/scaffolding/learner/{learner_id}")
+async def scaffolding_get_learner(learner_id: str):
+    """Get a learner profile by ID."""
+    from agent.shared import scaffolding_engine
+    profile = scaffolding_engine.get_learner(learner_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Learner not found")
+    return profile.to_dict()
+
+
+class ScaffoldingAssessRequest(BaseModel):
+    skill_domain: str
+    level: str = "beginner"
+    score: float = 0.3
+    evidence: str = ""
+
+
+@router.post("/scaffolding/learner/{learner_id}/assess")
+async def scaffolding_assess_competence(
+    learner_id: str, req: ScaffoldingAssessRequest
+):
+    """Record a competence assessment for a learner in a skill domain."""
+    from agent.shared import scaffolding_engine
+    try:
+        assessment = scaffolding_engine.assess_competence(
+            learner_id=learner_id,
+            skill_domain=req.skill_domain,
+            level=req.level,
+            score=req.score,
+            evidence=req.evidence,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Learner not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return assessment.to_dict()
+
+
+@router.get("/scaffolding/learner/{learner_id}/assessments")
+async def scaffolding_list_assessments(
+    learner_id: str, skill_domain: str | None = None
+):
+    """List assessments for a learner, optionally filtered by skill domain."""
+    from agent.shared import scaffolding_engine
+    assessments = scaffolding_engine.list_assessments(
+        learner_id=learner_id, skill_domain=skill_domain
+    )
+    return {"items": [a.to_dict() for a in assessments], "total": len(assessments)}
+
+
+@router.get("/scaffolding/assessment/{assessment_id}")
+async def scaffolding_get_assessment(assessment_id: str):
+    """Get a competence assessment by ID."""
+    from agent.shared import scaffolding_engine
+    assessment = scaffolding_engine.get_assessment(assessment_id)
+    if assessment is None:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+    return assessment.to_dict()
+
+
+class ScaffoldingSessionCreateRequest(BaseModel):
+    learner_id: str
+    task_description: str
+    skill_domain: str
+    target_level: str = "intermediate"
+
+
+@router.post("/scaffolding/session")
+async def scaffolding_create_session(req: ScaffoldingSessionCreateRequest):
+    """Open a scaffolding session for a learner around a concrete task."""
+    from agent.shared import scaffolding_engine
+    try:
+        session = scaffolding_engine.create_session(
+            learner_id=req.learner_id,
+            task_description=req.task_description,
+            skill_domain=req.skill_domain,
+            target_level=req.target_level,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Learner not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return session.to_dict()
+
+
+@router.get("/scaffolding/sessions")
+async def scaffolding_list_sessions(
+    learner_id: str | None = None, status: str | None = None
+):
+    """List scaffolding sessions, optionally filtered by learner and/or status."""
+    from agent.shared import scaffolding_engine
+    sessions = scaffolding_engine.list_sessions(learner_id=learner_id, status=status)
+    return {"items": [s.to_dict() for s in sessions], "total": len(sessions)}
+
+
+@router.get("/scaffolding/session/{session_id}")
+async def scaffolding_get_session(session_id: str):
+    """Get a scaffolding session by ID."""
+    from agent.shared import scaffolding_engine
+    session = scaffolding_engine.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Scaffolding session not found")
+    return session.to_dict()
+
+
+class ScaffoldingProposeRequest(BaseModel):
+    level: str
+    strategy: str
+    content: str
+    fading_trigger: str = "mastery"
+
+
+@router.post("/scaffolding/session/{session_id}/scaffold")
+async def scaffolding_propose_scaffold(
+    session_id: str, req: ScaffoldingProposeRequest
+):
+    """Propose a new scaffold within a session."""
+    from agent.shared import scaffolding_engine
+    try:
+        scaffold = scaffolding_engine.propose_scaffold(
+            session_id=session_id,
+            level=req.level,
+            strategy=req.strategy,
+            content=req.content,
+            fading_trigger=req.fading_trigger,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Scaffolding session not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return scaffold.to_dict()
+
+
+@router.get("/scaffolding/session/{session_id}/scaffolds")
+async def scaffolding_list_scaffolds(
+    session_id: str, status: str | None = None
+):
+    """List scaffolds in a session, optionally filtered by status."""
+    from agent.shared import scaffolding_engine
+    scaffolds = scaffolding_engine.list_scaffolds(
+        session_id=session_id, status=status
+    )
+    return {"items": [s.to_dict() for s in scaffolds], "total": len(scaffolds)}
+
+
+@router.get("/scaffolding/scaffold/{scaffold_id}")
+async def scaffolding_get_scaffold(scaffold_id: str):
+    """Get a scaffold by ID."""
+    from agent.shared import scaffolding_engine
+    scaffold = scaffolding_engine.get_scaffold(scaffold_id)
+    if scaffold is None:
+        raise HTTPException(status_code=404, detail="Scaffold not found")
+    return scaffold.to_dict()
+
+
+@router.put("/scaffolding/scaffold/{scaffold_id}/activate")
+async def scaffolding_activate_scaffold(scaffold_id: str):
+    """Activate a proposed scaffold."""
+    from agent.shared import scaffolding_engine
+    try:
+        scaffold = scaffolding_engine.activate_scaffold(scaffold_id=scaffold_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Scaffold not found")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return scaffold.to_dict()
+
+
+class ScaffoldingFadeRequest(BaseModel):
+    reason: str = ""
+
+
+@router.put("/scaffolding/scaffold/{scaffold_id}/fade")
+async def scaffolding_fade_scaffold(
+    scaffold_id: str, req: ScaffoldingFadeRequest
+):
+    """Begin fading an active scaffold."""
+    from agent.shared import scaffolding_engine
+    try:
+        scaffold = scaffolding_engine.fade_scaffold(
+            scaffold_id=scaffold_id, reason=req.reason
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Scaffold not found")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return scaffold.to_dict()
+
+
+class ScaffoldingWithdrawRequest(BaseModel):
+    outcome: str = "success"
+
+
+@router.put("/scaffolding/scaffold/{scaffold_id}/withdraw")
+async def scaffolding_withdraw_scaffold(
+    scaffold_id: str, req: ScaffoldingWithdrawRequest
+):
+    """Withdraw a scaffold, marking it terminal."""
+    from agent.shared import scaffolding_engine
+    try:
+        scaffold = scaffolding_engine.withdraw_scaffold(
+            scaffold_id=scaffold_id, outcome=req.outcome
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Scaffold not found")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return scaffold.to_dict()
+
+
+class ScaffoldingFadingPlanRequest(BaseModel):
+    milestones: list
+
+
+@router.post("/scaffolding/scaffold/{scaffold_id}/fading-plan")
+async def scaffolding_create_fading_plan(
+    scaffold_id: str, req: ScaffoldingFadingPlanRequest
+):
+    """Attach a fading plan (with milestones) to a scaffold."""
+    from agent.shared import scaffolding_engine
+    try:
+        plan = scaffolding_engine.create_fading_plan(
+            scaffold_id=scaffold_id, milestones=req.milestones
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Scaffold not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return plan.to_dict()
+
+
+class ScaffoldingOutcomeRequest(BaseModel):
+    success: bool = True
+    feedback: str = ""
+
+
+@router.post("/scaffolding/session/{session_id}/outcome")
+async def scaffolding_record_outcome(
+    session_id: str, req: ScaffoldingOutcomeRequest
+):
+    """Record an outcome for a scaffolding session."""
+    from agent.shared import scaffolding_engine
+    try:
+        session = scaffolding_engine.record_outcome(
+            session_id=session_id,
+            success=req.success,
+            feedback=req.feedback,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Scaffolding session not found")
+    return session.to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Affective Engine Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class AffectiveProfileRegisterRequest(BaseModel):
+    agent_id: str
+    name: str = ""
+    baseline: dict | None = None
+
+
+@router.post("/affective/profile")
+async def affective_register_profile(req: AffectiveProfileRegisterRequest):
+    """Register an agent and return its affective profile."""
+    from agent.shared import affective_engine
+    profile = affective_engine.register_agent(
+        agent_id=req.agent_id, name=req.name, baseline=req.baseline
+    )
+    return profile.to_dict()
+
+
+@router.get("/affective/profiles")
+async def affective_list_profiles():
+    """List all registered affective profiles."""
+    from agent.shared import affective_engine
+    profiles = affective_engine.list_profiles()
+    return {"items": [p.to_dict() for p in profiles], "total": len(profiles)}
+
+
+@router.get("/affective/stats")
+async def affective_stats():
+    """Get affective engine statistics."""
+    from agent.shared import affective_engine
+    return affective_engine.get_stats().to_dict()
+
+
+@router.get("/affective/profile/{agent_id}")
+async def affective_get_profile(agent_id: str):
+    """Get the affective profile for an agent."""
+    from agent.shared import affective_engine
+    profile = affective_engine.get_profile(agent_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Affective profile not found")
+    return profile.to_dict()
+
+
+@router.get("/affective/state/{agent_id}")
+async def affective_get_state(agent_id: str):
+    """Get the agent's most recent affective state."""
+    from agent.shared import affective_engine
+    state = affective_engine.get_current_state(agent_id)
+    if state is None:
+        return {"state": None}
+    return state.to_dict()
+
+
+class AffectiveAppraiseRequest(BaseModel):
+    agent_id: str
+    trigger_type: str
+    event_description: str
+    appraisal_scores: dict | None = None
+
+
+@router.post("/affective/appraise")
+async def affective_appraise(req: AffectiveAppraiseRequest):
+    """Appraise an event along appraisal dimensions."""
+    from agent.shared import affective_engine
+    appraisal = affective_engine.appraise_event(
+        agent_id=req.agent_id,
+        trigger_type=req.trigger_type,
+        event_description=req.event_description,
+        appraisal_scores=req.appraisal_scores,
+    )
+    return appraisal.to_dict()
+
+
+class AffectiveGenerateRequest(BaseModel):
+    agent_id: str
+    appraisal_id: str
+
+
+@router.post("/affective/generate")
+async def affective_generate_emotion(req: AffectiveGenerateRequest):
+    """Generate an affective state from a previously stored appraisal."""
+    from agent.shared import affective_engine
+    try:
+        state = affective_engine.generate_emotion(
+            agent_id=req.agent_id, appraisal_id=req.appraisal_id
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Appraisal not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return state.to_dict()
+
+
+class AffectiveRegulateRequest(BaseModel):
+    agent_id: str
+    strategy: str
+    target_emotion: str | None = None
+
+
+@router.post("/affective/regulate")
+async def affective_regulate(req: AffectiveRegulateRequest):
+    """Apply a regulation strategy to the agent's current state."""
+    from agent.shared import affective_engine
+    action = affective_engine.regulate_emotion(
+        agent_id=req.agent_id,
+        strategy=req.strategy,
+        target_emotion=req.target_emotion,
+    )
+    return action.to_dict()
+
+
+class AffectiveRecordStateRequest(BaseModel):
+    agent_id: str
+    state: dict
+
+
+@router.post("/affective/record")
+async def affective_record_state(req: AffectiveRecordStateRequest):
+    """Record an externally constructed affective state on the agent's trajectory."""
+    from agent.shared import affective_engine
+    from agent.agent_affective_engine import AffectiveState, EmotionType
+    raw = req.state or {}
+    emotion_raw = raw.get("emotion", "calm")
+    emotion = EmotionType.CALM
+    if emotion_raw is not None:
+        try:
+            emotion = EmotionType(str(emotion_raw).lower())
+        except ValueError:
+            try:
+                emotion = EmotionType[str(emotion_raw).upper()]
+            except KeyError:
+                emotion = EmotionType.CALM
+    state = AffectiveState(
+        state_id=str(raw.get("state_id") or ""),
+        agent_id=req.agent_id,
+        emotion=emotion,
+        valence=float(raw.get("valence", 0.0)),
+        arousal=float(raw.get("arousal", 0.0)),
+        dominance=float(raw.get("dominance", 0.0)),
+        intensity=float(raw.get("intensity", 0.0)),
+        trigger_appraisal_id=raw.get("trigger_appraisal_id"),
+        created_at=str(raw.get("created_at") or ""),
+    )
+    trajectory = affective_engine.record_state(agent_id=req.agent_id, state=state)
+    return trajectory.to_dict()
+
+
+@router.get("/affective/trajectory/{agent_id}")
+async def affective_get_trajectory(agent_id: str, limit: int = 50):
+    """Get the agent's affective state trajectory."""
+    from agent.shared import affective_engine
+    trajectory = affective_engine.get_trajectory(agent_id=agent_id, limit=limit)
+    return trajectory.to_dict()
+
+
+class AffectiveModeRequest(BaseModel):
+    mode: str
+
+
+@router.put("/affective/mode/{agent_id}")
+async def affective_set_mode(agent_id: str, req: AffectiveModeRequest):
+    """Forcefully set the agent's affective mode."""
+    from agent.shared import affective_engine
+    profile = affective_engine.set_mode(agent_id=agent_id, mode=req.mode)
+    return profile.to_dict()
+
+
+@router.get("/affective/mode/{agent_id}")
+async def affective_get_mode(agent_id: str):
+    """Get the agent's current affective mode."""
+    from agent.shared import affective_engine
+    mode = affective_engine.get_mode(agent_id)
+    return {"agent_id": agent_id, "mode": mode.value}
+
+
+class AffectiveMirrorRequest(BaseModel):
+    agent_id: str
+    user_emotion: str
+    intensity: float = 0.5
+
+
+@router.post("/affective/mirror")
+async def affective_mirror_emotion(req: AffectiveMirrorRequest):
+    """Create a state that mirrors a user's emotion."""
+    from agent.shared import affective_engine
+    state = affective_engine.mirror_emotion(
+        agent_id=req.agent_id,
+        user_emotion=req.user_emotion,
+        intensity=req.intensity,
+    )
+    return state.to_dict()
+
+
+@router.get("/affective/regulations")
+async def affective_list_regulations(agent_id: str | None = None):
+    """List regulation actions, optionally filtered by agent."""
+    from agent.shared import affective_engine
+    with affective_engine._lock:
+        actions = list(affective_engine._regulations.values())
+    if agent_id is not None:
+        actions = [a for a in actions if a.agent_id == agent_id]
+    return {"items": [a.to_dict() for a in actions], "total": len(actions)}
+
+
+@router.get("/affective/appraisals")
+async def affective_list_appraisals(agent_id: str | None = None):
+    """List appraisals, optionally filtered by agent."""
+    from agent.shared import affective_engine
+    with affective_engine._lock:
+        appraisals = list(affective_engine._appraisals.values())
+    if agent_id is not None:
+        appraisals = [a for a in appraisals if a.agent_id == agent_id]
+    return {"items": [a.to_dict() for a in appraisals], "total": len(appraisals)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Cognitive Style Transfer Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class StyleTransferExtractRequest(BaseModel):
+    source_id: str
+    source_type: str
+    description: str = ""
+    features: list[dict] | None = None
+
+
+@router.post("/style-transfer/style")
+async def style_transfer_extract_style(req: StyleTransferExtractRequest):
+    """Extract a cognitive style from a source."""
+    from agent.shared import style_transfer_engine
+    style = style_transfer_engine.extract_style(
+        source_id=req.source_id,
+        source_type=req.source_type,
+        description=req.description,
+        features=req.features,
+    )
+    return style.to_dict()
+
+
+@router.get("/style-transfer/styles")
+async def style_transfer_list_styles(
+    source_type: str | None = None, dimension: str | None = None
+):
+    """List registered cognitive styles, optionally filtered."""
+    from agent.shared import style_transfer_engine
+    styles = style_transfer_engine.list_styles(
+        source_type=source_type, dimension=dimension
+    )
+    return {"items": [s.to_dict() for s in styles], "total": len(styles)}
+
+
+@router.get("/style-transfers/stats")
+async def style_transfer_stats():
+    """Get cognitive style transfer engine statistics."""
+    from agent.shared import style_transfer_engine
+    return style_transfer_engine.get_stats().to_dict()
+
+
+@router.get("/style-transfer/style/{style_id}")
+async def style_transfer_get_style(style_id: str):
+    """Get a cognitive style by ID."""
+    from agent.shared import style_transfer_engine
+    style = style_transfer_engine.get_style(style_id)
+    if style is None:
+        raise HTTPException(status_code=404, detail="Style not found")
+    return style.to_dict()
+
+
+class StyleTransferUpdateRequest(BaseModel):
+    description: str | None = None
+    features: list[dict] | None = None
+
+
+@router.put("/style-transfer/style/{style_id}")
+async def style_transfer_update_style(style_id: str, req: StyleTransferUpdateRequest):
+    """Update a cognitive style's description and/or features."""
+    from agent.shared import style_transfer_engine
+    try:
+        style = style_transfer_engine.update_style(
+            style_id=style_id,
+            description=req.description,
+            features=req.features,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Style not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return style.to_dict()
+
+
+@router.delete("/style-transfer/style/{style_id}")
+async def style_transfer_delete_style(style_id: str):
+    """Delete a cognitive style and its fingerprint."""
+    from agent.shared import style_transfer_engine
+    deleted = style_transfer_engine.delete_style(style_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Style not found")
+    return {"deleted": True, "style_id": style_id}
+
+
+@router.post("/style-transfer/style/{style_id}/fingerprint")
+async def style_transfer_fingerprint_style(style_id: str):
+    """Build or rebuild the numeric fingerprint for a style."""
+    from agent.shared import style_transfer_engine
+    try:
+        fingerprint = style_transfer_engine.fingerprint_style(style_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Style not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return fingerprint.to_dict()
+
+
+@router.get("/style-transfer/style/{style_id}/fingerprint")
+async def style_transfer_get_fingerprint(style_id: str):
+    """Get the cached fingerprint for a style."""
+    from agent.shared import style_transfer_engine
+    fingerprint = style_transfer_engine.get_fingerprint(style_id)
+    if fingerprint is None:
+        raise HTTPException(status_code=404, detail="Fingerprint not found")
+    return fingerprint.to_dict()
+
+
+@router.get("/style-transfer/style/{style_id}/match")
+async def style_transfer_match_styles(style_id: str, top_k: int = 5):
+    """Find the most similar styles to a query style by fingerprint."""
+    from agent.shared import style_transfer_engine
+    try:
+        matches = style_transfer_engine.match_styles(
+            style_id=style_id, top_k=top_k
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Style not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"items": [m.to_dict() for m in matches], "total": len(matches)}
+
+
+class StyleTransferCreateRequest(BaseModel):
+    source_style_id: str
+    target_domain: str
+    fidelity: str = "adaptive"
+    description: str = ""
+
+
+@router.post("/style-transfer/transfer")
+async def style_transfer_create_transfer(req: StyleTransferCreateRequest):
+    """Create a style transfer request from a source style to a target."""
+    from agent.shared import style_transfer_engine
+    try:
+        transfer = style_transfer_engine.create_transfer(
+            source_style_id=req.source_style_id,
+            target_domain=req.target_domain,
+            fidelity=req.fidelity,
+            description=req.description,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Source style not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return transfer.to_dict()
+
+
+@router.get("/style-transfer/transfers")
+async def style_transfer_list_transfers(status: str | None = None):
+    """List style transfers, optionally filtered by status."""
+    from agent.shared import style_transfer_engine
+    transfers = style_transfer_engine.list_transfers(status=status)
+    return {"items": [t.to_dict() for t in transfers], "total": len(transfers)}
+
+
+@router.get("/style-transfer/transfer/{transfer_id}")
+async def style_transfer_get_transfer(transfer_id: str):
+    """Get a style transfer by ID."""
+    from agent.shared import style_transfer_engine
+    transfer = style_transfer_engine.get_transfer(transfer_id)
+    if transfer is None:
+        raise HTTPException(status_code=404, detail="Transfer not found")
+    return transfer.to_dict()
+
+
+class StyleTransferValidateRequest(BaseModel):
+    constraints: dict | None = None
+
+
+@router.put("/style-transfer/transfer/{transfer_id}/validate")
+async def style_transfer_validate_transfer(
+    transfer_id: str, req: StyleTransferValidateRequest
+):
+    """Validate a transfer against constraints and mark it completed."""
+    from agent.shared import style_transfer_engine
+    try:
+        transfer = style_transfer_engine.validate_transfer(
+            transfer_id=transfer_id, constraints=req.constraints
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Transfer not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return transfer.to_dict()
+
+
+class StyleTransferBlendRequest(BaseModel):
+    style_ids: list[str]
+    strategy: str = "weighted"
+    weights: list[float] | None = None
+
+
+@router.post("/style-transfer/blend")
+async def style_transfer_blend_styles(req: StyleTransferBlendRequest):
+    """Combine several styles into a composite style."""
+    from agent.shared import style_transfer_engine
+    try:
+        blend = style_transfer_engine.blend_styles(
+            style_ids=req.style_ids,
+            strategy=req.strategy,
+            weights=req.weights,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Style not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return blend.to_dict()
+
+
+@router.get("/style-transfer/blends")
+async def style_transfer_list_blends():
+    """List all registered style blends."""
+    from agent.shared import style_transfer_engine
+    blends = style_transfer_engine.list_blends()
+    return {"items": [b.to_dict() for b in blends], "total": len(blends)}
+
+
+@router.get("/style-transfer/blend/{blend_id}")
+async def style_transfer_get_blend(blend_id: str):
+    """Get a style blend by ID."""
+    from agent.shared import style_transfer_engine
+    blend = style_transfer_engine.get_blend(blend_id)
+    if blend is None:
+        raise HTTPException(status_code=404, detail="Blend not found")
+    return blend.to_dict()
+
+
+class StyleTransferApplyRequest(BaseModel):
+    problem_description: str
+
+
+@router.post("/style-transfer/style/{style_id}/apply")
+async def style_transfer_apply_style(style_id: str, req: StyleTransferApplyRequest):
+    """Apply a cognitive style to a problem and return a suggested approach."""
+    from agent.shared import style_transfer_engine
+    try:
+        result = style_transfer_engine.apply_style(
+            style_id=style_id,
+            problem_description=req.problem_description,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Style not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Cognitive Prime Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class PrimeRegisterContextRequest(BaseModel):
+    agent_id: str
+    description: str = ""
+    active_concepts: list[str] | None = None
+
+
+@router.post("/prime/context")
+async def prime_register_context(req: PrimeRegisterContextRequest):
+    """Register a new priming context for an agent."""
+    from agent.shared import prime_engine
+    context = prime_engine.register_context(
+        agent_id=req.agent_id,
+        description=req.description,
+        active_concepts=req.active_concepts,
+    )
+    return context.to_dict()
+
+
+@router.get("/prime/contexts")
+async def prime_list_contexts(agent_id: str | None = None):
+    """List priming contexts, optionally filtered by agent."""
+    from agent.shared import prime_engine
+    contexts = prime_engine.list_contexts(agent_id=agent_id)
+    return {"items": [c.to_dict() for c in contexts], "total": len(contexts)}
+
+
+@router.get("/primes/stats")
+async def prime_stats():
+    """Get cognitive prime engine statistics."""
+    from agent.shared import prime_engine
+    return prime_engine.get_stats().to_dict()
+
+
+@router.get("/prime/context/{context_id}")
+async def prime_get_context(context_id: str):
+    """Get a priming context by ID."""
+    from agent.shared import prime_engine
+    context = prime_engine.get_context(context_id)
+    if context is None:
+        raise HTTPException(status_code=404, detail="Prime context not found")
+    return context.to_dict()
+
+
+class PrimeActivateRequest(BaseModel):
+    prime_concept: str
+    prime_type: str = "semantic"
+    strength: str = "moderate"
+    description: str = ""
+
+
+@router.post("/prime/context/{context_id}/activate")
+async def prime_activate(context_id: str, req: PrimeActivateRequest):
+    """Activate a prime on a concept within a context."""
+    from agent.shared import prime_engine
+    try:
+        activation = prime_engine.activate_prime(
+            context_id=context_id,
+            prime_concept=req.prime_concept,
+            prime_type=req.prime_type,
+            strength=req.strength,
+            description=req.description,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return activation.to_dict()
+
+
+@router.get("/prime/context/{context_id}/activations")
+async def prime_list_activations(
+    context_id: str, prime_type: str | None = None
+):
+    """List activations for a context, optionally filtered by prime type."""
+    from agent.shared import prime_engine
+    activations = prime_engine.list_activations(
+        context_id=context_id, prime_type=prime_type
+    )
+    return {"items": [a.to_dict() for a in activations], "total": len(activations)}
+
+
+@router.get("/prime/activation/{activation_id}")
+async def prime_get_activation(activation_id: str):
+    """Get a prime activation by ID."""
+    from agent.shared import prime_engine
+    activation = prime_engine.get_activation(activation_id)
+    if activation is None:
+        raise HTTPException(status_code=404, detail="Activation not found")
+    return activation.to_dict()
+
+
+class PrimeSpreadRequest(BaseModel):
+    mode: str = "spreading"
+    fan_out: int = 3
+    decay: float = 0.5
+
+
+@router.post("/prime/activation/{activation_id}/spread")
+async def prime_spread_activation(activation_id: str, req: PrimeSpreadRequest):
+    """Spread activation from a source prime to associated concepts."""
+    from agent.shared import prime_engine
+    try:
+        activations = prime_engine.spread_activation(
+            activation_id=activation_id,
+            mode=req.mode,
+            fan_out=req.fan_out,
+            decay=req.decay,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Activation not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"items": [a.to_dict() for a in activations], "total": len(activations)}
+
+
+class PrimeMeasureRequest(BaseModel):
+    target_concept: str
+    direction: str = "positive"
+
+
+@router.post("/prime/activation/{activation_id}/measure")
+async def prime_measure_effect(activation_id: str, req: PrimeMeasureRequest):
+    """Measure the effect of an activation on a target concept."""
+    from agent.shared import prime_engine
+    try:
+        effect = prime_engine.measure_effect(
+            activation_id=activation_id,
+            target_concept=req.target_concept,
+            direction=req.direction,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Activation not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return effect.to_dict()
+
+
+@router.get("/prime/activation/{activation_id}/effects")
+async def prime_list_effects(activation_id: str):
+    """List effects produced by an activation."""
+    from agent.shared import prime_engine
+    effects = prime_engine.list_effects(activation_id=activation_id)
+    return {"items": [e.to_dict() for e in effects], "total": len(effects)}
+
+
+@router.get("/prime/effect/{effect_id}")
+async def prime_get_effect(effect_id: str):
+    """Get a prime effect by ID."""
+    from agent.shared import prime_engine
+    effect = prime_engine.get_effect(effect_id)
+    if effect is None:
+        raise HTTPException(status_code=404, detail="Effect not found")
+    return effect.to_dict()
+
+
+class PrimeInterferenceRequest(BaseModel):
+    activation_id: str
+    other_activation_id: str
+
+
+@router.post("/prime/interference")
+async def prime_check_interference(req: PrimeInterferenceRequest):
+    """Detect interference between two activations."""
+    from agent.shared import prime_engine
+    try:
+        result = prime_engine.check_interference(
+            activation_id=req.activation_id,
+            other_activation_id=req.other_activation_id,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Activation not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return result
+
+
+class PrimeCreateSessionRequest(BaseModel):
+    goal: str = ""
+    description: str = ""
+
+
+@router.post("/prime/context/{context_id}/session")
+async def prime_create_session(context_id: str, req: PrimeCreateSessionRequest):
+    """Create a new priming session bound to a context."""
+    from agent.shared import prime_engine
+    try:
+        session = prime_engine.create_session(
+            context_id=context_id,
+            goal=req.goal,
+            description=req.description,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return session.to_dict()
+
+
+@router.get("/prime/context/{context_id}/sessions")
+async def prime_list_sessions(context_id: str):
+    """List sessions for a context."""
+    from agent.shared import prime_engine
+    sessions = prime_engine.list_sessions(context_id=context_id)
+    return {"items": [s.to_dict() for s in sessions], "total": len(sessions)}
+
+
+class PrimeDecayRequest(BaseModel):
+    decay_factor: float = 0.3
+
+
+@router.post("/prime/context/{context_id}/decay")
+async def prime_decay_activations(context_id: str, req: PrimeDecayRequest):
+    """Decay all activations in a context by a decay factor."""
+    from agent.shared import prime_engine
+    try:
+        affected = prime_engine.decay_activations(
+            context_id=context_id, decay_factor=req.decay_factor
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"context_id": context_id, "decayed": affected}
+
+
+@router.get("/prime/session/{session_id}")
+async def prime_get_session(session_id: str):
+    """Get a priming session by ID."""
+    from agent.shared import prime_engine
+    session = prime_engine.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session.to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Cognitive Phase Transition Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class PhaseTransitionRegisterContextRequest(BaseModel):
+    agent_id: str
+    domain: str
+    description: str = ""
+
+
+@router.post("/phase-transition/context")
+async def phase_transition_register_context(
+    req: PhaseTransitionRegisterContextRequest
+):
+    """Register a new phase transition context."""
+    from agent.shared import phase_transition_engine
+    try:
+        context = phase_transition_engine.register_context(
+            agent_id=req.agent_id,
+            domain=req.domain,
+            description=req.description,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return context.to_dict()
+
+
+@router.get("/phase-transition/contexts")
+async def phase_transition_list_contexts(agent_id: str | None = None):
+    """List phase transition contexts, optionally filtered by agent."""
+    from agent.shared import phase_transition_engine
+    contexts = phase_transition_engine.list_contexts(agent_id=agent_id)
+    return {"items": [c.to_dict() for c in contexts], "total": len(contexts)}
+
+
+@router.get("/phase-transitions/stats")
+async def phase_transition_stats():
+    """Get cognitive phase transition engine statistics."""
+    from agent.shared import phase_transition_engine
+    return phase_transition_engine.get_stats().to_dict()
+
+
+@router.get("/phase-transition/context/{context_id}")
+async def phase_transition_get_context(context_id: str):
+    """Get a phase transition context by ID."""
+    from agent.shared import phase_transition_engine
+    context = phase_transition_engine.get_context(context_id)
+    if context is None:
+        raise HTTPException(status_code=404, detail="Context not found")
+    return context.to_dict()
+
+
+class PhaseTransitionRecordParameterRequest(BaseModel):
+    parameter_type: str
+    value: float
+
+
+@router.post("/phase-transition/context/{context_id}/parameter")
+async def phase_transition_record_parameter(
+    context_id: str, req: PhaseTransitionRecordParameterRequest
+):
+    """Record a measurement of one order parameter for a context."""
+    from agent.shared import phase_transition_engine
+    try:
+        parameter = phase_transition_engine.record_parameter(
+            context_id=context_id,
+            parameter_type=req.parameter_type,
+            value=req.value,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return parameter.to_dict()
+
+
+@router.get("/phase-transition/context/{context_id}/parameters")
+async def phase_transition_get_parameters(
+    context_id: str, parameter_type: str | None = None
+):
+    """Get parameter history for a context, optionally filtered by type."""
+    from agent.shared import phase_transition_engine
+    parameters = phase_transition_engine.get_parameter_history(
+        context_id=context_id, parameter_type=parameter_type
+    )
+    return {"items": [p.to_dict() for p in parameters], "total": len(parameters)}
+
+
+@router.post("/phase-transition/context/{context_id}/detect")
+async def phase_transition_detect_critical_point(context_id: str):
+    """Analyze parameter variance to detect a critical point."""
+    from agent.shared import phase_transition_engine
+    try:
+        point = phase_transition_engine.detect_critical_point(context_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if point is None:
+        raise HTTPException(
+            status_code=404, detail="Critical point not detected"
+        )
+    return point.to_dict()
+
+
+@router.get("/phase-transition/context/{context_id}/critical-points")
+async def phase_transition_list_critical_points(context_id: str):
+    """List critical points detected for a context."""
+    from agent.shared import phase_transition_engine
+    points = phase_transition_engine.list_critical_points(context_id)
+    return {"items": [p.to_dict() for p in points], "total": len(points)}
+
+
+@router.get("/phase-transition/critical-point/{point_id}")
+async def phase_transition_get_critical_point(point_id: str):
+    """Get a critical point by ID."""
+    from agent.shared import phase_transition_engine
+    point = phase_transition_engine.get_critical_point(point_id)
+    if point is None:
+        raise HTTPException(status_code=404, detail="Critical point not found")
+    return point.to_dict()
+
+
+class PhaseTransitionRegisterCatalystRequest(BaseModel):
+    catalyst_type: str
+    description: str
+    strength: float = 0.5
+
+
+@router.post("/phase-transition/context/{context_id}/catalyst")
+async def phase_transition_register_catalyst(
+    context_id: str, req: PhaseTransitionRegisterCatalystRequest
+):
+    """Register a new transition catalyst for a context."""
+    from agent.shared import phase_transition_engine
+    try:
+        catalyst = phase_transition_engine.register_catalyst(
+            context_id=context_id,
+            catalyst_type=req.catalyst_type,
+            description=req.description,
+            strength=req.strength,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return catalyst.to_dict()
+
+
+@router.get("/phase-transition/context/{context_id}/catalysts")
+async def phase_transition_list_catalysts(
+    context_id: str, catalyst_type: str | None = None
+):
+    """List catalysts for a context, optionally filtered by type."""
+    from agent.shared import phase_transition_engine
+    catalysts = phase_transition_engine.list_catalysts(
+        context_id=context_id, catalyst_type=catalyst_type
+    )
+    return {"items": [c.to_dict() for c in catalysts], "total": len(catalysts)}
+
+
+@router.get("/phase-transition/catalyst/{catalyst_id}")
+async def phase_transition_get_catalyst(catalyst_id: str):
+    """Get a transition catalyst by ID."""
+    from agent.shared import phase_transition_engine
+    catalyst = phase_transition_engine.get_catalyst(catalyst_id)
+    if catalyst is None:
+        raise HTTPException(status_code=404, detail="Catalyst not found")
+    return catalyst.to_dict()
+
+
+class PhaseTransitionTriggerRequest(BaseModel):
+    catalyst_id: str
+    description: str = ""
+
+
+@router.post("/phase-transition/context/{context_id}/trigger")
+async def phase_transition_trigger_transition(
+    context_id: str, req: PhaseTransitionTriggerRequest
+):
+    """Trigger a transition by firing a catalyst against a context."""
+    from agent.shared import phase_transition_engine
+    try:
+        event = phase_transition_engine.trigger_transition(
+            context_id=context_id,
+            catalyst_id=req.catalyst_id,
+            description=req.description,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context or catalyst not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return event.to_dict()
+
+
+@router.get("/phase-transition/events")
+async def phase_transition_list_events(
+    context_id: str | None = None, status: str | None = None
+):
+    """List transition events, optionally filtered by context and status."""
+    from agent.shared import phase_transition_engine
+    events = phase_transition_engine.list_events(
+        context_id=context_id, status=status
+    )
+    return {"items": [e.to_dict() for e in events], "total": len(events)}
+
+
+@router.get("/phase-transition/event/{event_id}")
+async def phase_transition_get_event(event_id: str):
+    """Get a phase transition event by ID."""
+    from agent.shared import phase_transition_engine
+    event = phase_transition_engine.get_event(event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return event.to_dict()
+
+
+class PhaseTransitionFacilitateRequest(BaseModel):
+    interventions: list[str] | None = None
+
+
+@router.put("/phase-transition/event/{event_id}/facilitate")
+async def phase_transition_facilitate(
+    event_id: str, req: PhaseTransitionFacilitateRequest
+):
+    """Apply interventions to support an in-progress transition."""
+    from agent.shared import phase_transition_engine
+    try:
+        event = phase_transition_engine.facilitate_transition(
+            event_id=event_id, interventions=req.interventions
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Event not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return event.to_dict()
+
+
+class PhaseTransitionStabilizeRequest(BaseModel):
+    description: str = ""
+
+
+@router.put("/phase-transition/event/{event_id}/stabilize")
+async def phase_transition_stabilize(
+    event_id: str, req: PhaseTransitionStabilizeRequest
+):
+    """Mark a transition as stabilized in a new stable phase."""
+    from agent.shared import phase_transition_engine
+    try:
+        event = phase_transition_engine.stabilize_phase(
+            event_id=event_id, description=req.description
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Event not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return event.to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Cognitive Gravity Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class GravityRegisterContextRequest(BaseModel):
+    agent_id: str
+    description: str = ""
+    initial_concepts: list[dict] | None = None
+
+
+@router.post("/gravity/context")
+async def gravity_register_context(req: GravityRegisterContextRequest):
+    """Register a new gravity context and return it."""
+    from agent.shared import gravity_engine
+    try:
+        context = gravity_engine.register_context(
+            agent_id=req.agent_id,
+            description=req.description,
+            initial_concepts=req.initial_concepts,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return context.to_dict()
+
+
+@router.get("/gravity/contexts")
+async def gravity_list_contexts(agent_id: str | None = None):
+    """List gravity contexts, optionally filtered by agent."""
+    from agent.shared import gravity_engine
+    contexts = gravity_engine.list_contexts(agent_id=agent_id)
+    return {"items": [c.to_dict() for c in contexts], "total": len(contexts)}
+
+
+@router.get("/gravity/stats")
+async def gravity_stats():
+    """Get cognitive gravity engine statistics."""
+    from agent.shared import gravity_engine
+    return gravity_engine.get_stats().to_dict()
+
+
+@router.get("/gravity/context/{context_id}")
+async def gravity_get_context(context_id: str):
+    """Get a gravity context by ID."""
+    from agent.shared import gravity_engine
+    context = gravity_engine.get_context(context_id)
+    if context is None:
+        raise HTTPException(status_code=404, detail="Context not found")
+    return context.to_dict()
+
+
+class GravityAddConceptRequest(BaseModel):
+    concept: str
+    mass: float = 1.0
+    position: list[float] | None = None
+    contributions: dict | None = None
+
+
+@router.post("/gravity/context/{context_id}/concept")
+async def gravity_add_concept(context_id: str, req: GravityAddConceptRequest):
+    """Add a concept to a gravity context and return its IdeaMass record."""
+    from agent.shared import gravity_engine
+    try:
+        idea = gravity_engine.add_concept(
+            context_id=context_id,
+            concept=req.concept,
+            mass=req.mass,
+            position=req.position,
+            contributions=req.contributions,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return idea.to_dict()
+
+
+@router.get("/gravity/context/{context_id}/concepts")
+async def gravity_list_concepts(context_id: str):
+    """List concepts registered in a gravity context."""
+    from agent.shared import gravity_engine
+    concepts = gravity_engine.list_concepts(context_id)
+    return {"items": [c.to_dict() for c in concepts], "total": len(concepts)}
+
+
+@router.get("/gravity/context/{context_id}/concept/{concept}")
+async def gravity_get_concept(context_id: str, concept: str):
+    """Get a concept by label within a gravity context."""
+    from agent.shared import gravity_engine
+    idea = gravity_engine.get_concept(context_id=context_id, concept=concept)
+    if idea is None:
+        raise HTTPException(status_code=404, detail="Concept not found")
+    return idea.to_dict()
+
+
+@router.post("/gravity/context/{context_id}/field")
+async def gravity_compute_field(context_id: str):
+    """Compute the gravitational field for a context from its concepts."""
+    from agent.shared import gravity_engine
+    try:
+        field = gravity_engine.compute_field(context_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return field.to_dict()
+
+
+@router.get("/gravity/context/{context_id}/field")
+async def gravity_get_field(context_id: str):
+    """Get the most recently computed field for a context."""
+    from agent.shared import gravity_engine
+    field = gravity_engine.get_field(context_id)
+    if field is None:
+        raise HTTPException(status_code=404, detail="Field not found")
+    return field.to_dict()
+
+
+class GravityCreateBasinRequest(BaseModel):
+    center_concept: str
+    attractor_type: str = "basin"
+    radius: float = 1.0
+    stability: float = 0.5
+
+
+@router.post("/gravity/context/{context_id}/basin")
+async def gravity_create_basin(context_id: str, req: GravityCreateBasinRequest):
+    """Create an attractor basin centered on a concept."""
+    from agent.shared import gravity_engine
+    try:
+        basin = gravity_engine.create_basin(
+            context_id=context_id,
+            center_concept=req.center_concept,
+            attractor_type=req.attractor_type,
+            radius=req.radius,
+            stability=req.stability,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context or concept not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return basin.to_dict()
+
+
+@router.get("/gravity/context/{context_id}/basins")
+async def gravity_list_basins(context_id: str):
+    """List basins created for a gravity context."""
+    from agent.shared import gravity_engine
+    basins = gravity_engine.list_basins(context_id)
+    return {"items": [b.to_dict() for b in basins], "total": len(basins)}
+
+
+@router.get("/gravity/basin/{basin_id}")
+async def gravity_get_basin(basin_id: str):
+    """Get an attractor basin by ID."""
+    from agent.shared import gravity_engine
+    basin = gravity_engine.get_basin(basin_id)
+    if basin is None:
+        raise HTTPException(status_code=404, detail="Basin not found")
+    return basin.to_dict()
+
+
+class GravityPredictTrajectoryRequest(BaseModel):
+    start_concept: str
+    steps: int = 10
+    step_size: float = 0.1
+
+
+@router.post("/gravity/context/{context_id}/trajectory")
+async def gravity_predict_trajectory(
+    context_id: str, req: GravityPredictTrajectoryRequest
+):
+    """Predict a thought path through idea space from a starting concept."""
+    from agent.shared import gravity_engine
+    try:
+        trajectory = gravity_engine.predict_trajectory(
+            context_id=context_id,
+            start_concept=req.start_concept,
+            steps=req.steps,
+            step_size=req.step_size,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context or concept not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return trajectory.to_dict()
+
+
+@router.get("/gravity/trajectories")
+async def gravity_list_trajectories(
+    context_id: str | None = None, status: str | None = None
+):
+    """List trajectories, optionally filtered by context and status."""
+    from agent.shared import gravity_engine
+    trajectories = gravity_engine.list_trajectories(
+        context_id=context_id, status=status
+    )
+    return {
+        "items": [t.to_dict() for t in trajectories],
+        "total": len(trajectories),
+    }
+
+
+@router.get("/gravity/trajectory/{trajectory_id}")
+async def gravity_get_trajectory(trajectory_id: str):
+    """Get a thought trajectory by ID."""
+    from agent.shared import gravity_engine
+    trajectory = gravity_engine.get_trajectory(trajectory_id)
+    if trajectory is None:
+        raise HTTPException(status_code=404, detail="Trajectory not found")
+    return trajectory.to_dict()
+
+
+@router.post("/gravity/trajectory/{trajectory_id}/escape")
+async def gravity_check_basin_escape(trajectory_id: str):
+    """Check whether a trajectory has escaped a basin."""
+    from agent.shared import gravity_engine
+    try:
+        result = gravity_engine.check_basin_escape(trajectory_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Trajectory not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return result
+
+
+class GravityPerturbRequest(BaseModel):
+    concept: str
+    force_vector: list[float]
+
+
+@router.post("/gravity/context/{context_id}/perturb")
+async def gravity_perturb_field(context_id: str, req: GravityPerturbRequest):
+    """Apply a perturbation to a concept and recompute the field."""
+    from agent.shared import gravity_engine
+    try:
+        field = gravity_engine.perturb_field(
+            context_id=context_id,
+            concept=req.concept,
+            force_vector=req.force_vector,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context or concept not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return field.to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Cognitive Resonance Routes
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ResonanceRegisterContextRequest(BaseModel):
+    agent_id: str
+    domain: str
+    description: str = ""
+
+
+@router.post("/resonance/context")
+async def resonance_register_context(req: ResonanceRegisterContextRequest):
+    """Register a new resonance context."""
+    from agent.shared import resonance_engine
+    try:
+        context = resonance_engine.register_context(
+            agent_id=req.agent_id,
+            domain=req.domain,
+            description=req.description,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return context.to_dict()
+
+
+@router.get("/resonance/contexts")
+async def resonance_list_contexts(agent_id: str | None = None):
+    """List resonance contexts, optionally filtered by agent."""
+    from agent.shared import resonance_engine
+    contexts = resonance_engine.list_contexts(agent_id=agent_id)
+    return {"items": [c.to_dict() for c in contexts], "total": len(contexts)}
+
+
+@router.get("/resonance/stats")
+async def resonance_stats():
+    """Get cognitive resonance engine statistics."""
+    from agent.shared import resonance_engine
+    return resonance_engine.get_stats().to_dict()
+
+
+@router.get("/resonance/context/{context_id}")
+async def resonance_get_context(context_id: str):
+    """Get a resonance context by ID."""
+    from agent.shared import resonance_engine
+    context = resonance_engine.get_context(context_id)
+    if context is None:
+        raise HTTPException(status_code=404, detail="Context not found")
+    return context.to_dict()
+
+
+class ResonanceRegisterConceptRequest(BaseModel):
+    concept: str
+    attributes: dict | None = None
+
+
+@router.post("/resonance/context/{context_id}/concept")
+async def resonance_register_concept(
+    context_id: str, req: ResonanceRegisterConceptRequest
+):
+    """Register a concept within a resonance context."""
+    from agent.shared import resonance_engine
+    try:
+        concept = resonance_engine.register_concept(
+            context_id=context_id,
+            concept=req.concept,
+            attributes=req.attributes,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return concept
+
+
+class ResonanceDetectRequest(BaseModel):
+    concept_a: str
+    concept_b: str
+    resonance_type: str = "structural"
+    method: str = "cross_correlation"
+
+
+@router.post("/resonance/context/{context_id}/detect")
+async def resonance_detect(context_id: str, req: ResonanceDetectRequest):
+    """Detect resonance between two concepts in a context."""
+    from agent.shared import resonance_engine
+    try:
+        event = resonance_engine.detect_resonance(
+            context_id=context_id,
+            concept_a=req.concept_a,
+            concept_b=req.concept_b,
+            resonance_type=req.resonance_type,
+            method=req.method,
+        )
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail="Context or concept not found"
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return event.to_dict()
+
+
+@router.get("/resonance/context/{context_id}/events")
+async def resonance_list_events(
+    context_id: str, resonance_type: str | None = None
+):
+    """List resonance events for a context, optionally filtered by type."""
+    from agent.shared import resonance_engine
+    events = resonance_engine.list_events(
+        context_id=context_id, resonance_type=resonance_type
+    )
+    return {"items": [e.to_dict() for e in events], "total": len(events)}
+
+
+@router.get("/resonance/event/{event_id}")
+async def resonance_get_event(event_id: str):
+    """Get a resonance event by ID."""
+    from agent.shared import resonance_engine
+    event = resonance_engine.get_event(event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return event.to_dict()
+
+
+@router.post("/resonance/event/{event_id}/amplify")
+async def resonance_amplify(event_id: str):
+    """Measure how much a resonance amplifies its constituent concepts."""
+    from agent.shared import resonance_engine
+    try:
+        profile = resonance_engine.measure_amplification(event_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Event not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return profile.to_dict()
+
+
+@router.get("/resonance/event/{event_id}/amplification")
+async def resonance_get_amplification(event_id: str):
+    """Get the amplification profile for a resonance event."""
+    from agent.shared import resonance_engine
+    profile = resonance_engine.get_amplification(event_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Amplification not found")
+    return profile.to_dict()
+
+
+@router.get("/resonance/amplifications")
+async def resonance_list_amplifications(context_id: str | None = None):
+    """List amplification profiles, optionally filtered by context."""
+    from agent.shared import resonance_engine
+    profiles = resonance_engine.list_amplifications(context_id=context_id)
+    return {"items": [p.to_dict() for p in profiles], "total": len(profiles)}
+
+
+class ResonanceClusterRequest(BaseModel):
+    threshold: float = 0.5
+
+
+@router.post("/resonance/context/{context_id}/cluster")
+async def resonance_cluster(context_id: str, req: ResonanceClusterRequest):
+    """Group resonant concepts into clusters via connected components."""
+    from agent.shared import resonance_engine
+    try:
+        clusters = resonance_engine.cluster_resonances(
+            context_id=context_id, threshold=req.threshold
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"items": [c.to_dict() for c in clusters], "total": len(clusters)}
+
+
+@router.get("/resonance/clusters")
+async def resonance_list_clusters(context_id: str | None = None):
+    """List resonance clusters, optionally filtered by context."""
+    from agent.shared import resonance_engine
+    clusters = resonance_engine.list_clusters(context_id=context_id)
+    return {"items": [c.to_dict() for c in clusters], "total": len(clusters)}
+
+
+@router.get("/resonance/cluster/{cluster_id}")
+async def resonance_get_cluster(cluster_id: str):
+    """Get a resonance cluster by ID."""
+    from agent.shared import resonance_engine
+    cluster = resonance_engine.get_cluster(cluster_id)
+    if cluster is None:
+        raise HTTPException(status_code=404, detail="Cluster not found")
+    return cluster.to_dict()
+
+
+@router.post("/resonance/cluster/{cluster_id}/insight")
+async def resonance_generate_insight(cluster_id: str):
+    """Generate an insight description from a resonance cluster."""
+    from agent.shared import resonance_engine
+    try:
+        result = resonance_engine.generate_insight(cluster_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Cluster not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return result
+
+
+@router.get("/resonance/context/{context_id}/network")
+async def resonance_map_network(context_id: str):
+    """Return the full network of resonance connections for a context."""
+    from agent.shared import resonance_engine
+    try:
+        network = resonance_engine.map_network(context_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Context not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return network
+
+
+# ============================================================================
+# Cognitive Workload Engine — tracks cognitive load (intrinsic, extraneous,
+# germane), detects overload states, and manages allocation of effort.
+# ============================================================================
+
+class WorkloadMeasurementRequest(BaseModel):
+    agent_id: str
+    load_type: str
+    value: float
+    source_task: str = ""
+    element_complexity: float = 0.5
+    element_interactivity: float = 0.5
+
+
+@router.post("/workload/measurement")
+async def workload_record_measurement(req: WorkloadMeasurementRequest):
+    """Record a single cognitive load measurement for an agent."""
+    from agent.shared import workload_engine
+    from agent.agent_cognitive_workload import LoadType
+    try:
+        load_type = LoadType(req.load_type)
+    except ValueError:
+        try:
+            load_type = LoadType[req.load_type]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown load type: {req.load_type}")
+    measurement = workload_engine.record_measurement(
+        agent_id=req.agent_id,
+        load_type=load_type,
+        value=req.value,
+        source_task=req.source_task,
+        element_complexity=req.element_complexity,
+        element_interactivity=req.element_interactivity,
+    )
+    return measurement.to_dict()
+
+
+@router.get("/workload/measurements")
+async def workload_list_measurements(agent_id: str | None = None, load_type: str | None = None):
+    """List workload measurements, optionally filtered by agent and load type."""
+    from agent.shared import workload_engine
+    from agent.agent_cognitive_workload import LoadType
+    lt = None
+    if load_type:
+        try:
+            lt = LoadType(load_type)
+        except ValueError:
+            try:
+                lt = LoadType[load_type]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown load type: {load_type}")
+    items = workload_engine.list_measurements(agent_id=agent_id, load_type=lt)
+    return {"items": [m.to_dict() for m in items], "total": len(items)}
+
+
+@router.get("/workload/measurement/{measurement_id}")
+async def workload_get_measurement(measurement_id: str):
+    """Get a workload measurement by ID."""
+    from agent.shared import workload_engine
+    m = workload_engine.get_measurement(measurement_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail="Measurement not found")
+    return m.to_dict()
+
+
+class WorkloadSnapshotRequest(BaseModel):
+    agent_id: str
+    active_tasks: int = 1
+
+
+@router.post("/workload/snapshot")
+async def workload_take_snapshot(req: WorkloadSnapshotRequest):
+    """Aggregate recent measurements into a workload snapshot."""
+    from agent.shared import workload_engine
+    snapshot = workload_engine.take_snapshot(agent_id=req.agent_id, active_tasks=req.active_tasks)
+    return snapshot.to_dict()
+
+
+@router.get("/workload/snapshots")
+async def workload_list_snapshots(agent_id: str | None = None, state: str | None = None):
+    """List workload snapshots, optionally filtered by agent and state."""
+    from agent.shared import workload_engine
+    from agent.agent_cognitive_workload import WorkloadState
+    st = None
+    if state:
+        try:
+            st = WorkloadState(state)
+        except ValueError:
+            try:
+                st = WorkloadState[state]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown state: {state}")
+    items = workload_engine.list_snapshots(agent_id=agent_id, state=st)
+    return {"items": [s.to_dict() for s in items], "total": len(items)}
+
+
+@router.get("/workload/snapshot/{snapshot_id}")
+async def workload_get_snapshot(snapshot_id: str):
+    """Get a workload snapshot by ID."""
+    from agent.shared import workload_engine
+    s = workload_engine.get_snapshot(snapshot_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return s.to_dict()
+
+
+class WorkloadInterferenceRequest(BaseModel):
+    agent_id: str
+    primary_task: str
+    secondary_task: str
+
+
+@router.post("/workload/interference")
+async def workload_assess_interference(req: WorkloadInterferenceRequest):
+    """Assess dual-task interference between two tasks."""
+    from agent.shared import workload_engine
+    assessment = workload_engine.assess_interference(
+        agent_id=req.agent_id,
+        primary_task=req.primary_task,
+        secondary_task=req.secondary_task,
+    )
+    return assessment.to_dict()
+
+
+@router.get("/workload/interferences")
+async def workload_list_interferences(agent_id: str | None = None):
+    """List interference assessments, optionally filtered by agent."""
+    from agent.shared import workload_engine
+    items = workload_engine.list_assessments(agent_id=agent_id)
+    return {"items": [a.to_dict() for a in items], "total": len(items)}
+
+
+@router.get("/workload/interference/{assessment_id}")
+async def workload_get_interference(assessment_id: str):
+    """Get an interference assessment by ID."""
+    from agent.shared import workload_engine
+    a = workload_engine.get_assessment(assessment_id)
+    if a is None:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+    return a.to_dict()
+
+
+class WorkloadAllocationRequest(BaseModel):
+    agent_id: str
+    target_task: str
+    current_load: float
+    strategy: str
+    rationale: str = ""
+
+
+@router.post("/workload/allocation")
+async def workload_decide_allocation(req: WorkloadAllocationRequest):
+    """Decide how to reallocate cognitive resources for an overloaded task."""
+    from agent.shared import workload_engine
+    from agent.agent_cognitive_workload import AllocationStrategy
+    try:
+        strategy = AllocationStrategy(req.strategy)
+    except ValueError:
+        try:
+            strategy = AllocationStrategy[req.strategy]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown strategy: {req.strategy}")
+    decision = workload_engine.decide_allocation(
+        agent_id=req.agent_id,
+        target_task=req.target_task,
+        current_load=req.current_load,
+        strategy=strategy,
+        rationale=req.rationale,
+    )
+    return decision.to_dict()
+
+
+@router.get("/workload/allocations")
+async def workload_list_allocations(agent_id: str | None = None, strategy: str | None = None):
+    """List allocation decisions, optionally filtered by agent and strategy."""
+    from agent.shared import workload_engine
+    from agent.agent_cognitive_workload import AllocationStrategy
+    st = None
+    if strategy:
+        try:
+            st = AllocationStrategy(strategy)
+        except ValueError:
+            try:
+                st = AllocationStrategy[strategy]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown strategy: {strategy}")
+    items = workload_engine.list_decisions(agent_id=agent_id, strategy=st)
+    return {"items": [d.to_dict() for d in items], "total": len(items)}
+
+
+@router.get("/workload/allocation/{decision_id}")
+async def workload_get_allocation(decision_id: str):
+    """Get an allocation decision by ID."""
+    from agent.shared import workload_engine
+    d = workload_engine.get_decision(decision_id)
+    if d is None:
+        raise HTTPException(status_code=404, detail="Decision not found")
+    return d.to_dict()
+
+
+class WorkloadRecoveryRequest(BaseModel):
+    agent_id: str
+    action: str
+    duration_estimate: float = 60.0
+    expected_relief: float = 0.3
+    steps: list[str] | None = None
+
+
+@router.post("/workload/recovery")
+async def workload_create_recovery(req: WorkloadRecoveryRequest):
+    """Create a recovery plan for an overloaded agent."""
+    from agent.shared import workload_engine
+    from agent.agent_cognitive_workload import RecoveryAction
+    try:
+        action = RecoveryAction(req.action)
+    except ValueError:
+        try:
+            action = RecoveryAction[req.action]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown action: {req.action}")
+    plan = workload_engine.create_recovery_plan(
+        agent_id=req.agent_id,
+        action=action,
+        duration_estimate=req.duration_estimate,
+        expected_relief=req.expected_relief,
+        steps=req.steps,
+    )
+    return plan.to_dict()
+
+
+@router.get("/workload/recoveries")
+async def workload_list_recoveries(agent_id: str | None = None, action: str | None = None):
+    """List recovery plans, optionally filtered by agent and action."""
+    from agent.shared import workload_engine
+    from agent.agent_cognitive_workload import RecoveryAction
+    act = None
+    if action:
+        try:
+            act = RecoveryAction(action)
+        except ValueError:
+            try:
+                act = RecoveryAction[action]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
+    items = workload_engine.list_recovery_plans(agent_id=agent_id, action=act)
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/workload/recovery/{plan_id}")
+async def workload_get_recovery(plan_id: str):
+    """Get a recovery plan by ID."""
+    from agent.shared import workload_engine
+    p = workload_engine.get_recovery_plan(plan_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Recovery plan not found")
+    return p.to_dict()
+
+
+@router.get("/workload/profiles")
+async def workload_list_profiles():
+    """List all workload profiles."""
+    from agent.shared import workload_engine
+    items = workload_engine.list_profiles()
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/workload/profile/{agent_id}")
+async def workload_get_profile(agent_id: str):
+    """Get or create a workload profile for an agent."""
+    from agent.shared import workload_engine
+    profile = workload_engine.get_or_create_profile(agent_id)
+    return profile.to_dict()
+
+
+@router.put("/workload/profile/{agent_id}")
+async def workload_update_profile(agent_id: str, req: dict):
+    """Update fields of an agent's workload profile."""
+    from agent.shared import workload_engine
+    profile = workload_engine.update_profile(agent_id, **req)
+    return profile.to_dict()
+
+
+@router.get("/workload/stats")
+async def workload_stats():
+    """Return aggregate workload engine statistics."""
+    from agent.shared import workload_engine
+    return workload_engine.get_stats().to_dict()
+
+
+# ============================================================================
+# Cognitive Entropy Engine — measures information-theoretic properties of
+# agent reasoning state, applies maximum entropy inference, and tracks flux.
+# ============================================================================
+
+class EntropySampleRequest(BaseModel):
+    agent_id: str
+    kind: str
+    distribution: dict[str, float]
+
+
+@router.post("/entropy/sample")
+async def entropy_sample_distribution(req: EntropySampleRequest):
+    """Sample a probability distribution and compute its Shannon entropy."""
+    from agent.shared import entropy_engine
+    from agent.agent_cognitive_entropy import EntropyKind
+    try:
+        kind = EntropyKind(req.kind)
+    except ValueError:
+        try:
+            kind = EntropyKind[req.kind]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown kind: {req.kind}")
+    sample = entropy_engine.sample_distribution(
+        agent_id=req.agent_id, kind=kind, distribution=req.distribution
+    )
+    return sample.to_dict()
+
+
+@router.get("/entropy/samples")
+async def entropy_list_samples(agent_id: str | None = None, kind: str | None = None):
+    """List entropy samples, optionally filtered by agent and kind."""
+    from agent.shared import entropy_engine
+    from agent.agent_cognitive_entropy import EntropyKind
+    k = None
+    if kind:
+        try:
+            k = EntropyKind(kind)
+        except ValueError:
+            try:
+                k = EntropyKind[kind]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown kind: {kind}")
+    items = entropy_engine.list_samples(agent_id=agent_id, kind=k)
+    return {"items": [s.to_dict() for s in items], "total": len(items)}
+
+
+@router.get("/entropy/sample/{sample_id}")
+async def entropy_get_sample(sample_id: str):
+    """Get an entropy sample by ID."""
+    from agent.shared import entropy_engine
+    s = entropy_engine.get_sample(sample_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail="Sample not found")
+    return s.to_dict()
+
+
+class EntropyFluxRequest(BaseModel):
+    agent_id: str
+    kind: str
+    current_entropy: float
+
+
+@router.post("/entropy/flux")
+async def entropy_record_flux(req: EntropyFluxRequest):
+    """Record a flux entry tracking how entropy changes for an agent."""
+    from agent.shared import entropy_engine
+    from agent.agent_cognitive_entropy import EntropyKind
+    try:
+        kind = EntropyKind(req.kind)
+    except ValueError:
+        try:
+            kind = EntropyKind[req.kind]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown kind: {req.kind}")
+    record = entropy_engine.record_flux(
+        agent_id=req.agent_id, kind=kind, current_entropy=req.current_entropy
+    )
+    return record.to_dict()
+
+
+@router.get("/entropy/fluxes")
+async def entropy_list_fluxes(agent_id: str | None = None, kind: str | None = None, direction: str | None = None):
+    """List entropy flux records with optional filters."""
+    from agent.shared import entropy_engine
+    from agent.agent_cognitive_entropy import EntropyKind, FluxDirection
+    k = None
+    if kind:
+        try:
+            k = EntropyKind(kind)
+        except ValueError:
+            try:
+                k = EntropyKind[kind]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown kind: {kind}")
+    d = None
+    if direction:
+        try:
+            d = FluxDirection(direction)
+        except ValueError:
+            try:
+                d = FluxDirection[direction]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown direction: {direction}")
+    items = entropy_engine.list_flux_records(agent_id=agent_id, kind=k, direction=d)
+    return {"items": [r.to_dict() for r in items], "total": len(items)}
+
+
+@router.get("/entropy/flux/{record_id}")
+async def entropy_get_flux(record_id: str):
+    """Get an entropy flux record by ID."""
+    from agent.shared import entropy_engine
+    r = entropy_engine.get_flux_record(record_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="Flux record not found")
+    return r.to_dict()
+
+
+class EntropyInferenceRequest(BaseModel):
+    agent_id: str
+    principle: str
+    prior: dict[str, float]
+    evidence: dict[str, float] | None = None
+    rationale: str = ""
+
+
+@router.post("/entropy/inference")
+async def entropy_infer_distribution(req: EntropyInferenceRequest):
+    """Infer a posterior distribution under the chosen entropy principle."""
+    from agent.shared import entropy_engine
+    from agent.agent_cognitive_entropy import InferencePrinciple
+    try:
+        principle = InferencePrinciple(req.principle)
+    except ValueError:
+        try:
+            principle = InferencePrinciple[req.principle]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown principle: {req.principle}")
+    result = entropy_engine.infer_distribution(
+        agent_id=req.agent_id,
+        principle=principle,
+        prior=req.prior,
+        evidence=req.evidence,
+        rationale=req.rationale,
+    )
+    return result.to_dict()
+
+
+@router.get("/entropy/inferences")
+async def entropy_list_inferences(agent_id: str | None = None, principle: str | None = None):
+    """List inference results, optionally filtered by agent and principle."""
+    from agent.shared import entropy_engine
+    from agent.agent_cognitive_entropy import InferencePrinciple
+    p = None
+    if principle:
+        try:
+            p = InferencePrinciple(principle)
+        except ValueError:
+            try:
+                p = InferencePrinciple[principle]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown principle: {principle}")
+    items = entropy_engine.list_inferences(agent_id=agent_id, principle=p)
+    return {"items": [i.to_dict() for i in items], "total": len(items)}
+
+
+@router.get("/entropy/inference/{result_id}")
+async def entropy_get_inference(result_id: str):
+    """Get an inference result by ID."""
+    from agent.shared import entropy_engine
+    r = entropy_engine.get_inference(result_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="Inference not found")
+    return r.to_dict()
+
+
+class EntropyCompressionRequest(BaseModel):
+    agent_id: str
+    source_payload: str
+    entropy_before: float
+
+
+@router.post("/entropy/compression")
+async def entropy_compress_payload(req: EntropyCompressionRequest):
+    """Compress a payload and trace the entropy/size impact."""
+    from agent.shared import entropy_engine
+    trace = entropy_engine.compress_payload(
+        agent_id=req.agent_id,
+        source_payload=req.source_payload,
+        entropy_before=req.entropy_before,
+    )
+    return trace.to_dict()
+
+
+@router.get("/entropy/compressions")
+async def entropy_list_compressions(agent_id: str | None = None, status: str | None = None):
+    """List compression traces, optionally filtered by agent and status."""
+    from agent.shared import entropy_engine
+    from agent.agent_cognitive_entropy import CompressionStatus
+    st = None
+    if status:
+        try:
+            st = CompressionStatus(status)
+        except ValueError:
+            try:
+                st = CompressionStatus[status]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown status: {status}")
+    items = entropy_engine.list_compressions(agent_id=agent_id, status=st)
+    return {"items": [c.to_dict() for c in items], "total": len(items)}
+
+
+@router.get("/entropy/compression/{trace_id}")
+async def entropy_get_compression(trace_id: str):
+    """Get a compression trace by ID."""
+    from agent.shared import entropy_engine
+    c = entropy_engine.get_compression(trace_id)
+    if c is None:
+        raise HTTPException(status_code=404, detail="Compression not found")
+    return c.to_dict()
+
+
+@router.get("/entropy/profiles")
+async def entropy_list_profiles():
+    """List all entropy profiles."""
+    from agent.shared import entropy_engine
+    items = entropy_engine.list_profiles()
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/entropy/profile/{agent_id}")
+async def entropy_get_profile(agent_id: str):
+    """Get or create an entropy profile for an agent."""
+    from agent.shared import entropy_engine
+    profile = entropy_engine.get_or_create_profile(agent_id)
+    return profile.to_dict()
+
+
+@router.put("/entropy/profile/{agent_id}")
+async def entropy_update_profile(agent_id: str, req: dict):
+    """Update fields of an agent's entropy profile."""
+    from agent.shared import entropy_engine
+    profile = entropy_engine.update_profile(agent_id, **req)
+    return profile.to_dict()
+
+
+@router.get("/entropy/stats")
+async def entropy_stats():
+    """Return aggregate entropy engine statistics."""
+    from agent.shared import entropy_engine
+    return entropy_engine.get_stats().to_dict()
+
+
+# ============================================================================
+# Cognitive Horizon Engine — manages epistemic boundaries, competence
+# frontiers, and the responses triggered when reasoning reaches its horizon.
+# ============================================================================
+
+class HorizonCompetenceRequest(BaseModel):
+    agent_id: str
+    domain: str
+    level: str
+    confidence: float = 0.5
+    success_rate: float = 0.5
+    samples_seen: int = 0
+
+
+@router.post("/horizon/competence")
+async def horizon_register_competence(req: HorizonCompetenceRequest):
+    """Register an agent's competence level in a knowledge domain."""
+    from agent.shared import horizon_engine
+    from agent.agent_cognitive_horizon import KnowledgeDomain, CompetenceLevel
+    try:
+        domain = KnowledgeDomain(req.domain)
+    except ValueError:
+        try:
+            domain = KnowledgeDomain[req.domain]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown domain: {req.domain}")
+    try:
+        level = CompetenceLevel(req.level)
+    except ValueError:
+        try:
+            level = CompetenceLevel[req.level]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown level: {req.level}")
+    competence = horizon_engine.register_competence(
+        agent_id=req.agent_id,
+        domain=domain,
+        level=level,
+        confidence=req.confidence,
+        success_rate=req.success_rate,
+        samples_seen=req.samples_seen,
+    )
+    return competence.to_dict()
+
+
+@router.get("/horizon/competences")
+async def horizon_list_competences(agent_id: str | None = None, domain: str | None = None):
+    """List competences, optionally filtered by agent and domain."""
+    from agent.shared import horizon_engine
+    from agent.agent_cognitive_horizon import KnowledgeDomain
+    d = None
+    if domain:
+        try:
+            d = KnowledgeDomain(domain)
+        except ValueError:
+            try:
+                d = KnowledgeDomain[domain]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown domain: {domain}")
+    items = horizon_engine.list_competences(agent_id=agent_id, domain=d)
+    return {"items": [c.to_dict() for c in items], "total": len(items)}
+
+
+@router.get("/horizon/competence/{competence_id}")
+async def horizon_get_competence(competence_id: str):
+    """Get a competence record by ID."""
+    from agent.shared import horizon_engine
+    c = horizon_engine.get_competence(competence_id)
+    if c is None:
+        raise HTTPException(status_code=404, detail="Competence not found")
+    return c.to_dict()
+
+
+class HorizonProbeRequest(BaseModel):
+    agent_id: str
+    domain: str
+    probe_query: str
+    evidence_signals: list[str] | None = None
+
+
+@router.post("/horizon/probe")
+async def horizon_probe(req: HorizonProbeRequest):
+    """Probe the agent's horizon in a domain for a given query."""
+    from agent.shared import horizon_engine
+    from agent.agent_cognitive_horizon import KnowledgeDomain
+    try:
+        domain = KnowledgeDomain(req.domain)
+    except ValueError:
+        try:
+            domain = KnowledgeDomain[req.domain]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown domain: {req.domain}")
+    probe = horizon_engine.probe_horizon(
+        agent_id=req.agent_id,
+        domain=domain,
+        probe_query=req.probe_query,
+        evidence_signals=req.evidence_signals,
+    )
+    return probe.to_dict()
+
+
+@router.get("/horizon/probes")
+async def horizon_list_probes(agent_id: str | None = None, domain: str | None = None, proximity: str | None = None):
+    """List horizon probes with optional filters."""
+    from agent.shared import horizon_engine
+    from agent.agent_cognitive_horizon import KnowledgeDomain, HorizonProximity
+    d = None
+    if domain:
+        try:
+            d = KnowledgeDomain(domain)
+        except ValueError:
+            try:
+                d = KnowledgeDomain[domain]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown domain: {domain}")
+    prox = None
+    if proximity:
+        try:
+            prox = HorizonProximity(proximity)
+        except ValueError:
+            try:
+                prox = HorizonProximity[proximity]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown proximity: {proximity}")
+    items = horizon_engine.list_probes(agent_id=agent_id, domain=d, proximity=prox)
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/horizon/probe/{probe_id}")
+async def horizon_get_probe(probe_id: str):
+    """Get a horizon probe by ID."""
+    from agent.shared import horizon_engine
+    p = horizon_engine.get_probe(probe_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Probe not found")
+    return p.to_dict()
+
+
+class HorizonEventRequest(BaseModel):
+    agent_id: str
+    domain: str
+    proximity: str
+    response: str
+    trigger: str = ""
+    context: dict | None = None
+
+
+@router.post("/horizon/event")
+async def horizon_record_event(req: HorizonEventRequest):
+    """Record a boundary event encountered by an agent."""
+    from agent.shared import horizon_engine
+    from agent.agent_cognitive_horizon import KnowledgeDomain, HorizonProximity, BoundaryResponse
+    try:
+        domain = KnowledgeDomain(req.domain)
+    except ValueError:
+        try:
+            domain = KnowledgeDomain[req.domain]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown domain: {req.domain}")
+    try:
+        proximity = HorizonProximity(req.proximity)
+    except ValueError:
+        try:
+            proximity = HorizonProximity[req.proximity]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown proximity: {req.proximity}")
+    try:
+        response = BoundaryResponse(req.response)
+    except ValueError:
+        try:
+            response = BoundaryResponse[req.response]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown response: {req.response}")
+    event = horizon_engine.record_event(
+        agent_id=req.agent_id,
+        domain=domain,
+        proximity=proximity,
+        response=response,
+        trigger=req.trigger,
+        context=req.context,
+    )
+    return event.to_dict()
+
+
+@router.get("/horizon/events")
+async def horizon_list_events(agent_id: str | None = None, response: str | None = None):
+    """List boundary events, optionally filtered by agent and response."""
+    from agent.shared import horizon_engine
+    from agent.agent_cognitive_horizon import BoundaryResponse
+    r = None
+    if response:
+        try:
+            r = BoundaryResponse(response)
+        except ValueError:
+            try:
+                r = BoundaryResponse[response]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown response: {response}")
+    items = horizon_engine.list_events(agent_id=agent_id, response=r)
+    return {"items": [e.to_dict() for e in items], "total": len(items)}
+
+
+@router.get("/horizon/event/{event_id}")
+async def horizon_get_event(event_id: str):
+    """Get a boundary event by ID."""
+    from agent.shared import horizon_engine
+    e = horizon_engine.get_event(event_id)
+    if e is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return e.to_dict()
+
+
+class HorizonResolveRequest(BaseModel):
+    resolution: str
+
+
+@router.post("/horizon/event/{event_id}/resolve")
+async def horizon_resolve_event(event_id: str, req: HorizonResolveRequest):
+    """Resolve a boundary event with a resolution note."""
+    from agent.shared import horizon_engine
+    event = horizon_engine.resolve_event(event_id, req.resolution)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return event.to_dict()
+
+
+class HorizonLearningRequest(BaseModel):
+    agent_id: str
+    domain: str
+    trigger_probe_id: str
+    target_concept: str
+    urgency: float = 0.5
+    estimated_effort: float = 1.0
+
+
+@router.post("/horizon/learning")
+async def horizon_request_learning(req: HorizonLearningRequest):
+    """Request learning for a concept at the agent's competence horizon."""
+    from agent.shared import horizon_engine
+    from agent.agent_cognitive_horizon import KnowledgeDomain
+    try:
+        domain = KnowledgeDomain(req.domain)
+    except ValueError:
+        try:
+            domain = KnowledgeDomain[req.domain]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown domain: {req.domain}")
+    request = horizon_engine.request_learning(
+        agent_id=req.agent_id,
+        domain=domain,
+        trigger_probe_id=req.trigger_probe_id,
+        target_concept=req.target_concept,
+        urgency=req.urgency,
+        estimated_effort=req.estimated_effort,
+    )
+    return request.to_dict()
+
+
+@router.get("/horizon/learnings")
+async def horizon_list_learnings(agent_id: str | None = None, status: str | None = None):
+    """List learning requests, optionally filtered by agent and status."""
+    from agent.shared import horizon_engine
+    items = horizon_engine.list_learning_requests(agent_id=agent_id, status=status)
+    return {"items": [l.to_dict() for l in items], "total": len(items)}
+
+
+@router.get("/horizon/learning/{request_id}")
+async def horizon_get_learning(request_id: str):
+    """Get a learning request by ID."""
+    from agent.shared import horizon_engine
+    l = horizon_engine.get_learning_request(request_id)
+    if l is None:
+        raise HTTPException(status_code=404, detail="Learning request not found")
+    return l.to_dict()
+
+
+class HorizonDeferRequest(BaseModel):
+    agent_id: str
+    domain: str
+    deferred_to: str
+    reason: str
+    original_confidence: float
+    confidence_threshold: float = 0.7
+
+
+@router.post("/horizon/defer")
+async def horizon_defer_decision(req: HorizonDeferRequest):
+    """Record a decision to defer reasoning to another agent or system."""
+    from agent.shared import horizon_engine
+    from agent.agent_cognitive_horizon import KnowledgeDomain
+    try:
+        domain = KnowledgeDomain(req.domain)
+    except ValueError:
+        try:
+            domain = KnowledgeDomain[req.domain]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown domain: {req.domain}")
+    decision = horizon_engine.defer_decision(
+        agent_id=req.agent_id,
+        domain=domain,
+        deferred_to=req.deferred_to,
+        reason=req.reason,
+        original_confidence=req.original_confidence,
+        confidence_threshold=req.confidence_threshold,
+    )
+    return decision.to_dict()
+
+
+@router.get("/horizon/defers")
+async def horizon_list_defers(agent_id: str | None = None):
+    """List defer decisions, optionally filtered by agent."""
+    from agent.shared import horizon_engine
+    items = horizon_engine.list_defer_decisions(agent_id=agent_id)
+    return {"items": [d.to_dict() for d in items], "total": len(items)}
+
+
+@router.get("/horizon/defer/{decision_id}")
+async def horizon_get_defer(decision_id: str):
+    """Get a defer decision by ID."""
+    from agent.shared import horizon_engine
+    d = horizon_engine.get_defer_decision(decision_id)
+    if d is None:
+        raise HTTPException(status_code=404, detail="Defer decision not found")
+    return d.to_dict()
+
+
+@router.get("/horizon/recommend/{agent_id}/{domain}")
+async def horizon_recommend_response(agent_id: str, domain: str):
+    """Recommend a boundary response for the agent in the given domain."""
+    from agent.shared import horizon_engine
+    from agent.agent_cognitive_horizon import KnowledgeDomain
+    try:
+        d = KnowledgeDomain(domain)
+    except ValueError:
+        try:
+            d = KnowledgeDomain[domain]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown domain: {domain}")
+    response = horizon_engine.recommend_response(agent_id=agent_id, domain=d)
+    return {"agent_id": agent_id, "domain": d.value, "recommended_response": response.value}
+
+
+@router.get("/horizon/profiles")
+async def horizon_list_profiles():
+    """List all horizon profiles."""
+    from agent.shared import horizon_engine
+    items = horizon_engine.list_profiles()
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/horizon/profile/{agent_id}")
+async def horizon_get_profile(agent_id: str):
+    """Get or create a horizon profile for an agent."""
+    from agent.shared import horizon_engine
+    profile = horizon_engine.get_or_create_profile(agent_id)
+    return profile.to_dict()
+
+
+@router.put("/horizon/profile/{agent_id}")
+async def horizon_update_profile(agent_id: str, req: dict):
+    """Update fields of an agent's horizon profile."""
+    from agent.shared import horizon_engine
+    profile = horizon_engine.update_profile(agent_id, **req)
+    return profile.to_dict()
+
+
+@router.get("/horizon/stats")
+async def horizon_stats():
+    """Return aggregate horizon engine statistics."""
+    from agent.shared import horizon_engine
+    return horizon_engine.get_stats().to_dict()
+
+
+# ============================================================================
+# Cognitive Momentum Engine — tracks reasoning inertia, detects stuck states,
+# and applies perturbations to escape local minima.
+# ============================================================================
+
+class MomentumVectorRequest(BaseModel):
+    agent_id: str
+    direction: str
+    magnitude: float
+    velocity: float = 0.0
+    acceleration: float = 0.0
+    curvature: float = 0.0
+    mass: float = 1.0
+
+
+@router.post("/momentum/vector")
+async def momentum_record_vector(req: MomentumVectorRequest):
+    """Record a momentum vector describing the agent's reasoning direction."""
+    from agent.shared import momentum_engine
+    vector = momentum_engine.record_vector(
+        agent_id=req.agent_id,
+        direction=req.direction,
+        magnitude=req.magnitude,
+        velocity=req.velocity,
+        acceleration=req.acceleration,
+        curvature=req.curvature,
+        mass=req.mass,
+    )
+    return vector.to_dict()
+
+
+@router.get("/momentum/vectors")
+async def momentum_list_vectors(agent_id: str | None = None, regime: str | None = None):
+    """List momentum vectors, optionally filtered by agent and regime."""
+    from agent.shared import momentum_engine
+    from agent.agent_cognitive_momentum import MomentumRegime
+    r = None
+    if regime:
+        try:
+            r = MomentumRegime(regime)
+        except ValueError:
+            try:
+                r = MomentumRegime[regime]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown regime: {regime}")
+    items = momentum_engine.list_vectors(agent_id=agent_id, regime=r)
+    return {"items": [v.to_dict() for v in items], "total": len(items)}
+
+
+@router.get("/momentum/vector/{vector_id}")
+async def momentum_get_vector(vector_id: str):
+    """Get a momentum vector by ID."""
+    from agent.shared import momentum_engine
+    v = momentum_engine.get_vector(vector_id)
+    if v is None:
+        raise HTTPException(status_code=404, detail="Vector not found")
+    return v.to_dict()
+
+
+class MomentumPointRequest(BaseModel):
+    agent_id: str
+    step: int
+    position: dict[str, float]
+    momentum: dict | None = None
+    progress: str = "forward"
+    reward: float = 0.0
+
+
+@router.post("/momentum/point")
+async def momentum_record_point(req: MomentumPointRequest):
+    """Record a single point along the agent's reasoning trajectory."""
+    from agent.shared import momentum_engine
+    from agent.agent_cognitive_momentum import ProgressSignal
+    try:
+        progress = ProgressSignal(req.progress)
+    except ValueError:
+        try:
+            progress = ProgressSignal[req.progress]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown progress: {req.progress}")
+    point = momentum_engine.record_trajectory_point(
+        agent_id=req.agent_id,
+        step=req.step,
+        position=req.position,
+        momentum=None,
+        progress=progress,
+        reward=req.reward,
+    )
+    return point.to_dict()
+
+
+@router.get("/momentum/points")
+async def momentum_list_points(agent_id: str | None = None):
+    """List trajectory points, optionally filtered by agent."""
+    from agent.shared import momentum_engine
+    items = momentum_engine.list_trajectory_points(agent_id=agent_id)
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/momentum/point/{point_id}")
+async def momentum_get_point(point_id: str):
+    """Get a trajectory point by ID."""
+    from agent.shared import momentum_engine
+    p = momentum_engine.get_trajectory_point(point_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Point not found")
+    return p.to_dict()
+
+
+class MomentumStuckRequest(BaseModel):
+    agent_id: str
+    trajectory_id: str
+    momentum_magnitude: float
+    progress_rate: float
+    curvature: float
+
+
+@router.post("/momentum/stuck")
+async def momentum_detect_stuck(req: MomentumStuckRequest):
+    """Detect whether the agent's reasoning is stuck in a local minimum."""
+    from agent.shared import momentum_engine
+    detection = momentum_engine.detect_stuck_state(
+        agent_id=req.agent_id,
+        trajectory_id=req.trajectory_id,
+        momentum_magnitude=req.momentum_magnitude,
+        progress_rate=req.progress_rate,
+        curvature=req.curvature,
+    )
+    return detection.to_dict()
+
+
+@router.get("/momentum/stucks")
+async def momentum_list_stucks(agent_id: str | None = None, regime: str | None = None):
+    """List stuck-state detections, optionally filtered by agent and regime."""
+    from agent.shared import momentum_engine
+    from agent.agent_cognitive_momentum import MomentumRegime
+    r = None
+    if regime:
+        try:
+            r = MomentumRegime(regime)
+        except ValueError:
+            try:
+                r = MomentumRegime[regime]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown regime: {regime}")
+    items = momentum_engine.list_detections(agent_id=agent_id, regime=r)
+    return {"items": [d.to_dict() for d in items], "total": len(items)}
+
+
+@router.get("/momentum/stuck/{detection_id}")
+async def momentum_get_stuck(detection_id: str):
+    """Get a stuck-state detection by ID."""
+    from agent.shared import momentum_engine
+    d = momentum_engine.get_detection(detection_id)
+    if d is None:
+        raise HTTPException(status_code=404, detail="Detection not found")
+    return d.to_dict()
+
+
+class MomentumPerturbationRequest(BaseModel):
+    agent_id: str
+    perturbation_type: str
+    target_trajectory: str
+    intensity: float = 0.5
+    expected_impact: float = 0.3
+
+
+@router.post("/momentum/perturbation")
+async def momentum_apply_perturbation(req: MomentumPerturbationRequest):
+    """Apply a perturbation to break an agent out of a stuck trajectory."""
+    from agent.shared import momentum_engine
+    from agent.agent_cognitive_momentum import PerturbationType
+    try:
+        pt = PerturbationType(req.perturbation_type)
+    except ValueError:
+        try:
+            pt = PerturbationType[req.perturbation_type]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown perturbation type: {req.perturbation_type}")
+    event = momentum_engine.apply_perturbation(
+        agent_id=req.agent_id,
+        perturbation_type=pt,
+        target_trajectory=req.target_trajectory,
+        intensity=req.intensity,
+        expected_impact=req.expected_impact,
+    )
+    return event.to_dict()
+
+
+@router.get("/momentum/perturbations")
+async def momentum_list_perturbations(agent_id: str | None = None, perturbation_type: str | None = None):
+    """List perturbation events, optionally filtered by agent and type."""
+    from agent.shared import momentum_engine
+    from agent.agent_cognitive_momentum import PerturbationType
+    pt = None
+    if perturbation_type:
+        try:
+            pt = PerturbationType(perturbation_type)
+        except ValueError:
+            try:
+                pt = PerturbationType[perturbation_type]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown perturbation type: {perturbation_type}")
+    items = momentum_engine.list_perturbations(agent_id=agent_id, perturbation_type=pt)
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/momentum/perturbation/{event_id}")
+async def momentum_get_perturbation(event_id: str):
+    """Get a perturbation event by ID."""
+    from agent.shared import momentum_engine
+    e = momentum_engine.get_perturbation(event_id)
+    if e is None:
+        raise HTTPException(status_code=404, detail="Perturbation not found")
+    return e.to_dict()
+
+
+class MomentumEscapeVelocityRequest(BaseModel):
+    current_momentum: float
+    well_depth: float
+
+
+@router.post("/momentum/escape-velocity")
+async def momentum_escape_velocity(req: MomentumEscapeVelocityRequest):
+    """Compute the escape velocity needed to exit a reasoning local minimum."""
+    from agent.shared import momentum_engine
+    velocity = momentum_engine.compute_escape_velocity(
+        current_momentum=req.current_momentum,
+        well_depth=req.well_depth,
+    )
+    return {"current_momentum": req.current_momentum, "well_depth": req.well_depth, "escape_velocity": velocity}
+
+
+class MomentumEscapePlanRequest(BaseModel):
+    agent_id: str
+    trajectory_id: str
+    current_momentum: float
+    escape_velocity: float
+    strategy: str
+    steps: list[str] | None = None
+    estimated_steps: int = 3
+
+
+@router.post("/momentum/escape-plan")
+async def momentum_create_escape_plan(req: MomentumEscapePlanRequest):
+    """Create a plan to escape a stuck reasoning trajectory."""
+    from agent.shared import momentum_engine
+    from agent.agent_cognitive_momentum import EscapeStrategy
+    try:
+        strategy = EscapeStrategy(req.strategy)
+    except ValueError:
+        try:
+            strategy = EscapeStrategy[req.strategy]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown strategy: {req.strategy}")
+    plan = momentum_engine.create_escape_plan(
+        agent_id=req.agent_id,
+        trajectory_id=req.trajectory_id,
+        current_momentum=req.current_momentum,
+        escape_velocity=req.escape_velocity,
+        strategy=strategy,
+        steps=req.steps,
+        estimated_steps=req.estimated_steps,
+    )
+    return plan.to_dict()
+
+
+@router.get("/momentum/escape-plans")
+async def momentum_list_escape_plans(agent_id: str | None = None, strategy: str | None = None):
+    """List escape plans, optionally filtered by agent and strategy."""
+    from agent.shared import momentum_engine
+    from agent.agent_cognitive_momentum import EscapeStrategy
+    s = None
+    if strategy:
+        try:
+            s = EscapeStrategy(strategy)
+        except ValueError:
+            try:
+                s = EscapeStrategy[strategy]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown strategy: {strategy}")
+    items = momentum_engine.list_escape_plans(agent_id=agent_id, strategy=s)
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/momentum/escape-plan/{plan_id}")
+async def momentum_get_escape_plan(plan_id: str):
+    """Get an escape plan by ID."""
+    from agent.shared import momentum_engine
+    p = momentum_engine.get_escape_plan(plan_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Escape plan not found")
+    return p.to_dict()
+
+
+@router.get("/momentum/profiles")
+async def momentum_list_profiles():
+    """List all momentum profiles."""
+    from agent.shared import momentum_engine
+    items = momentum_engine.list_profiles()
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/momentum/profile/{agent_id}")
+async def momentum_get_profile(agent_id: str):
+    """Get or create a momentum profile for an agent."""
+    from agent.shared import momentum_engine
+    profile = momentum_engine.get_or_create_profile(agent_id)
+    return profile.to_dict()
+
+
+@router.put("/momentum/profile/{agent_id}")
+async def momentum_update_profile(agent_id: str, req: dict):
+    """Update fields of an agent's momentum profile."""
+    from agent.shared import momentum_engine
+    profile = momentum_engine.update_profile(agent_id, **req)
+    return profile.to_dict()
+
+
+@router.get("/momentum/stats")
+async def momentum_stats():
+    """Return aggregate momentum engine statistics."""
+    from agent.shared import momentum_engine
+    return momentum_engine.get_stats().to_dict()
+
+
+# ============================================================================
+# Cognitive Friction Engine — measures resistance during cognitive transitions.
+# ============================================================================
+
+class FrictionMeasurementRequest(BaseModel):
+    agent_id: str
+    source: str
+    transition_type: str
+    resistance_score: float
+    context: dict = {}
+
+
+@router.post("/friction/measurement")
+async def friction_record_measurement(req: FrictionMeasurementRequest):
+    """Record a single cognitive friction measurement for an agent."""
+    from agent.shared import friction_engine
+    from agent.agent_cognitive_friction import FrictionSource, TransitionType
+    try:
+        source = FrictionSource(req.source)
+    except ValueError:
+        try:
+            source = FrictionSource[req.source]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown source: {req.source}")
+    try:
+        transition_type = TransitionType(req.transition_type)
+    except ValueError:
+        try:
+            transition_type = TransitionType[req.transition_type]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown transition type: {req.transition_type}")
+    measurement = friction_engine.measure_friction(
+        agent_id=req.agent_id,
+        source=source,
+        transition_type=transition_type,
+        resistance_score=req.resistance_score,
+        context=req.context,
+    )
+    return measurement.to_dict()
+
+
+@router.get("/friction/measurements")
+async def friction_list_measurements(agent_id: str | None = None, limit: int = 50):
+    """List friction measurements, optionally filtered by agent."""
+    from agent.shared import friction_engine
+    items = friction_engine.list_measurements(agent_id=agent_id, limit=limit)
+    return {"items": [m.to_dict() for m in items], "total": len(items)}
+
+
+@router.get("/friction/measurement/{measurement_id}")
+async def friction_get_measurement(measurement_id: str):
+    """Get a friction measurement by ID."""
+    from agent.shared import friction_engine
+    try:
+        m = friction_engine.get_measurement(measurement_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Measurement not found")
+    return m.to_dict()
+
+
+class FrictionTransitionRequest(BaseModel):
+    agent_id: str
+    transition_type: str
+    from_state: str
+    to_state: str
+    friction_score: float
+    duration: float
+    completed: bool = True
+
+
+@router.post("/friction/transition")
+async def friction_record_transition(req: FrictionTransitionRequest):
+    """Record a cognitive state transition with its friction score."""
+    from agent.shared import friction_engine
+    from agent.agent_cognitive_friction import TransitionType
+    try:
+        transition_type = TransitionType(req.transition_type)
+    except ValueError:
+        try:
+            transition_type = TransitionType[req.transition_type]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown transition type: {req.transition_type}")
+    event = friction_engine.record_transition(
+        agent_id=req.agent_id,
+        transition_type=transition_type,
+        from_state=req.from_state,
+        to_state=req.to_state,
+        friction_score=req.friction_score,
+        duration=req.duration,
+        completed=req.completed,
+    )
+    return event.to_dict()
+
+
+@router.get("/friction/transitions")
+async def friction_list_transitions(agent_id: str | None = None, limit: int = 50):
+    """List friction transitions, optionally filtered by agent."""
+    from agent.shared import friction_engine
+    items = friction_engine.list_transitions(agent_id=agent_id, limit=limit)
+    return {"items": [e.to_dict() for e in items], "total": len(items)}
+
+
+@router.get("/friction/transition/{event_id}")
+async def friction_get_transition(event_id: str):
+    """Get a friction transition by ID."""
+    from agent.shared import friction_engine
+    try:
+        e = friction_engine.get_transition(event_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Transition not found")
+    return e.to_dict()
+
+
+class FrictionSnapshotRequest(BaseModel):
+    agent_id: str
+
+
+@router.post("/friction/snapshot")
+async def friction_take_snapshot(req: FrictionSnapshotRequest):
+    """Take a friction snapshot for an agent."""
+    from agent.shared import friction_engine
+    snapshot = friction_engine.take_snapshot(agent_id=req.agent_id)
+    return snapshot.to_dict()
+
+
+@router.get("/friction/snapshots")
+async def friction_list_snapshots(agent_id: str | None = None, limit: int = 50):
+    """List friction snapshots, optionally filtered by agent."""
+    from agent.shared import friction_engine
+    items = friction_engine.list_snapshots(agent_id=agent_id, limit=limit)
+    return {"items": [s.to_dict() for s in items], "total": len(items)}
+
+
+@router.get("/friction/snapshot/{snapshot_id}")
+async def friction_get_snapshot(snapshot_id: str):
+    """Get a friction snapshot by ID."""
+    from agent.shared import friction_engine
+    try:
+        s = friction_engine.get_snapshot(snapshot_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return s.to_dict()
+
+
+class FrictionLubricationRequest(BaseModel):
+    agent_id: str
+    transition_type: str
+    strategy: str
+    expected_relief: float
+    steps: list[str] = []
+
+
+@router.post("/friction/lubrication")
+async def friction_plan_lubrication(req: FrictionLubricationRequest):
+    """Plan a lubrication strategy to reduce friction for a transition."""
+    from agent.shared import friction_engine
+    from agent.agent_cognitive_friction import TransitionType, LubricationStrategy
+    try:
+        transition_type = TransitionType(req.transition_type)
+    except ValueError:
+        try:
+            transition_type = TransitionType[req.transition_type]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown transition type: {req.transition_type}")
+    try:
+        strategy = LubricationStrategy(req.strategy)
+    except ValueError:
+        try:
+            strategy = LubricationStrategy[req.strategy]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown strategy: {req.strategy}")
+    plan = friction_engine.plan_lubrication(
+        agent_id=req.agent_id,
+        transition_type=transition_type,
+        strategy=strategy,
+        expected_relief=req.expected_relief,
+        steps=req.steps,
+    )
+    return plan.to_dict()
+
+
+@router.get("/friction/lubrications")
+async def friction_list_lubrications(agent_id: str | None = None, limit: int = 50):
+    """List lubrication plans, optionally filtered by agent."""
+    from agent.shared import friction_engine
+    items = friction_engine.list_lubrications(agent_id=agent_id, limit=limit)
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/friction/lubrication/{plan_id}")
+async def friction_get_lubrication(plan_id: str):
+    """Get a lubrication plan by ID."""
+    from agent.shared import friction_engine
+    try:
+        p = friction_engine.get_lubrication(plan_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Lubrication plan not found")
+    return p.to_dict()
+
+
+class FrictionRecoveryRequest(BaseModel):
+    agent_id: str
+    transition_event_id: str
+    state: str
+    progress: float
+    blockers: list[str] = []
+
+
+@router.post("/friction/recovery")
+async def friction_assess_recovery(req: FrictionRecoveryRequest):
+    """Assess recovery progress for an agent after a friction event."""
+    from agent.shared import friction_engine
+    from agent.agent_cognitive_friction import RecoveryState
+    try:
+        state = RecoveryState(req.state)
+    except ValueError:
+        try:
+            state = RecoveryState[req.state]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown state: {req.state}")
+    assessment = friction_engine.assess_recovery(
+        agent_id=req.agent_id,
+        transition_event_id=req.transition_event_id,
+        state=state,
+        progress=req.progress,
+        blockers=req.blockers,
+    )
+    return assessment.to_dict()
+
+
+@router.get("/friction/recoveries")
+async def friction_list_recoveries(agent_id: str | None = None, limit: int = 50):
+    """List recovery assessments, optionally filtered by agent."""
+    from agent.shared import friction_engine
+    items = friction_engine.list_recoveries(agent_id=agent_id, limit=limit)
+    return {"items": [a.to_dict() for a in items], "total": len(items)}
+
+
+@router.get("/friction/recovery/{assessment_id}")
+async def friction_get_recovery(assessment_id: str):
+    """Get a recovery assessment by ID."""
+    from agent.shared import friction_engine
+    try:
+        a = friction_engine.get_recovery(assessment_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Recovery assessment not found")
+    return a.to_dict()
+
+
+@router.get("/friction/profile/{agent_id}")
+async def friction_get_profile(agent_id: str):
+    """Get a friction profile for an agent."""
+    from agent.shared import friction_engine
+    profile = friction_engine.get_profile(agent_id)
+    return profile.to_dict()
+
+
+@router.put("/friction/profile/{agent_id}")
+async def friction_update_profile(agent_id: str, req: dict):
+    """Update fields of an agent's friction profile."""
+    from agent.shared import friction_engine
+    profile = friction_engine.update_profile(agent_id, **req)
+    return profile.to_dict()
+
+
+@router.get("/friction/profiles")
+async def friction_list_profiles():
+    """List all friction profiles."""
+    from agent.shared import friction_engine
+    items = friction_engine.list_profiles()
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/friction/stats")
+async def friction_stats():
+    """Return aggregate friction engine statistics."""
+    from agent.shared import friction_engine
+    return friction_engine.get_stats().to_dict()
+
+
+# ============================================================================
+# Cognitive Tension Engine — tracks dialectical poles, pairs, and the
+# resolution or holding of cognitive tensions.
+# ============================================================================
+
+class TensionPoleRequest(BaseModel):
+    agent_id: str
+    label: str
+    description: str
+    strength: float = 0.5
+
+
+@router.post("/tension/pole")
+async def tension_register_pole(req: TensionPoleRequest):
+    """Register a cognitive tension pole for an agent."""
+    from agent.shared import tension_engine
+    pole = tension_engine.register_pole(
+        agent_id=req.agent_id,
+        label=req.label,
+        description=req.description,
+        strength=req.strength,
+    )
+    return pole.to_dict()
+
+
+@router.get("/tension/poles")
+async def tension_list_poles(agent_id: str | None = None, limit: int = 50):
+    """List tension poles, optionally filtered by agent."""
+    from agent.shared import tension_engine
+    items = tension_engine.list_poles(agent_id=agent_id, limit=limit)
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/tension/pole/{pole_id}")
+async def tension_get_pole(pole_id: str):
+    """Get a tension pole by ID."""
+    from agent.shared import tension_engine
+    p = tension_engine.get_pole(pole_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Pole not found")
+    return p.to_dict()
+
+
+class TensionPairRequest(BaseModel):
+    agent_id: str
+    kind: str
+    pole_a_id: str
+    pole_b_id: str
+    intensity: float = 0.5
+    polarity: str = ""
+
+
+@router.post("/tension/pair")
+async def tension_form_pair(req: TensionPairRequest):
+    """Form a tension pair between two poles."""
+    from agent.shared import tension_engine
+    from agent.agent_cognitive_tension import TensionKind, TensionPolarity
+    try:
+        kind = TensionKind(req.kind)
+    except ValueError:
+        try:
+            kind = TensionKind[req.kind]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown kind: {req.kind}")
+    polarity = None
+    if req.polarity:
+        try:
+            polarity = TensionPolarity(req.polarity)
+        except ValueError:
+            try:
+                polarity = TensionPolarity[req.polarity]
+            except KeyError as exc:
+                raise HTTPException(status_code=400, detail=f"Unknown polarity: {req.polarity}")
+    pair = tension_engine.form_pair(
+        agent_id=req.agent_id,
+        kind=kind,
+        pole_a_id=req.pole_a_id,
+        pole_b_id=req.pole_b_id,
+        intensity=req.intensity,
+        polarity=polarity,
+    )
+    return pair.to_dict()
+
+
+@router.get("/tension/pairs")
+async def tension_list_pairs(agent_id: str | None = None, limit: int = 50):
+    """List tension pairs, optionally filtered by agent."""
+    from agent.shared import tension_engine
+    items = tension_engine.list_pairs(agent_id=agent_id, limit=limit)
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/tension/pair/{pair_id}")
+async def tension_get_pair(pair_id: str):
+    """Get a tension pair by ID."""
+    from agent.shared import tension_engine
+    p = tension_engine.get_pair(pair_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Pair not found")
+    return p.to_dict()
+
+
+class TensionSnapshotRequest(BaseModel):
+    agent_id: str
+
+
+@router.post("/tension/snapshot")
+async def tension_take_snapshot(req: TensionSnapshotRequest):
+    """Take a tension snapshot for an agent."""
+    from agent.shared import tension_engine
+    snapshot = tension_engine.take_snapshot(agent_id=req.agent_id)
+    return snapshot.to_dict()
+
+
+@router.get("/tension/snapshots")
+async def tension_list_snapshots(agent_id: str | None = None, limit: int = 50):
+    """List tension snapshots, optionally filtered by agent."""
+    from agent.shared import tension_engine
+    items = tension_engine.list_snapshots(agent_id=agent_id, limit=limit)
+    return {"items": [s.to_dict() for s in items], "total": len(items)}
+
+
+@router.get("/tension/snapshot/{snapshot_id}")
+async def tension_get_snapshot(snapshot_id: str):
+    """Get a tension snapshot by ID."""
+    from agent.shared import tension_engine
+    s = tension_engine.get_snapshot(snapshot_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return s.to_dict()
+
+
+class TensionResolutionRequest(BaseModel):
+    agent_id: str
+    pair_id: str
+    mode: str
+    outcome: str
+    synthesis: str = ""
+    success: bool = True
+
+
+@router.post("/tension/resolution")
+async def tension_attempt_resolution(req: TensionResolutionRequest):
+    """Attempt to resolve a tension pair."""
+    from agent.shared import tension_engine
+    from agent.agent_cognitive_tension import ResolutionMode
+    try:
+        mode = ResolutionMode(req.mode)
+    except ValueError:
+        try:
+            mode = ResolutionMode[req.mode]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown mode: {req.mode}")
+    attempt = tension_engine.attempt_resolution(
+        agent_id=req.agent_id,
+        pair_id=req.pair_id,
+        mode=mode,
+        outcome=req.outcome,
+        synthesis=req.synthesis,
+        success=req.success,
+    )
+    return attempt.to_dict()
+
+
+@router.get("/tension/resolutions")
+async def tension_list_resolutions(agent_id: str | None = None, limit: int = 50):
+    """List resolution attempts, optionally filtered by agent."""
+    from agent.shared import tension_engine
+    items = tension_engine.list_resolutions(agent_id=agent_id, limit=limit)
+    return {"items": [a.to_dict() for a in items], "total": len(items)}
+
+
+@router.get("/tension/resolution/{attempt_id}")
+async def tension_get_resolution(attempt_id: str):
+    """Get a resolution attempt by ID."""
+    from agent.shared import tension_engine
+    a = tension_engine.get_resolution(attempt_id)
+    if a is None:
+        raise HTTPException(status_code=404, detail="Resolution attempt not found")
+    return a.to_dict()
+
+
+class TensionHoldingRequest(BaseModel):
+    agent_id: str
+    pair_id: str
+    strategy: str
+    rationale: str
+    duration: float
+
+
+@router.post("/tension/holding")
+async def tension_decide_holding(req: TensionHoldingRequest):
+    """Decide to hold a tension rather than resolve it."""
+    from agent.shared import tension_engine
+    from agent.agent_cognitive_tension import HoldingStrategy
+    try:
+        strategy = HoldingStrategy(req.strategy)
+    except ValueError:
+        try:
+            strategy = HoldingStrategy[req.strategy]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown strategy: {req.strategy}")
+    decision = tension_engine.decide_holding(
+        agent_id=req.agent_id,
+        pair_id=req.pair_id,
+        strategy=strategy,
+        rationale=req.rationale,
+        duration=req.duration,
+    )
+    return decision.to_dict()
+
+
+@router.get("/tension/holdings")
+async def tension_list_holdings(agent_id: str | None = None, limit: int = 50):
+    """List holding decisions, optionally filtered by agent."""
+    from agent.shared import tension_engine
+    items = tension_engine.list_holdings(agent_id=agent_id, limit=limit)
+    return {"items": [d.to_dict() for d in items], "total": len(items)}
+
+
+@router.get("/tension/holding/{decision_id}")
+async def tension_get_holding(decision_id: str):
+    """Get a holding decision by ID."""
+    from agent.shared import tension_engine
+    d = tension_engine.get_holding(decision_id)
+    if d is None:
+        raise HTTPException(status_code=404, detail="Holding decision not found")
+    return d.to_dict()
+
+
+@router.get("/tension/profile/{agent_id}")
+async def tension_get_profile(agent_id: str):
+    """Get a tension profile for an agent."""
+    from agent.shared import tension_engine
+    profile = tension_engine.get_profile(agent_id)
+    return profile.to_dict()
+
+
+@router.put("/tension/profile/{agent_id}")
+async def tension_update_profile(agent_id: str, req: dict):
+    """Update fields of an agent's tension profile."""
+    from agent.shared import tension_engine
+    profile = tension_engine.update_profile(agent_id, **req)
+    return profile.to_dict()
+
+
+@router.get("/tension/profiles")
+async def tension_list_profiles():
+    """List all tension profiles."""
+    from agent.shared import tension_engine
+    items = tension_engine.list_profiles()
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/tension/stats")
+async def tension_stats():
+    """Return aggregate tension engine statistics."""
+    from agent.shared import tension_engine
+    return tension_engine.get_stats().to_dict()
+
+
+# ============================================================================
+# Cognitive Depth Engine — probes depth of processing, manages deepening and
+# surfacing moves, and records depth trajectories.
+# ============================================================================
+
+class DepthProbeRequest(BaseModel):
+    agent_id: str
+    dimension: str
+    depth_score: float
+    levels_traversed: int
+    evidence: str = ""
+
+
+@router.post("/depth/probe")
+async def depth_probe(req: DepthProbeRequest):
+    """Record a depth probe for an agent."""
+    from agent.shared import depth_engine
+    from agent.agent_cognitive_depth import DepthDimension
+    try:
+        dimension = DepthDimension(req.dimension)
+    except ValueError:
+        try:
+            dimension = DepthDimension[req.dimension]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown dimension: {req.dimension}")
+    probe = depth_engine.probe_depth(
+        agent_id=req.agent_id,
+        dimension=dimension,
+        depth_score=req.depth_score,
+        levels_traversed=req.levels_traversed,
+        evidence=req.evidence,
+    )
+    return probe.to_dict()
+
+
+@router.get("/depth/probes")
+async def depth_list_probes(agent_id: str | None = None, limit: int = 50):
+    """List depth probes, optionally filtered by agent."""
+    from agent.shared import depth_engine
+    items = depth_engine.list_probes(agent_id=agent_id, limit=limit)
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/depth/probe/{probe_id}")
+async def depth_get_probe(probe_id: str):
+    """Get a depth probe by ID."""
+    from agent.shared import depth_engine
+    p = depth_engine.get_probe(probe_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Probe not found")
+    return p.to_dict()
+
+
+class DepthAssessmentRequest(BaseModel):
+    agent_id: str
+
+
+@router.post("/depth/assessment")
+async def depth_assess(req: DepthAssessmentRequest):
+    """Assess the depth profile for an agent."""
+    from agent.shared import depth_engine
+    assessment = depth_engine.assess_depth(agent_id=req.agent_id)
+    return assessment.to_dict()
+
+
+@router.get("/depth/assessments")
+async def depth_list_assessments(agent_id: str | None = None, limit: int = 50):
+    """List depth assessments, optionally filtered by agent."""
+    from agent.shared import depth_engine
+    items = depth_engine.list_assessments(agent_id=agent_id, limit=limit)
+    return {"items": [a.to_dict() for a in items], "total": len(items)}
+
+
+@router.get("/depth/assessment/{assessment_id}")
+async def depth_get_assessment(assessment_id: str):
+    """Get a depth assessment by ID."""
+    from agent.shared import depth_engine
+    a = depth_engine.get_assessment(assessment_id)
+    if a is None:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+    return a.to_dict()
+
+
+class DepthDeepeningRequest(BaseModel):
+    agent_id: str
+    dimension: str
+    move: str
+    rationale: str = ""
+    expected_gain: float = 0.0
+
+
+@router.post("/depth/deepening")
+async def depth_apply_deepening(req: DepthDeepeningRequest):
+    """Apply a deepening move for an agent."""
+    from agent.shared import depth_engine
+    from agent.agent_cognitive_depth import DepthDimension, DeepeningMove
+    try:
+        dimension = DepthDimension(req.dimension)
+    except ValueError:
+        try:
+            dimension = DepthDimension[req.dimension]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown dimension: {req.dimension}")
+    try:
+        move = DeepeningMove(req.move)
+    except ValueError:
+        try:
+            move = DeepeningMove[req.move]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown move: {req.move}")
+    action = depth_engine.apply_deepening(
+        agent_id=req.agent_id,
+        dimension=dimension,
+        move=move,
+        rationale=req.rationale,
+        expected_gain=req.expected_gain,
+    )
+    return action.to_dict()
+
+
+@router.get("/depth/deepenings")
+async def depth_list_deepenings(agent_id: str | None = None, limit: int = 50):
+    """List deepening actions, optionally filtered by agent."""
+    from agent.shared import depth_engine
+    items = depth_engine.list_deepenings(agent_id=agent_id, limit=limit)
+    return {"items": [a.to_dict() for a in items], "total": len(items)}
+
+
+@router.get("/depth/deepening/{action_id}")
+async def depth_get_deepening(action_id: str):
+    """Get a deepening action by ID."""
+    from agent.shared import depth_engine
+    a = depth_engine.get_deepening(action_id)
+    if a is None:
+        raise HTTPException(status_code=404, detail="Deepening action not found")
+    return a.to_dict()
+
+
+class DepthSurfacingRequest(BaseModel):
+    agent_id: str
+    dimension: str
+    move: str
+    rationale: str = ""
+    expected_relief: float = 0.0
+
+
+@router.post("/depth/surfacing")
+async def depth_apply_surfacing(req: DepthSurfacingRequest):
+    """Apply a surfacing move for an agent."""
+    from agent.shared import depth_engine
+    from agent.agent_cognitive_depth import DepthDimension, SurfacingMove
+    try:
+        dimension = DepthDimension(req.dimension)
+    except ValueError:
+        try:
+            dimension = DepthDimension[req.dimension]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown dimension: {req.dimension}")
+    try:
+        move = SurfacingMove(req.move)
+    except ValueError:
+        try:
+            move = SurfacingMove[req.move]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown move: {req.move}")
+    action = depth_engine.apply_surfacing(
+        agent_id=req.agent_id,
+        dimension=dimension,
+        move=move,
+        rationale=req.rationale,
+        expected_relief=req.expected_relief,
+    )
+    return action.to_dict()
+
+
+@router.get("/depth/surfacings")
+async def depth_list_surfacings(agent_id: str | None = None, limit: int = 50):
+    """List surfacing actions, optionally filtered by agent."""
+    from agent.shared import depth_engine
+    items = depth_engine.list_surfacings(agent_id=agent_id, limit=limit)
+    return {"items": [a.to_dict() for a in items], "total": len(items)}
+
+
+@router.get("/depth/surfacing/{action_id}")
+async def depth_get_surfacing(action_id: str):
+    """Get a surfacing action by ID."""
+    from agent.shared import depth_engine
+    a = depth_engine.get_surfacing(action_id)
+    if a is None:
+        raise HTTPException(status_code=404, detail="Surfacing action not found")
+    return a.to_dict()
+
+
+class DepthTrajectoryRequest(BaseModel):
+    agent_id: str
+    trajectory: str
+    from_depth: float
+    to_depth: float
+
+
+@router.post("/depth/trajectory")
+async def depth_record_trajectory(req: DepthTrajectoryRequest):
+    """Record a depth trajectory for an agent."""
+    from agent.shared import depth_engine
+    from agent.agent_cognitive_depth import DepthTrajectory
+    try:
+        trajectory = DepthTrajectory(req.trajectory)
+    except ValueError:
+        try:
+            trajectory = DepthTrajectory[req.trajectory]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown trajectory: {req.trajectory}")
+    record = depth_engine.record_trajectory(
+        agent_id=req.agent_id,
+        trajectory=trajectory,
+        from_depth=req.from_depth,
+        to_depth=req.to_depth,
+    )
+    return record.to_dict()
+
+
+@router.get("/depth/trajectories")
+async def depth_list_trajectories(agent_id: str | None = None, limit: int = 50):
+    """List depth trajectories, optionally filtered by agent."""
+    from agent.shared import depth_engine
+    items = depth_engine.list_trajectories(agent_id=agent_id, limit=limit)
+    return {"items": [r.to_dict() for r in items], "total": len(items)}
+
+
+@router.get("/depth/trajectory/{record_id}")
+async def depth_get_trajectory(record_id: str):
+    """Get a depth trajectory by ID."""
+    from agent.shared import depth_engine
+    r = depth_engine.get_trajectory(record_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="Trajectory not found")
+    return r.to_dict()
+
+
+@router.get("/depth/profile/{agent_id}")
+async def depth_get_profile(agent_id: str):
+    """Get a depth profile for an agent."""
+    from agent.shared import depth_engine
+    profile = depth_engine.get_profile(agent_id)
+    return profile.to_dict()
+
+
+@router.put("/depth/profile/{agent_id}")
+async def depth_update_profile(agent_id: str, req: dict):
+    """Update fields of an agent's depth profile."""
+    from agent.shared import depth_engine
+    profile = depth_engine.update_profile(agent_id, **req)
+    return profile.to_dict()
+
+
+@router.get("/depth/profiles")
+async def depth_list_profiles():
+    """List all depth profiles."""
+    from agent.shared import depth_engine
+    items = depth_engine.list_profiles()
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/depth/stats")
+async def depth_stats():
+    """Return aggregate depth engine statistics."""
+    from agent.shared import depth_engine
+    return depth_engine.get_stats().to_dict()
+
+
+# ============================================================================
+# Cognitive Coherence Engine — maintains a coherence graph of nodes and
+# relations, snapshots coherence state, and repairs incoherent links.
+# ============================================================================
+
+class CoherenceNodeRequest(BaseModel):
+    agent_id: str
+    label: str
+    node_type: str
+    content: str
+    weight: float = 0.5
+
+
+@router.post("/coherence/node")
+async def coherence_register_node(req: CoherenceNodeRequest):
+    """Register a coherence node for an agent."""
+    from agent.shared import coherence_engine
+    node = coherence_engine.register_node(
+        agent_id=req.agent_id,
+        label=req.label,
+        node_type=req.node_type,
+        content=req.content,
+        weight=req.weight,
+    )
+    return node.to_dict()
+
+
+@router.get("/coherence/nodes")
+async def coherence_list_nodes(agent_id: str | None = None, limit: int = 50):
+    """List coherence nodes, optionally filtered by agent."""
+    from agent.shared import coherence_engine
+    items = coherence_engine.list_nodes(agent_id=agent_id, limit=limit)
+    return {"items": [n.to_dict() for n in items], "total": len(items)}
+
+
+@router.get("/coherence/node/{node_id}")
+async def coherence_get_node(node_id: str):
+    """Get a coherence node by ID."""
+    from agent.shared import coherence_engine
+    n = coherence_engine.get_node(node_id)
+    if n is None:
+        raise HTTPException(status_code=404, detail="Node not found")
+    return n.to_dict()
+
+
+class CoherenceRelationRequest(BaseModel):
+    agent_id: str
+    source_id: str
+    target_id: str
+    relation: str
+    strength: float = 0.5
+
+
+@router.post("/coherence/relation")
+async def coherence_link_relation(req: CoherenceRelationRequest):
+    """Link two coherence nodes with a typed relation."""
+    from agent.shared import coherence_engine
+    from agent.agent_cognitive_coherence import RelationType
+    try:
+        relation = RelationType(req.relation)
+    except ValueError:
+        try:
+            relation = RelationType[req.relation]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown relation: {req.relation}")
+    rel = coherence_engine.link_relation(
+        agent_id=req.agent_id,
+        source_id=req.source_id,
+        target_id=req.target_id,
+        relation=relation,
+        strength=req.strength,
+    )
+    return rel.to_dict()
+
+
+@router.get("/coherence/relations")
+async def coherence_list_relations(agent_id: str | None = None, limit: int = 50):
+    """List coherence relations, optionally filtered by agent."""
+    from agent.shared import coherence_engine
+    items = coherence_engine.list_relations(agent_id=agent_id, limit=limit)
+    return {"items": [r.to_dict() for r in items], "total": len(items)}
+
+
+@router.get("/coherence/relation/{relation_id}")
+async def coherence_get_relation(relation_id: str):
+    """Get a coherence relation by ID."""
+    from agent.shared import coherence_engine
+    r = coherence_engine.get_relation(relation_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="Relation not found")
+    return r.to_dict()
+
+
+class CoherenceSnapshotRequest(BaseModel):
+    agent_id: str
+
+
+@router.post("/coherence/snapshot")
+async def coherence_take_snapshot(req: CoherenceSnapshotRequest):
+    """Take a coherence snapshot for an agent."""
+    from agent.shared import coherence_engine
+    snapshot = coherence_engine.take_snapshot(agent_id=req.agent_id)
+    return snapshot.to_dict()
+
+
+@router.get("/coherence/snapshots")
+async def coherence_list_snapshots(agent_id: str | None = None, limit: int = 50):
+    """List coherence snapshots, optionally filtered by agent."""
+    from agent.shared import coherence_engine
+    items = coherence_engine.list_snapshots(agent_id=agent_id, limit=limit)
+    return {"items": [s.to_dict() for s in items], "total": len(items)}
+
+
+@router.get("/coherence/snapshot/{snapshot_id}")
+async def coherence_get_snapshot(snapshot_id: str):
+    """Get a coherence snapshot by ID."""
+    from agent.shared import coherence_engine
+    s = coherence_engine.get_snapshot(snapshot_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return s.to_dict()
+
+
+class CoherenceRepairRequest(BaseModel):
+    agent_id: str
+    strategy: str
+    target_relation_id: str = ""
+    snapshot_id: str = ""
+    rationale: str = ""
+    success: bool = True
+
+
+@router.post("/coherence/repair")
+async def coherence_attempt_repair(req: CoherenceRepairRequest):
+    """Attempt to repair an incoherent relation."""
+    from agent.shared import coherence_engine
+    from agent.agent_cognitive_coherence import RepairStrategy
+    try:
+        strategy = RepairStrategy(req.strategy)
+    except ValueError:
+        try:
+            strategy = RepairStrategy[req.strategy]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown strategy: {req.strategy}")
+    attempt = coherence_engine.attempt_repair(
+        agent_id=req.agent_id,
+        strategy=strategy,
+        target_relation_id=req.target_relation_id or None,
+        snapshot_id=req.snapshot_id or None,
+        rationale=req.rationale,
+        success=req.success,
+    )
+    return attempt.to_dict()
+
+
+@router.get("/coherence/repairs")
+async def coherence_list_repairs(agent_id: str | None = None, limit: int = 50):
+    """List repair attempts, optionally filtered by agent."""
+    from agent.shared import coherence_engine
+    items = coherence_engine.list_repairs(agent_id=agent_id, limit=limit)
+    return {"items": [a.to_dict() for a in items], "total": len(items)}
+
+
+@router.get("/coherence/repair/{attempt_id}")
+async def coherence_get_repair(attempt_id: str):
+    """Get a repair attempt by ID."""
+    from agent.shared import coherence_engine
+    a = coherence_engine.get_repair(attempt_id)
+    if a is None:
+        raise HTTPException(status_code=404, detail="Repair attempt not found")
+    return a.to_dict()
+
+
+class CoherenceTrajectoryRequest(BaseModel):
+    agent_id: str
+    trajectory: str
+    from_coherence: float
+    to_coherence: float
+
+
+@router.post("/coherence/trajectory")
+async def coherence_record_trajectory(req: CoherenceTrajectoryRequest):
+    """Record a coherence trajectory for an agent."""
+    from agent.shared import coherence_engine
+    from agent.agent_cognitive_coherence import CoherenceTrajectory
+    try:
+        trajectory = CoherenceTrajectory(req.trajectory)
+    except ValueError:
+        try:
+            trajectory = CoherenceTrajectory[req.trajectory]
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"Unknown trajectory: {req.trajectory}")
+    record = coherence_engine.record_trajectory(
+        agent_id=req.agent_id,
+        trajectory=trajectory,
+        from_coherence=req.from_coherence,
+        to_coherence=req.to_coherence,
+    )
+    return record.to_dict()
+
+
+@router.get("/coherence/trajectories")
+async def coherence_list_trajectories(agent_id: str | None = None, limit: int = 50):
+    """List coherence trajectories, optionally filtered by agent."""
+    from agent.shared import coherence_engine
+    items = coherence_engine.list_trajectories(agent_id=agent_id, limit=limit)
+    return {"items": [r.to_dict() for r in items], "total": len(items)}
+
+
+@router.get("/coherence/trajectory/{record_id}")
+async def coherence_get_trajectory(record_id: str):
+    """Get a coherence trajectory by ID."""
+    from agent.shared import coherence_engine
+    r = coherence_engine.get_trajectory(record_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="Trajectory not found")
+    return r.to_dict()
+
+
+@router.get("/coherence/profile/{agent_id}")
+async def coherence_get_profile(agent_id: str):
+    """Get a coherence profile for an agent."""
+    from agent.shared import coherence_engine
+    profile = coherence_engine.get_profile(agent_id)
+    return profile.to_dict()
+
+
+@router.put("/coherence/profile/{agent_id}")
+async def coherence_update_profile(agent_id: str, req: dict):
+    """Update fields of an agent's coherence profile."""
+    from agent.shared import coherence_engine
+    profile = coherence_engine.update_profile(agent_id, **req)
+    return profile.to_dict()
+
+
+@router.get("/coherence/profiles")
+async def coherence_list_profiles():
+    """List all coherence profiles."""
+    from agent.shared import coherence_engine
+    items = coherence_engine.list_profiles()
+    return {"items": [p.to_dict() for p in items], "total": len(items)}
+
+
+@router.get("/coherence/stats")
+async def coherence_stats():
+    """Return aggregate coherence engine statistics."""
+    from agent.shared import coherence_engine
+    return coherence_engine.get_stats().to_dict()
