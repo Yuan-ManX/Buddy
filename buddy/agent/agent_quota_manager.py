@@ -541,6 +541,59 @@ class AgentQuotaManager:
         fraction = (raw & ((1 << 64) - 1)) / float(1 << 64)
         return fraction * 0.25 * base
 
+    def _compute_backpressure_locked(self) -> BackpressureLevel:
+        """Compute the current backpressure level (lock must be held).
+
+        The level is derived from the usage ratio of every active,
+        non-expired usage tracker:
+
+          * Any tracker in :attr:`QuotaStatus.EXHAUSTED` or
+            :attr:`QuotaStatus.BLOCKED` state yields
+            :attr:`BackpressureLevel.CRITICAL`.
+          * If at least half of the trackers are at or above
+            :attr:`NEAR_LIMIT_RATIO`, the level is
+            :attr:`BackpressureLevel.HIGH`.
+          * If at least half of the trackers are at or above
+            :attr:`MID_LIMIT_RATIO`, the level is
+            :attr:`BackpressureLevel.MEDIUM`.
+          * When at least one tracker exists but none of the above
+            thresholds are met, the level is
+            :attr:`BackpressureLevel.LOW`.
+          * With no trackers, the level is
+            :attr:`BackpressureLevel.NONE`.
+        """
+        now = time.time()
+        ratios: list[float] = []
+        any_exhausted = False
+        for limit in self._limits.values():
+            usage = self._usage.get(limit.limit_id)
+            if usage is None:
+                continue
+            if now >= usage.window_end:
+                # Expired windows exert no current pressure.
+                continue
+            if usage.status in (QuotaStatus.EXHAUSTED, QuotaStatus.BLOCKED):
+                any_exhausted = True
+                continue
+            if limit.max_value <= 0:
+                ratios.append(1.0)
+                continue
+            ratios.append(usage.current_value / limit.max_value)
+
+        if any_exhausted:
+            return BackpressureLevel.CRITICAL
+        if not ratios:
+            return BackpressureLevel.NONE
+
+        total = len(ratios)
+        near = sum(1 for r in ratios if r >= self.NEAR_LIMIT_RATIO)
+        mid = sum(1 for r in ratios if r >= self.MID_LIMIT_RATIO)
+        if near / total >= 0.5:
+            return BackpressureLevel.HIGH
+        if mid / total >= 0.5:
+            return BackpressureLevel.MEDIUM
+        return BackpressureLevel.LOW
+
     # ────────────────────────────────────────────────────────────────
     # Limit lifecycle
     # ────────────────────────────────────────────────────────────────
@@ -985,63 +1038,13 @@ class AgentQuotaManager:
     def get_backpressure_level(self) -> BackpressureLevel:
         """Compute the aggregate backpressure level across all resources.
 
-        The level is derived from the usage ratio of every active, non-
-        expired usage tracker:
-
-          * Any tracker in :attr:`QuotaStatus.EXHAUSTED` or
-            :attr:`QuotaStatus.BLOCKED` state yields
-            :attr:`BackpressureLevel.CRITICAL`.
-          * If at least half of the trackers are at or above
-            :attr:`NEAR_LIMIT_RATIO`, the level is
-            :attr:`BackpressureLevel.HIGH`.
-          * If at least half of the trackers are at or above
-            :attr:`MID_LIMIT_RATIO`, the level is
-            :attr:`BackpressureLevel.MEDIUM`.
-          * When at least one tracker exists but none of the above
-            thresholds are met, the level is
-            :attr:`BackpressureLevel.LOW`.
-          * With no trackers, the level is
-            :attr:`BackpressureLevel.NONE`.
+        See :meth:`_compute_backpressure_locked` for the threshold rules.
 
         Returns:
             The current :class:`BackpressureLevel`.
         """
         with self._lock:
-            now = time.time()
-            ratios: list[float] = []
-            any_exhausted = False
-            for limit in self._limits.values():
-                usage = self._usage.get(limit.limit_id)
-                if usage is None:
-                    continue
-                if now >= usage.window_end:
-                    # Expired windows exert no current pressure.
-                    continue
-                if usage.status in (
-                    QuotaStatus.EXHAUSTED,
-                    QuotaStatus.BLOCKED,
-                ):
-                    any_exhausted = True
-                    continue
-                if limit.max_value <= 0:
-                    ratios.append(1.0)
-                    continue
-                ratios.append(usage.current_value / limit.max_value)
-
-            if any_exhausted:
-                return BackpressureLevel.CRITICAL
-            if not ratios:
-                return BackpressureLevel.NONE
-
-            total = len(ratios)
-            near = sum(1 for r in ratios if r >= self.NEAR_LIMIT_RATIO)
-            mid = sum(1 for r in ratios if r >= self.MID_LIMIT_RATIO)
-
-            if near / total >= 0.5:
-                return BackpressureLevel.HIGH
-            if mid / total >= 0.5:
-                return BackpressureLevel.MEDIUM
-            return BackpressureLevel.LOW
+            return self._compute_backpressure_locked()
 
     def get_stats(self) -> QuotaManagerStats:
         """Return an aggregate snapshot of manager state.
@@ -1060,41 +1063,7 @@ class AgentQuotaManager:
             else:
                 avg_latency = 0.0
 
-            # Compute backpressure inline to avoid re-acquiring the lock.
-            now = time.time()
-            ratios: list[float] = []
-            any_exhausted = False
-            for limit in self._limits.values():
-                usage = self._usage.get(limit.limit_id)
-                if usage is None:
-                    continue
-                if now >= usage.window_end:
-                    continue
-                if usage.status in (
-                    QuotaStatus.EXHAUSTED,
-                    QuotaStatus.BLOCKED,
-                ):
-                    any_exhausted = True
-                    continue
-                if limit.max_value <= 0:
-                    ratios.append(1.0)
-                    continue
-                ratios.append(usage.current_value / limit.max_value)
-
-            if any_exhausted:
-                level = BackpressureLevel.CRITICAL
-            elif not ratios:
-                level = BackpressureLevel.NONE
-            else:
-                total = len(ratios)
-                near = sum(1 for r in ratios if r >= self.NEAR_LIMIT_RATIO)
-                mid = sum(1 for r in ratios if r >= self.MID_LIMIT_RATIO)
-                if near / total >= 0.5:
-                    level = BackpressureLevel.HIGH
-                elif mid / total >= 0.5:
-                    level = BackpressureLevel.MEDIUM
-                else:
-                    level = BackpressureLevel.LOW
+            level = self._compute_backpressure_locked()
 
             return QuotaManagerStats(
                 total_resources=len(resources),
