@@ -3582,4 +3582,619 @@ export const api = {
     generateSummary: (narrativeId: string) => request<any>(`/narrative/${narrativeId}/summary`),
     stats: () => request<any>('/narratives/stats'),
   },
+  cognitiveMapping: {
+    createMap: (data: { agent_id: string; name: string; environment_type: string; description?: string }) =>
+      request<any>('/cognitive-mapping/map', { method: 'POST', body: JSON.stringify(data) }),
+    listMaps: (agentId?: string, environmentType?: string) =>
+      request<any>(`/cognitive-mapping/maps${[agentId && 'agent_id=' + agentId, environmentType && 'environment_type=' + environmentType].filter(Boolean).join('&') ? '?' + [agentId && 'agent_id=' + agentId, environmentType && 'environment_type=' + environmentType].filter(Boolean).join('&') : ''}`),
+    stats: () => request<any>('/cognitive-maps/stats'),
+    getMap: (mapId: string) => request<any>(`/cognitive-mapping/map/${mapId}`),
+    updateMap: (mapId: string, data: { name?: string; status?: string }) =>
+      request<any>(`/cognitive-mapping/map/${mapId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteMap: (mapId: string) => request<any>(`/cognitive-mapping/map/${mapId}`, { method: 'DELETE' }),
+    addPlace: (mapId: string, data: { name: string; place_type?: string; coordinates?: Record<string, unknown>; properties?: Record<string, unknown> }) =>
+      request<any>(`/cognitive-mapping/map/${mapId}/place`, { method: 'POST', body: JSON.stringify(data) }),
+    listPlaces: (mapId: string, placeType?: string) =>
+      request<any>(`/cognitive-mapping/map/${mapId}/places${placeType ? '?place_type=' + placeType : ''}`),
+    getPlace: (mapId: string, placeId: string) => request<any>(`/cognitive-mapping/map/${mapId}/place/${placeId}`),
+    addAnchor: (mapId: string, placeId: string, data: { anchor_type: string; label: string; salience?: number }) =>
+      request<any>(`/cognitive-mapping/map/${mapId}/place/${placeId}/anchor`, { method: 'POST', body: JSON.stringify(data) }),
+    listAnchors: (mapId: string, placeId?: string) =>
+      request<any>(`/cognitive-mapping/map/${mapId}/anchors${placeId ? '?place_id=' + placeId : ''}`),
+    addEdge: (mapId: string, data: { source_place_id: string; target_place_id: string; relation: string; weight?: number; properties?: Record<string, unknown> }) =>
+      request<any>(`/cognitive-mapping/map/${mapId}/edge`, { method: 'POST', body: JSON.stringify(data) }),
+    listEdges: (mapId: string, sourcePlaceId?: string) =>
+      request<any>(`/cognitive-mapping/map/${mapId}/edges${sourcePlaceId ? '?source_place_id=' + sourcePlaceId : ''}`),
+    findPath: (mapId: string, sourcePlaceId: string, targetPlaceId: string) =>
+      request<any>(`/cognitive-mapping/map/${mapId}/path?source_place_id=${sourcePlaceId}&target_place_id=${targetPlaceId}`),
+    localize: (mapId: string, data: { coordinates?: Record<string, number>; anchor_label?: string }) =>
+      request<any>(`/cognitive-mapping/map/${mapId}/localize`, { method: 'POST', body: JSON.stringify(data) }),
+    applyDelta: (mapId: string, data: { delta_type: string; place_id?: string; place_data?: Record<string, unknown> }) =>
+      request<any>(`/cognitive-mapping/map/${mapId}/delta`, { method: 'POST', body: JSON.stringify(data) }),
+    listDeltas: (mapId: string) => request<any>(`/cognitive-mapping/map/${mapId}/deltas`),
+  },
+  biasDetector: {
+    submitReasoning: (data: { agent_id: string; reasoning_trace: string; context?: Record<string, unknown> }) =>
+      request<any>('/bias/audit', { method: 'POST', body: JSON.stringify(data) }),
+    listAudits: (agentId?: string, status?: string) =>
+      request<any>(`/bias/audits${[agentId && 'agent_id=' + agentId, status && 'status=' + status].filter(Boolean).join('&') ? '?' + [agentId && 'agent_id=' + agentId, status && 'status=' + status].filter(Boolean).join('&') : ''}`),
+    stats: () => request<any>('/biases/stats'),
+    getAudit: (auditId: string) => request<any>(`/bias/audit/${auditId}`),
+    detectBiases: (auditId: string) => request<any>(`/bias/audit/${auditId}/detect`, { method: 'POST' }),
+    listDetections: (auditId: string) => request<any>(`/bias/audit/${auditId}/detections`),
+    getDetection: (detectionId: string) => request<any>(`/bias/detection/${detectionId}`),
+    applyDebiasing: (detectionId: string, strategy: string) =>
+      request<any>(`/bias/detection/${detectionId}/debias`, { method: 'POST', body: JSON.stringify({ strategy }) }),
+    listDebiasingActions: (detectionId: string) => request<any>(`/bias/detection/${detectionId}/actions`),
+    resolveDetection: (detectionId: string, resolutionNote: string) =>
+      request<any>(`/bias/detection/${detectionId}/resolve`, { method: 'PUT', body: JSON.stringify({ resolution_note: resolutionNote }) }),
+    listAllDebiasingActions: (auditId?: string) =>
+      request<any>(`/bias/debiasing-actions${auditId ? '?audit_id=' + auditId : ''}`),
+    getProfile: (agentId: string) => request<any>(`/bias/profile/${agentId}`),
+    listProfiles: () => request<any>('/bias/profiles'),
+    updateProfile: (agentId: string, data: { bias_type: string; tendency_delta: number }) =>
+      request<any>(`/bias/profile/${agentId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    analyzeEvidence: (evidenceItems: unknown[]) =>
+      request<any>('/bias/evidence/analyze', { method: 'POST', body: JSON.stringify({ evidence_items: evidenceItems }) }),
+  },
+  cognitiveAffordance: {
+    registerContext: (data: { agent_id: string; environment_id: string; description?: string; cues?: string[] }) =>
+      request<any>('/affordance/context', { method: 'POST', body: JSON.stringify(data) }),
+    listContexts: (agentId?: string) =>
+      request<any>(`/affordance/contexts${agentId ? '?agent_id=' + agentId : ''}`),
+    stats: () => request<any>('/affordances/stats'),
+    getContext: (contextId: string) => request<any>(`/affordance/context/${contextId}`),
+    perceiveAffordance: (contextId: string, data: { name: string; source: string; description?: string; constraints?: unknown[]; signatures?: unknown[]; effects?: string[]; effort?: number; utility?: number; risk?: number }) =>
+      request<any>(`/affordance/context/${contextId}/perceive`, { method: 'POST', body: JSON.stringify(data) }),
+    listAffordances: (contextId: string, source?: string, status?: string) =>
+      request<any>(`/affordance/context/${contextId}/affordances${[source && 'source=' + source, status && 'status=' + status].filter(Boolean).join('&') ? '?' + [source && 'source=' + source, status && 'status=' + status].filter(Boolean).join('&') : ''}`),
+    getAffordance: (affordanceId: string) => request<any>(`/affordance/affordance/${affordanceId}`),
+    validateAffordance: (affordanceId: string, data: { validation_result: boolean; notes?: string }) =>
+      request<any>(`/affordance/affordance/${affordanceId}/validate`, { method: 'PUT', body: JSON.stringify(data) }),
+    executeAffordance: (affordanceId: string, executionData?: Record<string, unknown>) =>
+      request<any>(`/affordance/affordance/${affordanceId}/execute`, { method: 'POST', body: JSON.stringify({ execution_data: executionData }) }),
+    rankAffordances: (contextId: string, metric?: string, topK?: number) =>
+      request<any>(`/affordance/context/${contextId}/rank${[metric && 'metric=' + metric, topK !== undefined && 'top_k=' + topK].filter(Boolean).join('&') ? '?' + [metric && 'metric=' + metric, topK !== undefined && 'top_k=' + topK].filter(Boolean).join('&') : ''}`),
+    addConstraint: (affordanceId: string, data: { constraint_type: string; description: string; satisfied?: boolean }) =>
+      request<any>(`/affordance/affordance/${affordanceId}/constraint`, { method: 'POST', body: JSON.stringify(data) }),
+    listConstraints: (affordanceId: string) => request<any>(`/affordance/affordance/${affordanceId}/constraints`),
+    addSignature: (affordanceId: string, data: { signature_type: string; pattern: string; confidence?: number }) =>
+      request<any>(`/affordance/affordance/${affordanceId}/signature`, { method: 'POST', body: JSON.stringify(data) }),
+    listSignatures: (affordanceId: string) => request<any>(`/affordance/affordance/${affordanceId}/signatures`),
+    buildMap: (contextId: string) => request<any>(`/affordance/context/${contextId}/map`),
+  },
+  cognitiveScaffolding: {
+    registerLearner: (data: { learner_id: string; name?: string; initial_competence?: Record<string, number> }) =>
+      request<any>('/scaffolding/learner', { method: 'POST', body: JSON.stringify(data) }),
+    listLearners: () => request<any>('/scaffolding/learners'),
+    stats: () => request<any>('/scaffolding/stats'),
+    getLearner: (learnerId: string) => request<any>(`/scaffolding/learner/${learnerId}`),
+    assessCompetence: (learnerId: string, data: { skill_domain: string; level: string; score?: number; evidence?: string }) =>
+      request<any>(`/scaffolding/learner/${learnerId}/assess`, { method: 'POST', body: JSON.stringify(data) }),
+    listAssessments: (learnerId: string, skillDomain?: string) =>
+      request<any>(`/scaffolding/learner/${learnerId}/assessments${skillDomain ? '?skill_domain=' + skillDomain : ''}`),
+    getAssessment: (assessmentId: string) => request<any>(`/scaffolding/assessment/${assessmentId}`),
+    createSession: (data: { learner_id: string; task_description: string; skill_domain: string; target_level?: string }) =>
+      request<any>('/scaffolding/session', { method: 'POST', body: JSON.stringify(data) }),
+    listSessions: (learnerId?: string, status?: string) =>
+      request<any>(`/scaffolding/sessions${[learnerId && 'learner_id=' + learnerId, status && 'status=' + status].filter(Boolean).join('&') ? '?' + [learnerId && 'learner_id=' + learnerId, status && 'status=' + status].filter(Boolean).join('&') : ''}`),
+    getSession: (sessionId: string) => request<any>(`/scaffolding/session/${sessionId}`),
+    proposeScaffold: (sessionId: string, data: { level: string; strategy: string; content: string; fading_trigger?: string }) =>
+      request<any>(`/scaffolding/session/${sessionId}/scaffold`, { method: 'POST', body: JSON.stringify(data) }),
+    listScaffolds: (sessionId: string, status?: string) =>
+      request<any>(`/scaffolding/session/${sessionId}/scaffolds${status ? '?status=' + status : ''}`),
+    getScaffold: (scaffoldId: string) => request<any>(`/scaffolding/scaffold/${scaffoldId}`),
+    activateScaffold: (scaffoldId: string) => request<any>(`/scaffolding/scaffold/${scaffoldId}/activate`, { method: 'PUT' }),
+    fadeScaffold: (scaffoldId: string, reason?: string) =>
+      request<any>(`/scaffolding/scaffold/${scaffoldId}/fade`, { method: 'PUT', body: JSON.stringify({ reason: reason || '' }) }),
+    withdrawScaffold: (scaffoldId: string, outcome?: string) =>
+      request<any>(`/scaffolding/scaffold/${scaffoldId}/withdraw`, { method: 'PUT', body: JSON.stringify({ outcome: outcome || 'success' }) }),
+    createFadingPlan: (scaffoldId: string, milestones: unknown[]) =>
+      request<any>(`/scaffolding/scaffold/${scaffoldId}/fading-plan`, { method: 'POST', body: JSON.stringify({ milestones }) }),
+    recordOutcome: (sessionId: string, data: { success: boolean; feedback?: string }) =>
+      request<any>(`/scaffolding/session/${sessionId}/outcome`, { method: 'POST', body: JSON.stringify(data) }),
+  },
+  affectiveEngine: {
+    registerAgent: (data: { agent_id: string; name?: string; baseline?: Record<string, number> }) =>
+      request<any>('/affective/profile', { method: 'POST', body: JSON.stringify(data) }),
+    listProfiles: () => request<any>('/affective/profiles'),
+    stats: () => request<any>('/affective/stats'),
+    getProfile: (agentId: string) => request<any>(`/affective/profile/${agentId}`),
+    getCurrentState: (agentId: string) => request<any>(`/affective/state/${agentId}`),
+    appraiseEvent: (data: { agent_id: string; trigger_type: string; event_description: string; appraisal_scores?: Record<string, number> }) =>
+      request<any>('/affective/appraise', { method: 'POST', body: JSON.stringify(data) }),
+    generateEmotion: (data: { agent_id: string; appraisal_id: string }) =>
+      request<any>('/affective/generate', { method: 'POST', body: JSON.stringify(data) }),
+    regulateEmotion: (data: { agent_id: string; strategy: string; target_emotion?: string }) =>
+      request<any>('/affective/regulate', { method: 'POST', body: JSON.stringify(data) }),
+    recordState: (data: { agent_id: string; state: Record<string, unknown> }) =>
+      request<any>('/affective/record', { method: 'POST', body: JSON.stringify(data) }),
+    getTrajectory: (agentId: string, limit?: number) =>
+      request<any>(`/affective/trajectory/${agentId}${limit !== undefined ? '?limit=' + limit : ''}`),
+    setMode: (agentId: string, mode: string) =>
+      request<any>(`/affective/mode/${agentId}`, { method: 'PUT', body: JSON.stringify({ mode }) }),
+    getMode: (agentId: string) => request<any>(`/affective/mode/${agentId}`),
+    mirrorEmotion: (data: { agent_id: string; user_emotion: string; intensity?: number }) =>
+      request<any>('/affective/mirror', { method: 'POST', body: JSON.stringify(data) }),
+    listRegulations: (agentId?: string) =>
+      request<any>(`/affective/regulations${agentId ? '?agent_id=' + agentId : ''}`),
+    listAppraisals: (agentId?: string) =>
+      request<any>(`/affective/appraisals${agentId ? '?agent_id=' + agentId : ''}`),
+  },
+  cognitiveStyleTransfer: {
+    extractStyle: (data: { source_id: string; source_type: string; description?: string; features?: unknown[] }) =>
+      request<any>('/style-transfer/style', { method: 'POST', body: JSON.stringify(data) }),
+    listStyles: (sourceType?: string, dimension?: string) =>
+      request<any>(`/style-transfer/styles${[sourceType && 'source_type=' + sourceType, dimension && 'dimension=' + dimension].filter(Boolean).join('&') ? '?' + [sourceType && 'source_type=' + sourceType, dimension && 'dimension=' + dimension].filter(Boolean).join('&') : ''}`),
+    stats: () => request<any>('/style-transfers/stats'),
+    getStyle: (styleId: string) => request<any>(`/style-transfer/style/${styleId}`),
+    updateStyle: (styleId: string, data: { description?: string; features?: unknown[] }) =>
+      request<any>(`/style-transfer/style/${styleId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteStyle: (styleId: string) => request<any>(`/style-transfer/style/${styleId}`, { method: 'DELETE' }),
+    fingerprintStyle: (styleId: string) => request<any>(`/style-transfer/style/${styleId}/fingerprint`, { method: 'POST' }),
+    getFingerprint: (styleId: string) => request<any>(`/style-transfer/style/${styleId}/fingerprint`),
+    matchStyles: (styleId: string, topK?: number) =>
+      request<any>(`/style-transfer/style/${styleId}/match${topK !== undefined ? '?top_k=' + topK : ''}`),
+    createTransfer: (data: { source_style_id: string; target_domain: string; fidelity?: string; description?: string }) =>
+      request<any>('/style-transfer/transfer', { method: 'POST', body: JSON.stringify(data) }),
+    listTransfers: (status?: string) =>
+      request<any>(`/style-transfer/transfers${status ? '?status=' + status : ''}`),
+    getTransfer: (transferId: string) => request<any>(`/style-transfer/transfer/${transferId}`),
+    validateTransfer: (transferId: string, constraints?: Record<string, unknown>) =>
+      request<any>(`/style-transfer/transfer/${transferId}/validate`, { method: 'PUT', body: JSON.stringify({ constraints }) }),
+    blendStyles: (data: { style_ids: string[]; strategy?: string; weights?: number[] }) =>
+      request<any>('/style-transfer/blend', { method: 'POST', body: JSON.stringify(data) }),
+    listBlends: () => request<any>('/style-transfer/blends'),
+    getBlend: (blendId: string) => request<any>(`/style-transfer/blend/${blendId}`),
+    applyStyle: (styleId: string, problemDescription: string) =>
+      request<any>(`/style-transfer/style/${styleId}/apply`, { method: 'POST', body: JSON.stringify({ problem_description: problemDescription }) }),
+  },
+  cognitivePrime: {
+    registerContext: (data: { agent_id: string; description?: string; active_concepts?: string[] }) =>
+      request<any>('/prime/context', { method: 'POST', body: JSON.stringify(data) }),
+    listContexts: (agentId?: string) =>
+      request<any>(`/prime/contexts${agentId ? '?agent_id=' + agentId : ''}`),
+    stats: () => request<any>('/primes/stats'),
+    getContext: (contextId: string) => request<any>(`/prime/context/${contextId}`),
+    activatePrime: (contextId: string, data: { prime_concept: string; prime_type: string; strength?: string; description?: string }) =>
+      request<any>(`/prime/context/${contextId}/activate`, { method: 'POST', body: JSON.stringify(data) }),
+    listActivations: (contextId: string, primeType?: string) =>
+      request<any>(`/prime/context/${contextId}/activations${primeType ? '?prime_type=' + primeType : ''}`),
+    getActivation: (activationId: string) => request<any>(`/prime/activation/${activationId}`),
+    spreadActivation: (activationId: string, data: { mode?: string; fan_out?: number; decay?: number }) =>
+      request<any>(`/prime/activation/${activationId}/spread`, { method: 'POST', body: JSON.stringify(data) }),
+    measureEffect: (activationId: string, data: { target_concept: string; direction?: string }) =>
+      request<any>(`/prime/activation/${activationId}/measure`, { method: 'POST', body: JSON.stringify(data) }),
+    listEffects: (activationId: string) => request<any>(`/prime/activation/${activationId}/effects`),
+    getEffect: (effectId: string) => request<any>(`/prime/effect/${effectId}`),
+    checkInterference: (activationId: string, otherActivationId: string) =>
+      request<any>('/prime/interference', { method: 'POST', body: JSON.stringify({ activation_id: activationId, other_activation_id: otherActivationId }) }),
+    createSession: (contextId: string, data: { goal?: string; description?: string }) =>
+      request<any>(`/prime/context/${contextId}/session`, { method: 'POST', body: JSON.stringify(data) }),
+    listSessions: (contextId: string) => request<any>(`/prime/context/${contextId}/sessions`),
+    getSession: (sessionId: string) => request<any>(`/prime/session/${sessionId}`),
+    decayActivations: (contextId: string, decayFactor?: number) =>
+      request<any>(`/prime/context/${contextId}/decay`, { method: 'POST', body: JSON.stringify({ decay_factor: decayFactor }) }),
+  },
+  cognitivePhaseTransition: {
+    registerContext: (data: { agent_id: string; domain: string; description?: string }) =>
+      request<any>('/phase-transition/context', { method: 'POST', body: JSON.stringify(data) }),
+    listContexts: (agentId?: string) =>
+      request<any>(`/phase-transition/contexts${agentId ? '?agent_id=' + agentId : ''}`),
+    stats: () => request<any>('/phase-transitions/stats'),
+    getContext: (contextId: string) => request<any>(`/phase-transition/context/${contextId}`),
+    recordParameter: (contextId: string, data: { parameter_type: string; value: number }) =>
+      request<any>(`/phase-transition/context/${contextId}/parameter`, { method: 'POST', body: JSON.stringify(data) }),
+    getParameterHistory: (contextId: string, parameterType?: string) =>
+      request<any>(`/phase-transition/context/${contextId}/parameters${parameterType ? '?parameter_type=' + parameterType : ''}`),
+    detectCriticalPoint: (contextId: string) =>
+      request<any>(`/phase-transition/context/${contextId}/detect`, { method: 'POST' }),
+    listCriticalPoints: (contextId: string) => request<any>(`/phase-transition/context/${contextId}/critical-points`),
+    getCriticalPoint: (pointId: string) => request<any>(`/phase-transition/critical-point/${pointId}`),
+    registerCatalyst: (contextId: string, data: { catalyst_type: string; description: string; strength?: number }) =>
+      request<any>(`/phase-transition/context/${contextId}/catalyst`, { method: 'POST', body: JSON.stringify(data) }),
+    listCatalysts: (contextId: string, catalystType?: string) =>
+      request<any>(`/phase-transition/context/${contextId}/catalysts${catalystType ? '?catalyst_type=' + catalystType : ''}`),
+    getCatalyst: (catalystId: string) => request<any>(`/phase-transition/catalyst/${catalystId}`),
+    triggerTransition: (contextId: string, data: { catalyst_id: string; description?: string }) =>
+      request<any>(`/phase-transition/context/${contextId}/trigger`, { method: 'POST', body: JSON.stringify(data) }),
+    listEvents: (contextId?: string, status?: string) =>
+      request<any>(`/phase-transition/events${[contextId && 'context_id=' + contextId, status && 'status=' + status].filter(Boolean).join('&') ? '?' + [contextId && 'context_id=' + contextId, status && 'status=' + status].filter(Boolean).join('&') : ''}`),
+    getEvent: (eventId: string) => request<any>(`/phase-transition/event/${eventId}`),
+    facilitateTransition: (eventId: string, interventions?: string[]) =>
+      request<any>(`/phase-transition/event/${eventId}/facilitate`, { method: 'PUT', body: JSON.stringify({ interventions }) }),
+    stabilizePhase: (eventId: string, description?: string) =>
+      request<any>(`/phase-transition/event/${eventId}/stabilize`, { method: 'PUT', body: JSON.stringify({ description }) }),
+  },
+  cognitiveGravity: {
+    registerContext: (data: { agent_id: string; description?: string; initial_concepts?: unknown[] }) =>
+      request<any>('/gravity/context', { method: 'POST', body: JSON.stringify(data) }),
+    listContexts: (agentId?: string) =>
+      request<any>(`/gravity/contexts${agentId ? '?agent_id=' + agentId : ''}`),
+    stats: () => request<any>('/gravity/stats'),
+    getContext: (contextId: string) => request<any>(`/gravity/context/${contextId}`),
+    addConcept: (contextId: string, data: { concept: string; mass?: number; position?: number[]; contributions?: Record<string, number> }) =>
+      request<any>(`/gravity/context/${contextId}/concept`, { method: 'POST', body: JSON.stringify(data) }),
+    listConcepts: (contextId: string) => request<any>(`/gravity/context/${contextId}/concepts`),
+    getConcept: (contextId: string, concept: string) => request<any>(`/gravity/context/${contextId}/concept/${concept}`),
+    computeField: (contextId: string) => request<any>(`/gravity/context/${contextId}/field`, { method: 'POST' }),
+    getField: (contextId: string) => request<any>(`/gravity/context/${contextId}/field`),
+    createBasin: (contextId: string, data: { center_concept: string; attractor_type?: string; radius?: number; stability?: number }) =>
+      request<any>(`/gravity/context/${contextId}/basin`, { method: 'POST', body: JSON.stringify(data) }),
+    listBasins: (contextId: string) => request<any>(`/gravity/context/${contextId}/basins`),
+    getBasin: (basinId: string) => request<any>(`/gravity/basin/${basinId}`),
+    predictTrajectory: (contextId: string, data: { start_concept: string; steps?: number; step_size?: number }) =>
+      request<any>(`/gravity/context/${contextId}/trajectory`, { method: 'POST', body: JSON.stringify(data) }),
+    listTrajectories: (contextId?: string, status?: string) =>
+      request<any>(`/gravity/trajectories${[contextId && 'context_id=' + contextId, status && 'status=' + status].filter(Boolean).join('&') ? '?' + [contextId && 'context_id=' + contextId, status && 'status=' + status].filter(Boolean).join('&') : ''}`),
+    getTrajectory: (trajectoryId: string) => request<any>(`/gravity/trajectory/${trajectoryId}`),
+    checkBasinEscape: (trajectoryId: string) => request<any>(`/gravity/trajectory/${trajectoryId}/escape`, { method: 'POST' }),
+    perturbField: (contextId: string, data: { concept: string; force_vector: number[] }) =>
+      request<any>(`/gravity/context/${contextId}/perturb`, { method: 'POST', body: JSON.stringify(data) }),
+  },
+  cognitiveResonance: {
+    registerContext: (data: { agent_id: string; domain: string; description?: string }) =>
+      request<any>('/resonance/context', { method: 'POST', body: JSON.stringify(data) }),
+    listContexts: (agentId?: string) =>
+      request<any>(`/resonance/contexts${agentId ? '?agent_id=' + agentId : ''}`),
+    stats: () => request<any>('/resonance/stats'),
+    getContext: (contextId: string) => request<any>(`/resonance/context/${contextId}`),
+    registerConcept: (contextId: string, data: { concept: string; attributes?: Record<string, number> }) =>
+      request<any>(`/resonance/context/${contextId}/concept`, { method: 'POST', body: JSON.stringify(data) }),
+    detectResonance: (contextId: string, data: { concept_a: string; concept_b: string; resonance_type?: string; method?: string }) =>
+      request<any>(`/resonance/context/${contextId}/detect`, { method: 'POST', body: JSON.stringify(data) }),
+    listEvents: (contextId: string, resonanceType?: string) =>
+      request<any>(`/resonance/context/${contextId}/events${resonanceType ? '?resonance_type=' + resonanceType : ''}`),
+    getEvent: (eventId: string) => request<any>(`/resonance/event/${eventId}`),
+    measureAmplification: (eventId: string) => request<any>(`/resonance/event/${eventId}/amplify`, { method: 'POST' }),
+    getAmplification: (eventId: string) => request<any>(`/resonance/event/${eventId}/amplification`),
+    listAmplifications: (contextId?: string) =>
+      request<any>(`/resonance/amplifications${contextId ? '?context_id=' + contextId : ''}`),
+    clusterResonances: (contextId: string, threshold?: number) =>
+      request<any>(`/resonance/context/${contextId}/cluster`, { method: 'POST', body: JSON.stringify({ threshold }) }),
+    listClusters: (contextId?: string) =>
+      request<any>(`/resonance/clusters${contextId ? '?context_id=' + contextId : ''}`),
+    getCluster: (clusterId: string) => request<any>(`/resonance/cluster/${clusterId}`),
+    generateInsight: (clusterId: string) => request<any>(`/resonance/cluster/${clusterId}/insight`, { method: 'POST' }),
+    mapNetwork: (contextId: string) => request<any>(`/resonance/context/${contextId}/network`),
+  },
+
+  // ── Cognitive Workload Engine ──
+  cognitiveWorkload: {
+    recordMeasurement: (data: { agent_id: string; load_type: string; value: number; source_task?: string; element_complexity?: number; element_interactivity?: number }) =>
+      request<any>('/workload/measurement', { method: 'POST', body: JSON.stringify(data) }),
+    listMeasurements: (agentId?: string, loadType?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (loadType) params.set('load_type', loadType);
+      return request<any>(`/workload/measurements${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getMeasurement: (measurementId: string) => request<any>(`/workload/measurement/${measurementId}`),
+    takeSnapshot: (data: { agent_id: string; active_tasks?: number }) =>
+      request<any>('/workload/snapshot', { method: 'POST', body: JSON.stringify(data) }),
+    listSnapshots: (agentId?: string, state?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (state) params.set('state', state);
+      return request<any>(`/workload/snapshots${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getSnapshot: (snapshotId: string) => request<any>(`/workload/snapshot/${snapshotId}`),
+    assessInterference: (data: { agent_id: string; primary_task: string; secondary_task: string }) =>
+      request<any>('/workload/interference', { method: 'POST', body: JSON.stringify(data) }),
+    listInterferences: (agentId?: string) =>
+      request<any>(`/workload/interferences${agentId ? '?agent_id=' + agentId : ''}`),
+    getInterference: (assessmentId: string) => request<any>(`/workload/interference/${assessmentId}`),
+    decideAllocation: (data: { agent_id: string; target_task: string; current_load: number; strategy: string; rationale?: string }) =>
+      request<any>('/workload/allocation', { method: 'POST', body: JSON.stringify(data) }),
+    listAllocations: (agentId?: string, strategy?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (strategy) params.set('strategy', strategy);
+      return request<any>(`/workload/allocations${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getAllocation: (decisionId: string) => request<any>(`/workload/allocation/${decisionId}`),
+    createRecovery: (data: { agent_id: string; action: string; duration_estimate?: number; expected_relief?: number; steps?: string[] }) =>
+      request<any>('/workload/recovery', { method: 'POST', body: JSON.stringify(data) }),
+    listRecoveries: (agentId?: string, action?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (action) params.set('action', action);
+      return request<any>(`/workload/recoveries${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getRecovery: (planId: string) => request<any>(`/workload/recovery/${planId}`),
+    listProfiles: () => request<any>('/workload/profiles'),
+    getProfile: (agentId: string) => request<any>(`/workload/profile/${agentId}`),
+    updateProfile: (agentId: string, data: Record<string, unknown>) =>
+      request<any>(`/workload/profile/${agentId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    stats: () => request<any>('/workload/stats'),
+  },
+
+  // ── Cognitive Entropy Engine ──
+  cognitiveEntropy: {
+    sampleDistribution: (data: { agent_id: string; kind: string; distribution: Record<string, number> }) =>
+      request<any>('/entropy/sample', { method: 'POST', body: JSON.stringify(data) }),
+    listSamples: (agentId?: string, kind?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (kind) params.set('kind', kind);
+      return request<any>(`/entropy/samples${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getSample: (sampleId: string) => request<any>(`/entropy/sample/${sampleId}`),
+    recordFlux: (data: { agent_id: string; kind: string; current_entropy: number }) =>
+      request<any>('/entropy/flux', { method: 'POST', body: JSON.stringify(data) }),
+    listFluxes: (agentId?: string, kind?: string, direction?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (kind) params.set('kind', kind);
+      if (direction) params.set('direction', direction);
+      return request<any>(`/entropy/fluxes${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getFlux: (recordId: string) => request<any>(`/entropy/flux/${recordId}`),
+    inferDistribution: (data: { agent_id: string; principle: string; prior: Record<string, number>; evidence?: Record<string, number>; rationale?: string }) =>
+      request<any>('/entropy/inference', { method: 'POST', body: JSON.stringify(data) }),
+    listInferences: (agentId?: string, principle?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (principle) params.set('principle', principle);
+      return request<any>(`/entropy/inferences${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getInference: (resultId: string) => request<any>(`/entropy/inference/${resultId}`),
+    compressPayload: (data: { agent_id: string; source_payload: string; entropy_before: number }) =>
+      request<any>('/entropy/compression', { method: 'POST', body: JSON.stringify(data) }),
+    listCompressions: (agentId?: string, status?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (status) params.set('status', status);
+      return request<any>(`/entropy/compressions${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getCompression: (traceId: string) => request<any>(`/entropy/compression/${traceId}`),
+    listProfiles: () => request<any>('/entropy/profiles'),
+    getProfile: (agentId: string) => request<any>(`/entropy/profile/${agentId}`),
+    updateProfile: (agentId: string, data: Record<string, unknown>) =>
+      request<any>(`/entropy/profile/${agentId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    stats: () => request<any>('/entropy/stats'),
+  },
+
+  // ── Cognitive Horizon Engine ──
+  cognitiveHorizon: {
+    registerCompetence: (data: { agent_id: string; domain: string; level: string; confidence?: number; success_rate?: number; samples_seen?: number }) =>
+      request<any>('/horizon/competence', { method: 'POST', body: JSON.stringify(data) }),
+    listCompetences: (agentId?: string, domain?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (domain) params.set('domain', domain);
+      return request<any>(`/horizon/competences${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getCompetence: (competenceId: string) => request<any>(`/horizon/competence/${competenceId}`),
+    probe: (data: { agent_id: string; domain: string; probe_query: string; evidence_signals?: string[] }) =>
+      request<any>('/horizon/probe', { method: 'POST', body: JSON.stringify(data) }),
+    listProbes: (agentId?: string, domain?: string, proximity?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (domain) params.set('domain', domain);
+      if (proximity) params.set('proximity', proximity);
+      return request<any>(`/horizon/probes${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getProbe: (probeId: string) => request<any>(`/horizon/probe/${probeId}`),
+    recordEvent: (data: { agent_id: string; domain: string; proximity: string; response: string; trigger?: string; context?: Record<string, unknown> }) =>
+      request<any>('/horizon/event', { method: 'POST', body: JSON.stringify(data) }),
+    listEvents: (agentId?: string, response?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (response) params.set('response', response);
+      return request<any>(`/horizon/events${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getEvent: (eventId: string) => request<any>(`/horizon/event/${eventId}`),
+    resolveEvent: (eventId: string, resolution: string) =>
+      request<any>(`/horizon/event/${eventId}/resolve`, { method: 'POST', body: JSON.stringify({ resolution }) }),
+    requestLearning: (data: { agent_id: string; domain: string; trigger_probe_id: string; target_concept: string; urgency?: number; estimated_effort?: number }) =>
+      request<any>('/horizon/learning', { method: 'POST', body: JSON.stringify(data) }),
+    listLearnings: (agentId?: string, status?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (status) params.set('status', status);
+      return request<any>(`/horizon/learnings${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getLearning: (requestId: string) => request<any>(`/horizon/learning/${requestId}`),
+    deferDecision: (data: { agent_id: string; domain: string; deferred_to: string; reason: string; original_confidence: number; confidence_threshold?: number }) =>
+      request<any>('/horizon/defer', { method: 'POST', body: JSON.stringify(data) }),
+    listDefers: (agentId?: string) =>
+      request<any>(`/horizon/defers${agentId ? '?agent_id=' + agentId : ''}`),
+    getDefer: (decisionId: string) => request<any>(`/horizon/defer/${decisionId}`),
+    recommendResponse: (agentId: string, domain: string) =>
+      request<any>(`/horizon/recommend/${agentId}/${domain}`),
+    listProfiles: () => request<any>('/horizon/profiles'),
+    getProfile: (agentId: string) => request<any>(`/horizon/profile/${agentId}`),
+    updateProfile: (agentId: string, data: Record<string, unknown>) =>
+      request<any>(`/horizon/profile/${agentId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    stats: () => request<any>('/horizon/stats'),
+  },
+
+  // ── Cognitive Momentum Engine ──
+  cognitiveMomentum: {
+    recordVector: (data: { agent_id: string; direction: string; magnitude: number; velocity?: number; acceleration?: number; curvature?: number; mass?: number }) =>
+      request<any>('/momentum/vector', { method: 'POST', body: JSON.stringify(data) }),
+    listVectors: (agentId?: string, regime?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (regime) params.set('regime', regime);
+      return request<any>(`/momentum/vectors${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getVector: (vectorId: string) => request<any>(`/momentum/vector/${vectorId}`),
+    recordPoint: (data: { agent_id: string; step: number; position: Record<string, number>; momentum?: Record<string, unknown>; progress?: string; reward?: number }) =>
+      request<any>('/momentum/point', { method: 'POST', body: JSON.stringify(data) }),
+    listPoints: (agentId?: string) =>
+      request<any>(`/momentum/points${agentId ? '?agent_id=' + agentId : ''}`),
+    getPoint: (pointId: string) => request<any>(`/momentum/point/${pointId}`),
+    detectStuck: (data: { agent_id: string; trajectory_id: string; momentum_magnitude: number; progress_rate: number; curvature: number }) =>
+      request<any>('/momentum/stuck', { method: 'POST', body: JSON.stringify(data) }),
+    listStucks: (agentId?: string, regime?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (regime) params.set('regime', regime);
+      return request<any>(`/momentum/stucks${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getStuck: (detectionId: string) => request<any>(`/momentum/stuck/${detectionId}`),
+    applyPerturbation: (data: { agent_id: string; perturbation_type: string; target_trajectory: string; intensity?: number; expected_impact?: number }) =>
+      request<any>('/momentum/perturbation', { method: 'POST', body: JSON.stringify(data) }),
+    listPerturbations: (agentId?: string, perturbationType?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (perturbationType) params.set('perturbation_type', perturbationType);
+      return request<any>(`/momentum/perturbations${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getPerturbation: (eventId: string) => request<any>(`/momentum/perturbation/${eventId}`),
+    computeEscapeVelocity: (data: { current_momentum: number; well_depth: number }) =>
+      request<any>('/momentum/escape-velocity', { method: 'POST', body: JSON.stringify(data) }),
+    createEscapePlan: (data: { agent_id: string; trajectory_id: string; current_momentum: number; escape_velocity: number; strategy: string; steps?: string[]; estimated_steps?: number }) =>
+      request<any>('/momentum/escape-plan', { method: 'POST', body: JSON.stringify(data) }),
+    listEscapePlans: (agentId?: string, strategy?: string) => {
+      const params = new URLSearchParams();
+      if (agentId) params.set('agent_id', agentId);
+      if (strategy) params.set('strategy', strategy);
+      return request<any>(`/momentum/escape-plans${params.toString() ? '?' + params.toString() : ''}`);
+    },
+    getEscapePlan: (planId: string) => request<any>(`/momentum/escape-plan/${planId}`),
+    listProfiles: () => request<any>('/momentum/profiles'),
+    getProfile: (agentId: string) => request<any>(`/momentum/profile/${agentId}`),
+    updateProfile: (agentId: string, data: Record<string, unknown>) =>
+      request<any>(`/momentum/profile/${agentId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    stats: () => request<any>('/momentum/stats'),
+  },
+
+  // ── Cognitive Friction Engine ──
+  cognitiveFriction: {
+    recordMeasurement: (data: { agent_id: string; source: string; resistance_score: number; transition_type?: string; from_state?: string; to_state?: string; context?: string }) =>
+      request<any>('/friction/measurement', { method: 'POST', body: JSON.stringify(data) }),
+    listMeasurements: (agentId?: string) =>
+      request<any>(`/friction/measurements${agentId ? '?agent_id=' + agentId : ''}`),
+    getMeasurement: (measurementId: string) => request<any>(`/friction/measurement/${measurementId}`),
+    recordTransition: (data: { agent_id: string; transition_type: string; from_state?: string; to_state?: string; friction_score?: number; duration?: number; completed?: boolean }) =>
+      request<any>('/friction/transition', { method: 'POST', body: JSON.stringify(data) }),
+    listTransitions: (agentId?: string) =>
+      request<any>(`/friction/transitions${agentId ? '?agent_id=' + agentId : ''}`),
+    getTransition: (transitionId: string) => request<any>(`/friction/transition/${transitionId}`),
+    takeSnapshot: (data: { agent_id: string; active_sources?: string[] }) =>
+      request<any>('/friction/snapshot', { method: 'POST', body: JSON.stringify(data) }),
+    listSnapshots: (agentId?: string) =>
+      request<any>(`/friction/snapshots${agentId ? '?agent_id=' + agentId : ''}`),
+    getSnapshot: (snapshotId: string) => request<any>(`/friction/snapshot/${snapshotId}`),
+    planLubrication: (data: { agent_id: string; transition_id?: string; strategy: string; expected_relief?: number; steps?: string[] }) =>
+      request<any>('/friction/lubrication', { method: 'POST', body: JSON.stringify(data) }),
+    listLubrications: (agentId?: string) =>
+      request<any>(`/friction/lubrications${agentId ? '?agent_id=' + agentId : ''}`),
+    getLubrication: (lubricationId: string) => request<any>(`/friction/lubrication/${lubricationId}`),
+    assessRecovery: (data: { agent_id: string; transition_id?: string; from_state?: string; to_state?: string; strategy?: string; expected_recovery?: number }) =>
+      request<any>('/friction/recovery', { method: 'POST', body: JSON.stringify(data) }),
+    listRecoveries: (agentId?: string) =>
+      request<any>(`/friction/recoveries${agentId ? '?agent_id=' + agentId : ''}`),
+    getRecovery: (recoveryId: string) => request<any>(`/friction/recovery/${recoveryId}`),
+    listProfiles: () => request<any>('/friction/profiles'),
+    getProfile: (agentId: string) => request<any>(`/friction/profile/${agentId}`),
+    updateProfile: (agentId: string, data: Record<string, unknown>) =>
+      request<any>(`/friction/profile/${agentId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    stats: () => request<any>('/friction/stats'),
+  },
+
+  // ── Cognitive Tension Engine ──
+  cognitiveTension: {
+    registerPole: (data: { agent_id: string; content: string; polarity?: string; weight?: number }) =>
+      request<any>('/tension/pole', { method: 'POST', body: JSON.stringify(data) }),
+    listPoles: (agentId?: string) =>
+      request<any>(`/tension/poles${agentId ? '?agent_id=' + agentId : ''}`),
+    getPole: (poleId: string) => request<any>(`/tension/pole/${poleId}`),
+    formPair: (data: { agent_id: string; pole_a_id: string; pole_b_id: string; kind?: string }) =>
+      request<any>('/tension/pair', { method: 'POST', body: JSON.stringify(data) }),
+    listPairs: (agentId?: string) =>
+      request<any>(`/tension/pairs${agentId ? '?agent_id=' + agentId : ''}`),
+    getPair: (pairId: string) => request<any>(`/tension/pair/${pairId}`),
+    takeSnapshot: (data: { agent_id: string; active_pairs?: string[] }) =>
+      request<any>('/tension/snapshot', { method: 'POST', body: JSON.stringify(data) }),
+    listSnapshots: (agentId?: string) =>
+      request<any>(`/tension/snapshots${agentId ? '?agent_id=' + agentId : ''}`),
+    getSnapshot: (snapshotId: string) => request<any>(`/tension/snapshot/${snapshotId}`),
+    attemptResolution: (data: { agent_id: string; pair_id: string; mode?: string; synthesis?: string }) =>
+      request<any>('/tension/resolution', { method: 'POST', body: JSON.stringify(data) }),
+    listResolutions: (agentId?: string) =>
+      request<any>(`/tension/resolutions${agentId ? '?agent_id=' + agentId : ''}`),
+    getResolution: (resolutionId: string) => request<any>(`/tension/resolution/${resolutionId}`),
+    decideHolding: (data: { agent_id: string; pair_id: string; strategy?: string; duration?: number }) =>
+      request<any>('/tension/holding', { method: 'POST', body: JSON.stringify(data) }),
+    listHoldings: (agentId?: string) =>
+      request<any>(`/tension/holdings${agentId ? '?agent_id=' + agentId : ''}`),
+    getHolding: (holdingId: string) => request<any>(`/tension/holding/${holdingId}`),
+    listProfiles: () => request<any>('/tension/profiles'),
+    getProfile: (agentId: string) => request<any>(`/tension/profile/${agentId}`),
+    updateProfile: (agentId: string, data: Record<string, unknown>) =>
+      request<any>(`/tension/profile/${agentId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    stats: () => request<any>('/tension/stats'),
+  },
+
+  // ── Cognitive Depth Engine ──
+  cognitiveDepth: {
+    probeDepth: (data: { agent_id: string; dimension: string; query: string; target_depth?: number }) =>
+      request<any>('/depth/probe', { method: 'POST', body: JSON.stringify(data) }),
+    listProbes: (agentId?: string) =>
+      request<any>(`/depth/probes${agentId ? '?agent_id=' + agentId : ''}`),
+    getProbe: (probeId: string) => request<any>(`/depth/probe/${probeId}`),
+    assessDepth: (data: { agent_id: string; probe_id?: string; dimension?: string; depth_score?: number; regime?: string }) =>
+      request<any>('/depth/assessment', { method: 'POST', body: JSON.stringify(data) }),
+    listAssessments: (agentId?: string) =>
+      request<any>(`/depth/assessments${agentId ? '?agent_id=' + agentId : ''}`),
+    getAssessment: (assessmentId: string) => request<any>(`/depth/assessment/${assessmentId}`),
+    applyDeepening: (data: { agent_id: string; probe_id?: string; move: string; rationale?: string }) =>
+      request<any>('/depth/deepening', { method: 'POST', body: JSON.stringify(data) }),
+    listDeepenings: (agentId?: string) =>
+      request<any>(`/depth/deepenings${agentId ? '?agent_id=' + agentId : ''}`),
+    getDeepening: (deepeningId: string) => request<any>(`/depth/deepening/${deepeningId}`),
+    applySurfacing: (data: { agent_id: string; probe_id?: string; move: string; rationale?: string }) =>
+      request<any>('/depth/surfacing', { method: 'POST', body: JSON.stringify(data) }),
+    listSurfacings: (agentId?: string) =>
+      request<any>(`/depth/surfacings${agentId ? '?agent_id=' + agentId : ''}`),
+    getSurfacing: (surfacingId: string) => request<any>(`/depth/surfacing/${surfacingId}`),
+    recordTrajectory: (data: { agent_id: string; probe_id?: string; trajectory: string; velocity?: number }) =>
+      request<any>('/depth/trajectory', { method: 'POST', body: JSON.stringify(data) }),
+    listTrajectories: (agentId?: string) =>
+      request<any>(`/depth/trajectories${agentId ? '?agent_id=' + agentId : ''}`),
+    getTrajectory: (trajectoryId: string) => request<any>(`/depth/trajectory/${trajectoryId}`),
+    listProfiles: () => request<any>('/depth/profiles'),
+    getProfile: (agentId: string) => request<any>(`/depth/profile/${agentId}`),
+    updateProfile: (agentId: string, data: Record<string, unknown>) =>
+      request<any>(`/depth/profile/${agentId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    stats: () => request<any>('/depth/stats'),
+  },
+
+  // ── Cognitive Coherence Engine ──
+  cognitiveCoherence: {
+    registerNode: (data: { agent_id: string; content: string; facet?: string; weight?: number }) =>
+      request<any>('/coherence/node', { method: 'POST', body: JSON.stringify(data) }),
+    listNodes: (agentId?: string) =>
+      request<any>(`/coherence/nodes${agentId ? '?agent_id=' + agentId : ''}`),
+    getNode: (nodeId: string) => request<any>(`/coherence/node/${nodeId}`),
+    linkRelation: (data: { agent_id: string; source_node_id: string; target_node_id: string; relation_type: string; strength?: number }) =>
+      request<any>('/coherence/relation', { method: 'POST', body: JSON.stringify(data) }),
+    listRelations: (agentId?: string) =>
+      request<any>(`/coherence/relations${agentId ? '?agent_id=' + agentId : ''}`),
+    getRelation: (relationId: string) => request<any>(`/coherence/relation/${relationId}`),
+    takeSnapshot: (data: { agent_id: string; active_nodes?: string[] }) =>
+      request<any>('/coherence/snapshot', { method: 'POST', body: JSON.stringify(data) }),
+    listSnapshots: (agentId?: string) =>
+      request<any>(`/coherence/snapshots${agentId ? '?agent_id=' + agentId : ''}`),
+    getSnapshot: (snapshotId: string) => request<any>(`/coherence/snapshot/${snapshotId}`),
+    attemptRepair: (data: { agent_id: string; contradiction_id?: string; strategy: string; rationale?: string }) =>
+      request<any>('/coherence/repair', { method: 'POST', body: JSON.stringify(data) }),
+    listRepairs: (agentId?: string) =>
+      request<any>(`/coherence/repairs${agentId ? '?agent_id=' + agentId : ''}`),
+    getRepair: (repairId: string) => request<any>(`/coherence/repair/${repairId}`),
+    recordTrajectory: (data: { agent_id: string; trajectory: string; coherence_score?: number }) =>
+      request<any>('/coherence/trajectory', { method: 'POST', body: JSON.stringify(data) }),
+    listTrajectories: (agentId?: string) =>
+      request<any>(`/coherence/trajectories${agentId ? '?agent_id=' + agentId : ''}`),
+    getTrajectory: (trajectoryId: string) => request<any>(`/coherence/trajectory/${trajectoryId}`),
+    listProfiles: () => request<any>('/coherence/profiles'),
+    getProfile: (agentId: string) => request<any>(`/coherence/profile/${agentId}`),
+    updateProfile: (agentId: string, data: Record<string, unknown>) =>
+      request<any>(`/coherence/profile/${agentId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    stats: () => request<any>('/coherence/stats'),
+  },
 };
