@@ -126,6 +126,41 @@ from agent.agent_dialogue_manager import get_dialogue_manager, reset_dialogue_ma
 from agent.agent_benchmark import get_benchmark_engine, reset_benchmark_engine, AgentBenchmarkEngine, MetricCategory, EvaluationStatus, ScoreScale, ComparisonResult, BenchmarkType, TrendDirection, MetricDefinition, MetricResult, EvaluationRun, Benchmark, ComparisonReport, TrendAnalysis, BenchmarkStats
 from agent.agent_belief_state import get_belief_engine, reset_belief_engine, AgentBeliefEngine, BeliefStatus, EvidenceType, EvidenceStrength, RevisionType, BeliefCategory, ConfidenceLevel, Evidence, Belief, BeliefRevision, BeliefNetwork, ConsistencyCheck, BeliefEngineStats
 
+# Tracing Pipeline, Quota Manager, Causal Engine, Temporal Engine, Anomaly Detector
+from agent.agent_tracing_pipeline import get_tracing_pipeline, reset_tracing_pipeline, AgentTracingPipeline, SpanKind, SpanStatus, SamplingDecision, TraceFlags, SpanContext, SpanEvent, SpanLink, TraceSpan, Trace, TraceStats
+from agent.agent_quota_manager import get_quota_manager, reset_quota_manager, AgentQuotaManager, QuotaType, QuotaStatus, RetryStrategy, BackpressureLevel, QuotaLimit, QuotaUsage, RateLimitWindow, RetryPolicy, RetryAttempt, QuotaManagerStats
+from agent.agent_causal_reasoning import get_causal_engine, reset_causal_engine, AgentCausalEngine, CausalRelation, VariableType, InterventionStatus, EvidenceStrength as CausalEvidenceStrength, CounterfactualResult, CausalVariable, CausalEdge, CausalGraph, Intervention, Counterfactual, ConfounderReport, CausalEngineStats
+from agent.agent_temporal_reasoning import get_temporal_engine, reset_temporal_engine, AgentTemporalEngine, TemporalRelation, TemporalConstraintType, EventStatus, TimeWindowType, TimeInterval, TemporalEvent, TemporalConstraint, TemporalPlan, ConsistencyReport, TemporalEngineStats
+from agent.agent_anomaly_detector import get_anomaly_detector, reset_anomaly_detector, AgentAnomalyDetector, AnomalyType, AnomalySeverity, BaselineStatus, DiagnosisStatus, MetricDirection, BehaviorMetric, BehaviorBaseline, AnomalyEvent, DriftReport, DiagnosisReport, AnomalyEngineStats
+from agent.agent_scenario_simulator import get_scenario_simulator, reset_scenario_simulator, AgentScenarioSimulator, ScenarioType, SimulationStatus, OutcomeType, VariableType as SimVariableType, DistributionType, ScenarioVariable, ScenarioAction, Scenario, SimulationOutcome, SimulationReport, SimulatorStats
+from agent.agent_explanation_synthesizer import get_explanation_synthesizer, reset_explanation_synthesizer, AgentExplanationSynthesizer, ExplanationType, AudienceLevel, ConfidenceLevel, ExplanationStatus, EvidenceType, Evidence, ExplanationFactor, Explanation, ExplanationRequest, DecisionTrace, SynthesizerStats
+from agent.agent_knowledge_distiller import get_knowledge_distiller, reset_knowledge_distiller, AgentKnowledgeDistiller, KnowledgeType, CompressionLevel, DistillationStatus, SourceType, TransferStatus, KnowledgeSource, DistilledKnowledge, DistillationSession, KnowledgeTransfer, KnowledgeQuery, DistillerStats
+from agent.agent_attention_allocator import get_attention_allocator, reset_attention_allocator, AgentAttentionAllocator, AttentionMode, PriorityLevel, FocusType, AllocationStatus, DecayFunction, AttentionTarget, AttentionBudget, AttentionAllocation, AttentionSnapshot, AttentionEvent, AllocatorStats
+from agent.agent_ethical_deliberation import get_ethical_deliberator, reset_ethical_deliberator, AgentEthicalDeliberator, EthicalFramework, DeliberationStatus, VerdictType, StakeholderImpact, PrincipleCategory, Stakeholder, EthicalPrinciple, ActionConsequence, EthicalDilemma, FrameworkAssessment, EthicalVerdict, DeliberatorStats
+from agent.agent_concept_formation import get_concept_formation_engine, reset_concept_formation_engine, AgentConceptFormationEngine, ConceptType, FormationStatus, SimilarityMetric, AbstractionLevel, ClusterMethod, ConceptInstance, Concept, ConceptCluster, ConceptHierarchy, FormationSession, FormationStats
+from agent.agent_analogy_engine import get_analogy_engine, reset_analogy_engine, AgentAnalogyEngine, MappingType, AnalogyStatus, DomainType, ConfidenceLevel as AnalogyConfidenceLevel, TransferStatus, DomainEntity, DomainRelation, Domain, AnalogyMapping, Analogy, AnalogyStats
+from agent.agent_curiosity_engine import get_curiosity_engine, reset_curiosity_engine, AgentCuriosityEngine, CuriosityType, NoveltyMetric, ExplorationMode, CuriosityStatus, InformationGapType, NoveltyScore, InformationGap, ExplorationTarget, ExplorationResult, CuriosityProfile, CuriosityStats
+from agent.agent_mental_simulation import get_mental_simulation_engine, reset_mental_simulation_engine, AgentMentalSimulationEngine, SimulationType, SimulationStatus, ModelType, OutcomeValence, ConfidenceLevel as SimConfidenceLevel, ModelState, SimulationStep, SimulationOutcome, MentalModel, Simulation, SimulationStats
+from agent.agent_narrative_engine import get_narrative_engine, reset_narrative_engine, AgentNarrativeEngine, NarrativeType, NarrativeStatus, PlotArc, NarrativeTense, PerspectiveType, NarrativeEvent, NarrativeCharacter, NarrativeTheme, NarrativeThread, Narrative, NarrativeStats
+from agent.agent_cognitive_mapping import get_cognitive_mapping_engine, reset_cognitive_mapping_engine, AgentCognitiveMapping, EnvironmentType, SpatialRelation, MapStatus, AnchorType, DeltaType, SpatialAnchor, MapPlace, MapEdge, CognitiveMap, MapDelta, MappingStats
+from agent.agent_cognitive_bias_detector import get_bias_detector, reset_bias_detector, AgentCognitiveBiasDetector, BiasType, BiasSeverity, DebiasingStrategy, AuditStatus, EvidenceRole, BiasEvidence, BiasDetection, DebiasingAction, BiasProfile, ReasoningAudit, DetectorStats
+from agent.agent_cognitive_affordance import get_affordance_engine, reset_affordance_engine, AgentCognitiveAffordance, AffordanceSource, AffordanceStatus, ConstraintType, SignatureType, RankingMetric, AffordanceConstraint, AffordanceSignature, Affordance, AffordanceContext, AffordanceMap, AffordanceStats
+from agent.agent_cognitive_scaffolding import get_scaffolding_engine, reset_scaffolding_engine, AgentCognitiveScaffolding, ScaffoldingLevel, ScaffoldingStrategy, CompetenceLevel, FadingTrigger, ScaffoldStatus, CompetenceAssessment, FadingPlan, Scaffold, ScaffoldingSession, LearnerProfile, ScaffoldingStats
+from agent.agent_affective_engine import get_affective_engine, reset_affective_engine, AgentAffectiveEngine, EmotionType, RegulationStrategy, AppraisalDimension, AffectiveMode, TriggerType, Appraisal, AffectiveState, RegulationAction, AffectiveTrajectory, AffectiveProfile, AffectiveStats
+from agent.agent_cognitive_style_transfer import get_style_transfer_engine, reset_style_transfer_engine, AgentCognitiveStyleTransfer, StyleDimension, TransferStatus, FidelityMode, BlendStrategy, SourceType, ValidationStatus, StyleFeature, StyleFingerprint, CognitiveStyle, StyleTransfer, StyleBlend, TransferStats
+from agent.agent_cognitive_prime import get_prime_engine, reset_prime_engine, AgentCognitivePrime, PrimeType, PrimeStrength, ActivationMode, InterferenceType, EffectDirection, PrimeTarget, PrimeActivation, PrimeEffect, PrimeContext, PrimeSession, PrimeStats
+from agent.agent_cognitive_phase_transition import get_phase_transition_engine, reset_phase_transition_engine, AgentCognitivePhaseTransition, TransitionPhase, ParameterType, CatalystType, TransitionStatus, OrderParameter, CriticalPoint, TransitionCatalyst, PhaseTransitionEvent, TransitionContext, TransitionStats
+from agent.agent_cognitive_gravity import get_gravity_engine, reset_gravity_engine, AgentCognitiveGravity, AttractorType, MassContribution, TrajectoryStatus, FieldState, ResonanceMode as GravityResonanceMode, IdeaMass, AttractorBasin, ThoughtTrajectory, GravitationalField, GravityContext, GravityStats
+from agent.agent_cognitive_resonance import get_resonance_engine, reset_resonance_engine, AgentCognitiveResonance, ResonanceType, ResonanceMode, DetectionMethod, AmplificationStatus, ResonanceSignature, ResonanceEvent, AmplificationProfile, ResonanceCluster, ResonanceContext, ResonanceStats
+from agent.agent_cognitive_workload import get_workload_engine, reset_workload_engine, AgentCognitiveWorkload, LoadType, WorkloadState, InterferenceType as WorkloadInterferenceType, AllocationStrategy, RecoveryAction, LoadMeasurement, WorkloadSnapshot, InterferenceAssessment, AllocationDecision, RecoveryPlan, WorkloadProfile, WorkloadStats
+from agent.agent_cognitive_entropy import get_entropy_engine, reset_entropy_engine, AgentCognitiveEntropy, EntropyKind, EntropyRegime, FluxDirection, InferencePrinciple, CompressionStatus, DistributionSample, EntropyFluxRecord, InferenceResult, CompressionTrace, EntropyProfile, EntropyStats
+from agent.agent_cognitive_horizon import get_horizon_engine, reset_horizon_engine, AgentCognitiveHorizon, KnowledgeDomain, EpistemicState, HorizonProximity, BoundaryResponse, CompetenceLevel, DomainCompetence, HorizonProbe, BoundaryEvent, LearningRequest, DeferDecision, HorizonProfile, HorizonStats
+from agent.agent_cognitive_momentum import get_momentum_engine, reset_momentum_engine, AgentCognitiveMomentum, TrajectoryState, PerturbationType, MomentumRegime, EscapeStrategy, ProgressSignal, MomentumVector, TrajectoryPoint, StuckStateDetection, PerturbationEvent, EscapePlan, MomentumProfile, MomentumStats
+from agent.agent_cognitive_friction import get_friction_engine, reset_friction_engine, AgentCognitiveFriction, FrictionSource, FrictionRegime, TransitionType, LubricationStrategy, RecoveryState, FrictionMeasurement, TransitionEvent, FrictionSnapshot, LubricationPlan, RecoveryAssessment, FrictionProfile, FrictionStats
+from agent.agent_cognitive_tension import get_tension_engine, reset_tension_engine, AgentCognitiveTension, TensionKind, TensionState, ResolutionMode, TensionPolarity, HoldingStrategy, TensionPole, TensionPair, TensionSnapshot, ResolutionAttempt, HoldingDecision, TensionProfile, TensionStats
+from agent.agent_cognitive_depth import get_depth_engine, reset_depth_engine, AgentCognitiveDepth, DepthDimension, DepthRegime, DeepeningMove, SurfacingMove, DepthTrajectory, DepthProbe, DepthAssessment, DeepeningAction, SurfacingAction, DepthTrajectoryRecord, DepthProfile, DepthStats
+from agent.agent_cognitive_coherence import get_coherence_engine, reset_coherence_engine, AgentCognitiveCoherence, CoherenceFacet, CoherenceRegime, RelationType as CoherenceRelationType, RepairStrategy, CoherenceTrajectory, CoherenceNode, CoherenceRelation, CoherenceSnapshot, RepairAttempt, TrajectoryRecord, CoherenceProfile, CoherenceStats
+
 orchestrator = Orchestrator()
 skills_registry = SkillsRegistry()
 context_manager_instance = context_manager
@@ -604,3 +639,41 @@ goal_manager = get_goal_manager()
 dialogue_manager = get_dialogue_manager()
 benchmark_engine = get_benchmark_engine()
 belief_engine = get_belief_engine()
+
+# Tracing Pipeline, Quota Manager, Causal Engine, Temporal Engine, Anomaly Detector instances
+tracing_pipeline = get_tracing_pipeline()
+quota_manager = get_quota_manager()
+causal_engine = get_causal_engine()
+temporal_engine = get_temporal_engine()
+anomaly_detector = get_anomaly_detector()
+
+# Scenario Simulator, Explanation Synthesizer, Knowledge Distiller,
+# Attention Allocator, Ethical Deliberator instances
+scenario_simulator = get_scenario_simulator()
+explanation_synthesizer = get_explanation_synthesizer()
+knowledge_distiller = get_knowledge_distiller()
+attention_allocator = get_attention_allocator()
+ethical_deliberator = get_ethical_deliberator()
+concept_formation_engine = get_concept_formation_engine()
+analogy_engine = get_analogy_engine()
+curiosity_engine = get_curiosity_engine()
+mental_simulation_engine = get_mental_simulation_engine()
+narrative_engine = get_narrative_engine()
+cognitive_mapping_engine = get_cognitive_mapping_engine()
+bias_detector = get_bias_detector()
+affordance_engine = get_affordance_engine()
+scaffolding_engine = get_scaffolding_engine()
+affective_engine = get_affective_engine()
+style_transfer_engine = get_style_transfer_engine()
+prime_engine = get_prime_engine()
+phase_transition_engine = get_phase_transition_engine()
+gravity_engine = get_gravity_engine()
+resonance_engine = get_resonance_engine()
+workload_engine = get_workload_engine()
+entropy_engine = get_entropy_engine()
+horizon_engine = get_horizon_engine()
+momentum_engine = get_momentum_engine()
+friction_engine = get_friction_engine()
+tension_engine = get_tension_engine()
+depth_engine = get_depth_engine()
+coherence_engine = get_coherence_engine()
