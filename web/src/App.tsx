@@ -201,6 +201,19 @@ import { BiasDetectorPanel } from './components/BiasDetectorPanel';
 import { CognitiveAffordancePanel } from './components/CognitiveAffordancePanel';
 import { CognitiveScaffoldingPanel } from './components/CognitiveScaffoldingPanel';
 import { AffectiveEnginePanel } from './components/AffectiveEnginePanel';
+import { CognitiveStyleTransferPanel } from './components/CognitiveStyleTransferPanel';
+import { CognitivePrimePanel } from './components/CognitivePrimePanel';
+import { CognitivePhaseTransitionPanel } from './components/CognitivePhaseTransitionPanel';
+import { CognitiveGravityPanel } from './components/CognitiveGravityPanel';
+import { CognitiveResonancePanel } from './components/CognitiveResonancePanel';
+import { CognitiveWorkloadPanel } from './components/CognitiveWorkloadPanel';
+import { CognitiveEntropyPanel } from './components/CognitiveEntropyPanel';
+import { CognitiveHorizonPanel } from './components/CognitiveHorizonPanel';
+import { CognitiveMomentumPanel } from './components/CognitiveMomentumPanel';
+import { CognitiveFrictionPanel } from './components/CognitiveFrictionPanel';
+import { CognitiveTensionPanel } from './components/CognitiveTensionPanel';
+import { CognitiveDepthPanel } from './components/CognitiveDepthPanel';
+import { CognitiveCoherencePanel } from './components/CognitiveCoherencePanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/Toast';
 import { CommandPalette } from './components/CommandPalette';
@@ -774,6 +787,19 @@ export default function App() {
           {activeTab === 'cognitiveAffordance' && <CognitiveAffordancePanel />}
           {activeTab === 'cognitiveScaffolding' && <CognitiveScaffoldingPanel />}
           {activeTab === 'affectiveEngine' && <AffectiveEnginePanel />}
+          {activeTab === 'cognitiveStyleTransfer' && <CognitiveStyleTransferPanel />}
+          {activeTab === 'cognitivePrime' && <CognitivePrimePanel />}
+          {activeTab === 'cognitivePhaseTransition' && <CognitivePhaseTransitionPanel />}
+          {activeTab === 'cognitiveGravity' && <CognitiveGravityPanel />}
+          {activeTab === 'cognitiveResonance' && <CognitiveResonancePanel />}
+          {activeTab === 'cognitiveWorkload' && <CognitiveWorkloadPanel />}
+          {activeTab === 'cognitiveEntropy' && <CognitiveEntropyPanel />}
+          {activeTab === 'cognitiveHorizon' && <CognitiveHorizonPanel />}
+          {activeTab === 'cognitiveMomentum' && <CognitiveMomentumPanel />}
+          {activeTab === 'cognitiveFriction' && <CognitiveFrictionPanel />}
+          {activeTab === 'cognitiveTension' && <CognitiveTensionPanel />}
+          {activeTab === 'cognitiveDepth' && <CognitiveDepthPanel />}
+          {activeTab === 'cognitiveCoherence' && <CognitiveCoherencePanel />}
 {activeTab === 'experiments' && <ExperimentPanel />}
 {activeTab === 'issueBoard' && <IssueBoardPanel />}
 {activeTab === 'knowledgeBase' && <KnowledgeBasePanel agent={selectedAgent || { id: '', name: '', role: '', personality: '', instructions: '', avatar: '', is_active: false, created_at: '' }} />}
