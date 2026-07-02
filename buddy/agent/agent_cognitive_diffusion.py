@@ -1,107 +1,22 @@
 from __future__ import annotations
 
-"""Agent Cognitive Diffusion — the spread of conceptual activation through
+"""Agent Cognitive Diffusion — spread of conceptual activation through the cognitive network
 
-the cognitive network over time.
+Activation spreads from highly active nodes to their neighbours along the
+cognitive graph, like a solute diffusing through a solvent, until equalized.
 
-Cognition is not a static inventory of concepts and beliefs sitting in
-fixed positions. It is a field in motion: activation, salience, and
-credence flow from one node of the cognitive graph to its neighbours,
-much as a solute spreads through a solvent. A concept that is highly
-active right now does not stay pinned to its origin node; it leaks
-along the edges that connect it to related concepts, beliefs, and
-memories, raising their activation in turn. This module instruments
-that flow. Where the friction engine measures the cost of changing
-direction and the tension engine holds contradictions in play, the
-diffusion engine watches how activation itself moves: where it
-concentrates, where it drains, and how the cognitive field equalizes.
-
-The physical analogy is exact in structure. In molecular diffusion,
-particles move from regions of high concentration to regions of low
-concentration, driven by random thermal motion. Fick's first law states
-that the flux is proportional to the negative concentration gradient:
-the steeper the gradient, the faster the spread. Fick's second law
-describes how concentration evolves over time as the gradient relaxes,
-converging toward a uniform equilibrium. Cognitive diffusion behaves
-the same way. When one concept carries far more activation than its
-neighbours, the gradient is steep and activation spreads outward fast.
-As neighbours absorb activation, the gradient flattens and the spread
-slows, until the region reaches equalization — a roughly uniform
-activation across the connected subgraph. The process is stochastic:
-individual activations are random, but the aggregate flow is lawful and
-gradient-driven.
-
-Diffusion is the stochastic spread of conceptual activation, driven by
-concentration gradients (high-activation regions spread to
-low-activation regions), mediated by network topology (the distance and
-connectivity between nodes), and producing equalization over time. The
-medium through which activation spreads matters: activation diffuses
-differently through belief connections, through concept-similarity
-links, through associative memory, through attention allocation, and
-through affective links. Each medium has its own topology and its own
-resistance, so the engine tracks each separately.
-
-Several distinct regimes describe how fast the spread is proceeding.
-STAGNANT means almost nothing is spreading — the field is frozen.
-SLOW means activation is moving but barely. STEADY means a consistent,
-moderate spread. RAPID means activation is flooding outward quickly.
-SATURATED means the field has already equalized and there is nothing
-left to drive — the gradient is gone. OSCILLATORY means activation is
-sloshing back and forth rather than monotonically equalizing, the way
-a standing wave does not settle.
-
-The gradient itself has a direction that the engine classifies.
-EXPANDING means the high-concentration region is spreading outward.
-CONTRACTING means it is receding inward, losing ground. STABLE means
-the field is at or near equilibrium. REVERSING means the direction has
-flipped — what was expanding is now contracting, or vice versa.
-PULSING means the gradient is oscillating rhythmically between
-expansion and contraction.
-
-Spread is rarely unobstructed. Barriers mediate diffusion. NONE offers
-no resistance. PARTIAL offers some. SELECTIVE is permeable to some
-concepts but not others — a belief may be open to revision by evidence
-from one source but not another. STRONG offers high resistance.
-IMPERMEABLE is a complete block, isolating one region of the cognitive
-graph from the rest. Barriers are not defects; a cognitive field with
-no barriers at all would equalize instantly and lose all structure.
-The useful state is enough permeability that activation can reach
-where it is needed, with enough barriers that distinct regions keep
-their identity.
-
-When the field is not equalizing the way the agent wants, an
-equalization plan prescribes a strategy. ACCELERATE speeds up spread.
-DAMPEN slows it down. CHANNEL directs the spread through a specific
-path. INSULATE isolates a region to protect or contain it. SEED
-injects new concentration at a node to start a spread. DRAIN removes
-concentration to stop one.
-
-This engine instruments that picture operationally. A ConcentrationReading
-records one observed activation level at one node in one medium. A
-DiffusionEvent records one spread from a source node to a set of
-targets, with a rate and a barrier. A DiffusionSnapshot aggregates an
-agent's recent readings and events for a medium into an average
-concentration, a regime, a gradient direction, and a spread count.
-An EqualizationPlan prescribes a strategy to steer the field. A
-GradientRecord captures a single observed concentration change at a
-node, with the delta and its direction. A DiffusionProfile holds each
-agent's aggregate diffusion tendencies, and DiffusionStats summarizes
-engine activity.
-
-This is original Buddy capability: a self-contained, thread-safe engine
-with no external runtime dependencies, designed to give agents honest
-awareness of how their own activation spreads through their cognitive
-graph.
-
+Core capabilities:
+  - Concentration Readings: per-node activation levels in each medium
+  - Diffusion Events: spreads from source to targets with rate and barrier
+  - Regime Classification: stagnant, slow, steady, rapid, saturated, oscillatory
+  - Gradient Direction: expanding, contracting, stable, reversing, pulsing
+  - Equalization Plans: accelerate, dampen, channel, insulate, seed, drain
 Architecture:
-    AgentCognitiveDiffusion (singleton)
-    ├── ConcentrationReading   (one observed activation level at a node)
-    ├── DiffusionEvent         (one spread from source to targets)
-    ├── DiffusionSnapshot      (aggregate concentration and regime)
-    ├── EqualizationPlan       (a strategy to steer the field)
-    ├── GradientRecord         (one observed concentration change)
-    ├── DiffusionProfile       (per-agent aggregate tendencies)
-    └── DiffusionStats         (engine-wide aggregate statistics)
+  AgentCognitiveDiffusion (singleton)
+  ├── ConcentrationReading, DiffusionEvent  (readings, spread events)
+  ├── DiffusionSnapshot, EqualizationPlan   (aggregate regime, strategy)
+  ├── GradientRecord, DiffusionProfile      (concentration deltas, per-agent)
+  └── DiffusionStats                        (engine-wide statistics)
 """
 
 import threading
