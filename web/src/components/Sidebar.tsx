@@ -239,6 +239,11 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'cognitiveTide', label: 'Tide', icon: '🌊' },
   { id: 'cognitiveCascade', label: 'Cascade', icon: '💧' },
   { id: 'cognitiveStratum', label: 'Stratum', icon: '🪨' },
+  { id: 'cognitiveVortex', label: 'Vortex', icon: '🌀' },
+  { id: 'cognitiveCrystal', label: 'Crystal', icon: '💎' },
+  { id: 'cognitiveCompass', label: 'Compass', icon: '🧭' },
+  { id: 'cognitivePendulum', label: 'Pendulum', icon: '⏱️' },
+  { id: 'cognitiveBeacon', label: 'Beacon', icon: '📡' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
