@@ -1,94 +1,20 @@
-"""
-Agent Cognitive Depth Engine — managing the depth dimension of an agent's
-reasoning.
+"""Agent Cognitive Depth Engine — managing the depth dimension of reasoning
 
-Every act of reasoning has a depth. A shallow pass treats the question at
-face value: it reads the surface of the problem, produces a single
-answer, and stops. A deep pass descends through layers — from the
-literal statement of the problem, through the abstractions that organise
-it, down to the assumptions that ground it, and back up through the
-consequences that follow. Depth is not the same as length, and it is
-not the same as chain-of-thought. Chain-of-thought is a generation
-technique: it produces explicit intermediate steps. Depth is a
-measurement of how far those steps actually descend. A long chain can
-stay shallow (restating the same level in different words); a short
-chain can be deep (one well-placed "why" can reach a foundation). This
-engine measures and manages that depth as a first-class cognitive
-dimension, distinct from the generation techniques that produce the
-steps whose depth is being measured.
+Measures how far reasoning descends through abstraction, recursion, foundational,
+counterfactual, explanatory, and teleological layers — distinct from chain length.
 
-Depth is not a single quantity. It has components, each a distinct axis
-along which reasoning can descend:
-
-  * ABSTRACTION    — the number of abstraction levels traversed, from
-                     concrete instance up to the categories that contain
-                     it. Reasoning that stays at one level has low
-                     abstraction depth; reasoning that moves between
-                     levels has high.
-  * RECURSION      — the depth of recursive self-reference. A reasoning
-                     step that applies the same operation to its own
-                     output descends a level; repeated application
-                     builds recursive depth.
-  * FOUNDATIONAL   — the depth of questioning assumptions. Each
-                     "why does this hold?" that challenges a premise
-                     descends a foundational level; the chain bottoms
-                     out at axioms or first principles.
-  * COUNTERFACTUAL — the depth of alternative-world exploration. A
-                     shallow counterfactual flips one variable; a
-                     deeper one flips the flip, or explores worlds
-                     where the rules of inference themselves differ.
-  * EXPLANATORY    — the depth of why-chains. Each "why?" in succession
-                     lengthens the explanatory chain; the depth is the
-                     number of links traversed before the chain
-                     terminates.
-  * TELEOLOGICAL   — the depth of purpose-questioning. "What is this
-                     for?" begets "what is that for?" begets "what is
-                     that for?" — a chain that can bottom out at
-                     intrinsic value or recurse without end.
-
-The engine instruments these components via DepthProbe readings, each
-of which scores a single (agent, dimension) pair on a [0, 1] depth
-scale and records the number of levels actually traversed. Aggregated
-probes yield a DepthAssessment, which classifies the agent's current
-depth regime on a ladder from SHALLOW (surface only) through SURFACE,
-MODERATE, DEEP, and PROFOUND up to ABYSSAL (bottomless recursion,
-where the descent has no terminus).
-
-A regime is a diagnosis, not a verdict. SHALLOW reasoning is
-appropriate for routine tasks and dangerous for foundational ones;
-ABYSSAL reasoning is appropriate for axiom-hunting and dangerous when
-the user needs a quick answer. The engine therefore recommends
-deepening moves (ASK_WHY, ABSTRACT_UP, CONCRETIZE_DOWN,
-QUESTION_ASSUMPTION, CONSIDER_COUNTERFACTUAL, RECURSE,
-GROUND_IN_PRINCIPLE) when the regime is too shallow for the task, and
-surfacing moves (SUMMARIZE, ANCHOR_EXAMPLE, STATE_CONCLUSION,
-CITE_RESULT, DEFER) when the regime is too deep for the situation.
-Each move is recorded as an action with a rationale and an expected
-gain or relief, so the agent's depth management is auditable.
-
-Finally, the engine tracks trajectories — the direction of depth
-change over time. A trajectory can be DESCENDING (going deeper),
-HOLDING (maintaining depth), ASCENDING (surfacing), OSCILLATING
-(alternating deep and shallow), PLUNGING (a sudden depth increase),
-or BOTTOMING_OUT (hitting a foundational layer). Trajectories make
-the depth regime a dynamical quantity rather than a static one, and
-let the engine distinguish productive descent from unproductive
-plunge.
-
-This is original Buddy work: a self-contained, thread-safe engine
-with no external runtime dependencies, designed to give agents honest
-awareness of how deep their reasoning actually goes, and the levers
-to deepen or surface on demand.
+Core capabilities:
+  - Depth Probes: per-dimension depth scores with levels traversed
+  - Depth Assessments: aggregate regime from shallow through abyssal
+  - Deepening Actions: ask-why, abstract-up, question-assumption, recurse
+  - Surfacing Actions: summarize, anchor, state-conclusion, defer
+  - Trajectory Tracking: descending, holding, ascending, plunging, bottoming-out
 
 Architecture:
-    AgentCognitiveDepth (singleton)
-    ├── DepthProbe            (a single depth reading on one dimension)
-    ├── DepthAssessment       (aggregate depth across recent probes)
-    ├── DeepeningAction       (a recorded decision to push deeper)
-    ├── SurfacingAction       (a recorded decision to pull back to surface)
-    ├── DepthTrajectoryRecord (a single step in depth direction over time)
-    ├── DepthProfile          (per-agent depth summary)
-    └── DepthStats            (aggregate engine statistics)
+  AgentCognitiveDepth (singleton)
+  ├── DepthProbe, DepthAssessment, DeepeningAction
+  ├── SurfacingAction, DepthTrajectoryRecord, DepthProfile
+  └── DepthStats
 """
 
 from __future__ import annotations
@@ -1047,6 +973,11 @@ class AgentCognitiveDepth:
             profile.last_updated = _now()
             self._profiles[agent_id] = profile
             return profile
+
+    def list_profiles(self) -> List[DepthProfile]:
+        """Return all stored depth profiles as a snapshot list."""
+        with self._lock:
+            return list(self._profiles.values())
 
     # ── Statistics & Reset ───────────────────────────────────────────
 
