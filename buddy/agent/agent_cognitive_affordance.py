@@ -1,28 +1,30 @@
 from __future__ import annotations
 
-# Agent Cognitive Affordance — perceiving action possibilities.
-#
-# An affordance is an action possibility that an environment, tool, artifact,
-# context, or social setting offers to an agent. This module bridges
-# perception and action: it lets the agent perceive candidate actions in a
-# context, validate them against constraints, rank them by actionable
-# metrics, and execute them. Affordances are decorated with signatures
-# (perceptual/structural/functional/contextual patterns that signal the
-# affordance is available) and constraints (preconditions that must hold
-# before the affordance can be enacted).
-#
-# Capabilities: context registration, affordance perception, signature and
-# constraint management, validation, ranking by multiple metrics, execution,
-# affordance map construction, and aggregate statistics.
-#
-# Architecture:
-#     AgentCognitiveAffordance (singleton)
-#     ├── AffordanceContext (per-agent/per-environment perception scope)
-#     │   └── Affordance (a perceived action possibility)
-#     │       ├── AffordanceConstraint (precondition/resource/safety/etc.)
-#     │       └── AffordanceSignature (perceptual/structural/functional/etc.)
-#     ├── AffordanceMap (summary view of a context's affordances)
-#     └── AffordanceStats (aggregate engine statistics)
+"""Agent Cognitive Affordance — perceiving action possibilities.
+
+
+An affordance is an action possibility that an environment, tool, artifact,
+context, or social setting offers to an agent. This module bridges
+perception and action: it lets the agent perceive candidate actions in a
+context, validate them against constraints, rank them by actionable
+metrics, and execute them. Affordances are decorated with signatures
+(perceptual/structural/functional/contextual patterns that signal the
+affordance is available) and constraints (preconditions that must hold
+before the affordance can be enacted).
+
+Capabilities: context registration, affordance perception, signature and
+constraint management, validation, ranking by multiple metrics, execution,
+affordance map construction, and aggregate statistics.
+
+Architecture:
+    AgentCognitiveAffordance (singleton)
+    ├── AffordanceContext (per-agent/per-environment perception scope)
+    │   └── Affordance (a perceived action possibility)
+    │       ├── AffordanceConstraint (precondition/resource/safety/etc.)
+    │       └── AffordanceSignature (perceptual/structural/functional/etc.)
+    ├── AffordanceMap (summary view of a context's affordances)
+    └── AffordanceStats (aggregate engine statistics)
+"""
 
 import threading
 import time
