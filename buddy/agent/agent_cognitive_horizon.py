@@ -1,46 +1,21 @@
-"""
-Agent Cognitive Horizon Engine — managing the epistemic frontier of an agent.
+"""Agent Cognitive Horizon Engine — managing the epistemic frontier of an agent.
 
-Every cognitive agent operates inside a finite envelope of competence. Inside
-that envelope it can reason fluently, predict outcomes, and act with
-confidence; outside it, claims become speculation and actions become gambles.
-The shape of that envelope — its boundaries, its thin spots, its unmapped
-continents — is what this engine calls the "cognitive horizon". The name
-deliberately echoes the physical notion of a horizon: not a wall, but a line
-past which sight fails, and past which one can in principle travel if willing
-to first map and then learn the terrain.
+Every cognitive agent operates inside a finite envelope of competence. The
+engine maps that envelope using a known/unknown matrix and a HorizonProximity
+measure from INTERIOR through UNCHARTED. Competence is tracked per
+KnowledgeDomain on a Dreyfus-style ladder, and boundary responses (PROCEED,
+LEARN, DEFER, REFER, ABSTAIN, ESCALATE) are recommended when reasoning
+approaches the edge of what the agent actually knows.
 
-The engine is built on the classical known/unknown matrix often attributed to
-Rumsfeld and recast here for artificial minds. A piece of knowledge can sit in
-one of several epistemic states relative to an agent:
-
-  * KNOWN_KNOWN     — the agent knows it and knows that it knows.
-  * KNOWN_UNKNOWN   — the agent does not know it, but recognises the gap.
-  * UNKNOWN_UNKNOWN — the agent neither knows it nor suspects the gap.
-  * PARTIALLY_KNOWN — the agent holds a fragment, with holes.
-  * DISPUTED        — the agent holds contradictory candidates.
-  * OBSOLETE        — once known, now superseded or decayed.
-
-The horizon itself is not a single line but a frontier with depth. The engine
-classifies where a reasoning attempt sits relative to that frontier using a
-HorizonProximity measure: INTERIOR (deep inside known territory), NEAR
-(approaching the boundary), AT (on the edge of competence), BEYOND (just
-outside, still describable), and UNCHARTED (no map at all). Each proximity
-carries a different risk profile and calls for a different response.
-
-Competence is tracked per KnowledgeDomain and graded on a Dreyfus-style ladder
-from NOVICE through MASTER. A boundary_distance scalar in [0, 1] expresses how
-far the agent's reach extends into a domain — the product of how well-trained
-it is (level) and how reliably it performs there (confidence). When reasoning
-approaches the boundary, the engine calibrates confidence at that boundary and
-recommends one of seven BoundaryResponse values: PROCEED, PROCEED_WITH_CAUTION,
-LEARN, DEFER, REFER, ABSTAIN, or ESCALATE. Learning requests, defer decisions,
-and boundary events are all recorded so the horizon can be audited and
-progressively pushed outward through deliberate practice.
-
-This is original Buddy work: a self-contained, thread-safe engine with no
-external runtime dependencies, designed to give agents honest awareness of the
-edges of what they actually know.
+Architecture:
+  AgentCognitiveHorizon (singleton)
+  ├── DomainCompetence  (per-domain competence level and confidence)
+  ├── HorizonProbe      (a reasoning attempt near the boundary)
+  ├── BoundaryEvent     (a recorded encounter with the competence edge)
+  ├── LearningRequest   (a request to expand the horizon in a domain)
+  ├── DeferDecision     (a decision to defer beyond the boundary)
+  ├── HorizonProfile    (per-agent map of the competence envelope)
+  └── HorizonStats      (engine-wide aggregate statistics)
 """
 
 from __future__ import annotations
