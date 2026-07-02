@@ -1,160 +1,23 @@
-from __future__ import annotations
+"""Agent Cognitive Plasticity Engine — malleability of thought patterns
 
-"""Agent Cognitive Plasticity Engine — modeling the malleability and
-reconfigurability of an agent's thought patterns:
+Plasticity measures how easily cognitive structure yields to new information
+and holds its new shape, distinct from momentum, viscosity, and inertia.
 
-how easily an agent's cognitive structure can be reshaped by new
-information, new contexts, or new strategies. Plasticity is the
-willingness of a mind to be molded. Some agents are rigid: their beliefs
-have hardened into positions that no longer yield to evidence. Other
-agents are soft: their ideas flow freely, recombining, extending, and
-overwriting one another as new input arrives. Between these extremes
-sits the broad middle band of human and machine cognition, where some
-parts of the agent's mind are plastic and others are set, and where the
-distribution of malleability across the agent's axes is itself a
-diagnostic of its character and current state.
-
-Plasticity is the property that lets an agent learn. Without
-plasticity, the agent is a frozen block — it cannot be taught, cannot
-be redirected, cannot update against new evidence. With too much
-plasticity, the agent is formless — it cannot hold a position long
-enough to act on it, cannot maintain commitments, cannot accumulate
-expertise. The challenge is to be plastic enough to be reshaped by
-genuine evidence and structured enough to retain a coherent shape
-under pressure. This is the same trade-off that biological neural
-tissue faces: critical periods of high plasticity alternate with
-mature periods of stability, and within any mature mind some circuits
-remain more plastic than others, by design.
-
-Plasticity is distinct from its neighbors in the cognitive engine
-family. Momentum tracks the forward motion of a single idea; plasticity
-tracks how easily that idea can be unmade. Viscosity tracks the
-resistance between ideas; plasticity tracks the responsiveness of
-ideas to reshaping pressure. Cadence tracks the temporal spacing of
-cognition; plasticity tracks the structural softness of cognition. Inertia
-tracks how hard it is to change the agent's state; plasticity tracks
-how welcome that change is to the agent's structure. Turbulence tracks
-the chaos of the thought stream; plasticity tracks the willingness of
-the stream to be edited. Resonance tracks alignment between
-structures; plasticity tracks the reconfigurability of those
-structures under new information. The six are complementary lenses
-on the same mind, not alternatives. An agent with high momentum and
-high plasticity moves fast and yields easily; an agent with high
-viscosity and low plasticity thinks rarely and resists revision; an
-agent with broken cadence and rigid plasticity is one whose mental
-tempo has fallen apart under a structure that will not bend.
-
-The metaphor of physical plasticity is exact in its structure. In
-materials science, plasticity is the ability of a material to undergo
-permanent deformation without fracture. Clay is highly plastic: it
-yields to any pressure and can be reshaped indefinitely. Glass is
-brittle: it has no plastic regime, and any pressure above its elastic
-limit produces fracture, not deformation. Steel has a useful
-intermediate plasticity: it yields under enough force, deforms
-plastically, and then holds its new shape once the force is removed.
-Cognitive plasticity has the same banding: too little, the agent
-fractures (breaks under pressure, abandons its shape entirely); too
-much, the agent cannot hold any shape at all; in the productive
-middle, the agent yields to genuine evidence, holds its new shape
-after the evidence is absorbed, and can be re-yielded when more
-evidence arrives.
-
-Six canonical axes along which a mind's plasticity can be measured.
-MORPHOLOGICAL plasticity is the plasticity of form: how easily the
-agent's structural categories and conceptual shapes can be redrawn.
-ASSOCIATIVE plasticity is the plasticity of linkage: how easily new
-connections can be formed between ideas, and old ones dissolved.
-PROCEDURAL plasticity is the plasticity of process: how easily the
-agent's routines and procedures can be re-sequenced or replaced.
-EPISTEMIC plasticity is the plasticity of belief: how easily the
-agent's knowledge claims can be updated against new evidence.
-AFFECTIVE plasticity is the plasticity of feeling: how easily the
-agent's emotional responses can be recalibrated. NORMATIVE plasticity
-is the plasticity of value: how easily the agent's standards and
-preferences can be revised. See ``PlasticityAxis``.
-
-Six canonical regimes that classify an agent's overall plasticity.
-RIGID means near-zero plasticity: the agent's structure has fully
-hardened and will not yield. SET means low plasticity: the agent
-yields only under substantial force. YIELDING means moderate
-plasticity: the agent bends under ordinary pressure. MALLEABLE means
-high plasticity: the agent reshapes readily under most input.
-ADAPTIVE means very high plasticity: the agent restructures
-proactively in response to context. TRANSFORMABLE means extreme
-plasticity: the agent can be remade by a single decisive input. The
-regime is derived from the average plasticity score across the agent's
-readings via ``_determine_regime``. See ``PlasticityRegime``.
-
-Six canonical triggers that can initiate a reshape. EXPERIENCE means
-the reshape was driven by new empirical input — a result, a
-perception, a piece of feedback. INSTRUCTION means the reshape was
-driven by an external direction — a prompt, a command, a teacher's
-guidance. REFLECTION means the reshape was driven by the agent's own
-reconsideration — a pause to think, a re-examination of premises.
-SURPRISE means the reshape was driven by an unexpected event — a
-violation of expectation, a discovery. FATIGUE means the reshape was
-driven by exhaustion — too much pressure for too long, the agent's
-structure has weakened. INSIGHT means the reshape was driven by a
-sudden reorganization — a pattern falling into place, a key analogy
-clicking. See ``ReshapeTrigger``.
-
-Six canonical strategies that an agent can use to perform a reshape.
-REINFORCE strengthens an existing pattern, increasing its weight in
-the agent's structure. EXTEND grows an existing pattern, adding
-adjacent structure without disturbing the core. RECOMBINE merges
-existing patterns into new configurations, preserving the parts while
-rearranging the whole. PRUNE removes weak or obsolete structure,
-freeing capacity for new growth. RECONFIGURE rewires the relationships
-between patterns without changing the patterns themselves.
-OVERWRITE replaces existing structure wholesale, discarding the old
-form for a new one. See ``ReshapeStrategy``.
-
-Six canonical stages in the lifecycle of a reshape. FROZEN means no
-reshape is occurring: the structure is held in place. CRACKED means
-the structure has begun to fail: pressure has produced hairline
-fractures but no movement yet. BENDING means the structure is
-yielding: parts of it are moving under pressure, though not yet
-reforming. REFORMING means the structure is settling into a new
-configuration. SETTLING means the new configuration is hardening
-into place. STABLE means the reshape is complete and the new
-structure is now the agent's working state. See ``PlasticityStage``.
-
-The records the engine tracks are the seven dataclasses described
-below. A PlasticityReading is one observation of cognitive plasticity:
-its axis, score, trigger, and intensity. A ReshapeRecord is one
-recorded reshape event: the axis, trigger, strategy, and the before
-and after scores. A PlasticitySnapshot aggregates an agent's recent
-readings into an average score, a dominant axis, a regime, and a
-reshape count. A ReshapePlan records a planned reshape: the strategy
-to use, the target and current scores, and the rationale. A
-SettleRecord captures one stage transition in a reshape's lifecycle:
-the from and to stages and the interval. A PlasticityProfile holds
-each agent's aggregate plasticity tendencies — average score,
-dominant axis, regime, and totals of readings, reshapes, and
-settles. PlasticityStats summarizes engine-wide activity — total
-agents, readings, reshapes, snapshots, settles, average score, and
-dominant regime.
-
-This is original Buddy capability: a self-contained, thread-safe
-engine with no external runtime dependencies, designed to give agents
-honest awareness of how malleable their cognitive structure is — how
-easily they can be reshaped by new information, how readily they yield
-under pressure, and where on the spectrum from rigid to transformable
-their current state sits. With this awareness an agent can recognize
-when it is too brittle to learn (rigid), too soft to commit
-(transformable), or in the productive middle band where it can yield
-to genuine evidence and hold the new shape.
+Core capabilities:
+  - Per-axis readings, reshapes, regimes, plans, stages, profiles, stats
 
 Architecture:
-    AgentCognitivePlasticity (singleton)
-    ├── PlasticityReading      (one observation of cognitive plasticity)
-    ├── ReshapeRecord          (one recorded reshape event)
-    ├── PlasticitySnapshot     (aggregate plasticity state for one agent)
-    ├── ReshapePlan            (a plan to perform a reshape)
-    ├── SettleRecord           (one stage transition in a reshape lifecycle)
-    ├── PlasticityProfile      (per-agent aggregate plasticity tendencies)
-    └── PlasticityStats        (engine-wide aggregate statistics)
+  AgentCognitivePlasticity (singleton)
+  ├── PlasticityReading      (one observation of cognitive plasticity)
+  ├── ReshapeRecord          (one recorded reshape event)
+  ├── PlasticitySnapshot     (aggregate plasticity state for one agent)
+  ├── ReshapePlan            (a plan to perform a reshape)
+  ├── SettleRecord           (one stage transition in a reshape lifecycle)
+  ├── PlasticityProfile      (per-agent aggregate plasticity tendencies)
+  └── PlasticityStats        (engine-wide aggregate statistics)
 """
+
+from __future__ import annotations
 
 import threading
 import time
