@@ -1,55 +1,57 @@
 from __future__ import annotations
 
-# Agent Cognitive Momentum — models an agent's reasoning as a trajectory
-# with mass and velocity, treating the tendency of thought to continue in
-# a particular direction as a form of inertia. Once an agent commits
-# inference weight to a line of reasoning, that commitment accumulates
-# into mass; the rate at which the reasoning advances becomes its
-# velocity; and the tendency to keep moving the same way becomes
-# momentum. This module tracks that momentum, detects when it has become
-# unproductive, and applies perturbations to restore useful motion.
-#
-# The physics analogy is exact in structure if not in substance.
-# Reasoning has inertia: a chain of thought that has been advancing in
-# one direction resists redirection, because the accumulated weight of
-# prior inferences pulls subsequent steps along the same path. High
-# momentum is not inherently bad — it is what lets an agent drill deep
-# into a problem without being deflected by noise. But the same inertia
-# that enables depth also causes rigidity: when evidence turns against
-# the direction of travel, high momentum keeps the agent committed long
-# past the point where a course correction was warranted. Low momentum
-# has the opposite trade-off: it grants flexibility and rapid
-# redirection, but without enough inertia the agent drifts, never
-# pressing far enough in any direction to reach a conclusion.
-#
-# The most pathological state is the groove. A groove forms when
-# momentum is high — the agent is still expending effort — but
-# trajectory curvature is near zero, meaning the reasoning is turning
-# neither left nor right. The agent is moving fast along a track that
-# leads nowhere useful, and its own inertia prevents it from leaving
-# that track. Progress has stalled even as momentum remains high. This
-# is the cognitive equivalent of a body rolling endlessly around the
-# bottom of a shallow well: plenty of motion, no escape.
-#
-# Escape from such a local minimum requires energy above the escape
-# velocity, which scales with both the depth of the well and the
-# momentum that keeps the agent pinned within it. The engine computes
-# that escape velocity and constructs plans — waits, nudges, pivots,
-# resets, external inputs, decompositions, abstractions — to supply the
-# needed energy. When passive strategies are insufficient, active
-# perturbations (contrarian challenges, reframings, analogies, random
-# injections, decompositions, abstractions, context shifts) are applied
-# to break the inertia and redirect the trajectory.
-#
-# Architecture:
-#     AgentCognitiveMomentum (singleton)
-#     ├── MomentumVector (a direction with magnitude, velocity, mass)
-#     ├── TrajectoryPoint (a sampled position along the reasoning path)
-#     ├── StuckStateDetection (a diagnosed groove or stall)
-#     ├── PerturbationEvent (an applied redirect)
-#     ├── EscapePlan (a strategy for leaving a local minimum)
-#     ├── MomentumProfile (per-agent momentum history and tendencies)
-#     └── MomentumStats (aggregate engine statistics)
+"""Agent Cognitive Momentum — models an agent's reasoning as a trajectory
+
+with mass and velocity, treating the tendency of thought to continue in
+a particular direction as a form of inertia. Once an agent commits
+inference weight to a line of reasoning, that commitment accumulates
+into mass; the rate at which the reasoning advances becomes its
+velocity; and the tendency to keep moving the same way becomes
+momentum. This module tracks that momentum, detects when it has become
+unproductive, and applies perturbations to restore useful motion.
+
+The physics analogy is exact in structure if not in substance.
+Reasoning has inertia: a chain of thought that has been advancing in
+one direction resists redirection, because the accumulated weight of
+prior inferences pulls subsequent steps along the same path. High
+momentum is not inherently bad — it is what lets an agent drill deep
+into a problem without being deflected by noise. But the same inertia
+that enables depth also causes rigidity: when evidence turns against
+the direction of travel, high momentum keeps the agent committed long
+past the point where a course correction was warranted. Low momentum
+has the opposite trade-off: it grants flexibility and rapid
+redirection, but without enough inertia the agent drifts, never
+pressing far enough in any direction to reach a conclusion.
+
+The most pathological state is the groove. A groove forms when
+momentum is high — the agent is still expending effort — but
+trajectory curvature is near zero, meaning the reasoning is turning
+neither left nor right. The agent is moving fast along a track that
+leads nowhere useful, and its own inertia prevents it from leaving
+that track. Progress has stalled even as momentum remains high. This
+is the cognitive equivalent of a body rolling endlessly around the
+bottom of a shallow well: plenty of motion, no escape.
+
+Escape from such a local minimum requires energy above the escape
+velocity, which scales with both the depth of the well and the
+momentum that keeps the agent pinned within it. The engine computes
+that escape velocity and constructs plans — waits, nudges, pivots,
+resets, external inputs, decompositions, abstractions — to supply the
+needed energy. When passive strategies are insufficient, active
+perturbations (contrarian challenges, reframings, analogies, random
+injections, decompositions, abstractions, context shifts) are applied
+to break the inertia and redirect the trajectory.
+
+Architecture:
+    AgentCognitiveMomentum (singleton)
+    ├── MomentumVector (a direction with magnitude, velocity, mass)
+    ├── TrajectoryPoint (a sampled position along the reasoning path)
+    ├── StuckStateDetection (a diagnosed groove or stall)
+    ├── PerturbationEvent (an applied redirect)
+    ├── EscapePlan (a strategy for leaving a local minimum)
+    ├── MomentumProfile (per-agent momentum history and tendencies)
+    └── MomentumStats (aggregate engine statistics)
+"""
 
 import math
 import threading
