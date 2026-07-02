@@ -1,94 +1,22 @@
 from __future__ import annotations
 
-"""Agent Cognitive Buoyancy — models the float/sink property of concepts and
+"""Agent Cognitive Buoyancy Engine — float/sink property of concepts in awareness
 
-ideas in the agent's consciousness. Where the momentum engine models
-persistence along a reasoning trajectory and the friction engine models
-the cost of changing direction, the buoyancy engine models a vertical
-dimension: which ideas rise to the surface of awareness and which sink
-into depth. Some ideas are buoyant — they float up, capture attention,
-persist across turns, and dominate the agent's active working set. Other
-ideas are dense — they sink, fall out of attention, slip toward the
-subconscious, and may be repressed or forgotten entirely. The vertical
-stratification of cognitive content is not random; it is driven by
-identifiable buoyancy forces, and an agent that can read its own
-buoyancy profile can decide which ideas to lift and which to let sink.
+Models which ideas rise to the surface of attention and which sink into depth,
+driven by relevance, novelty, emotion, repetition, confirmation, density, and age.
 
-The physical analogy is exact in structure. In a fluid, buoyancy is the
-upward force a displaced volume exerts on an immersed body, opposed by
-the body's weight (density). A body less dense than the fluid floats; a
-body denser than the fluid sinks; a body at neutral buoyancy holds its
-depth. Cognitive content behaves the same way. An idea is not equally
-salient at all times: it has a buoyancy determined by several forces
-acting on it, and the net of those forces decides whether the idea
-occupies the surface of awareness or settles into a deeper stratum.
-Buoyant ideas rise into immediate awareness and stay there; dense ideas
-sink below the threshold of attention and become harder and harder to
-recall until they settle in the abyssal layer of repressed or forgotten
-content. Between these extremes the shallow, middle, and deep layers
-form a stratified profile, each with its own recall cost.
-
-Cognitive buoyancy is not a single force. It arises from several
-distinct forces, and an idea's net buoyancy is the composition of them:
-
-  * Relevance          — relevant ideas float. An idea connected to the
-                         current task or goal carries upward pressure
-                         because keeping it active pays off.
-  * Novelty            — new ideas float. A freshly encountered idea
-                         carries upward pressure because the agent has
-                         not yet exhausted what it can extract from it.
-  * Emotional charge   — emotionally charged ideas float. An idea tied
-                         to a strong affect carries upward pressure
-                         because the affective system flags it as
-                         significant.
-  * Repetition         — repeated ideas float. An idea the agent has
-                         encountered many times carries upward pressure
-                         because each encounter reinforces its salience.
-  * Confirmation       — confirmed ideas float. An idea that aligns with
-                         already-held beliefs carries upward pressure
-                         because confirming it is cheaper than
-                         revising it.
-  * Density            — complex ideas sink. An idea whose internal
-                         structure is dense carries downward pressure
-                         because holding it active costs more working
-                         memory than it can spare.
-  * Age                — old ideas sink. An idea that has sat unused for
-                         a long time carries downward pressure because
-                         the agent's attention has moved on and the
-                         idea's salience has decayed.
-
-This engine instruments that picture operationally. A BuoyancyReading
-records one observed buoyancy value for one idea under one force. A
-MovementEvent records an observed vertical shift of an idea between two
-layers, with a velocity (positive = ascending). A BuoyancySnapshot
-aggregates an agent's recent readings into an average buoyancy, a
-surface count, a deep count, a dominant force, and a regime
-classification running from SINKING through NEUTRAL and FLOATING to
-BURSTING and STABLE_STRATIFIED. When an idea needs to be raised, a
-LiftPlan prescribes a strategy — emphasize it, repeat it, connect it to
-a buoyant idea, emotionalize it, simplify it, or anchor it to a stable
-reference. When an idea needs to be lowered, a SinkPlan prescribes a
-strategy — defer it, archive it, abstract it, suppress it, compress it,
-or rotate it out for a newer idea. A BuoyancyProfile holds each agent's
-aggregate buoyancy tendencies, and BuoyancyStats summarizes engine
-activity.
-
-This is original Buddy capability: a self-contained, thread-safe
-engine with no external runtime dependencies, designed to give agents
-honest awareness of which of their ideas are floating and which are
-sinking, so that attention can be allocated to the ideas that deserve to
-stay on the surface and deliberately released from the ideas that do
-not.
+Core capabilities:
+  - Buoyancy Readings: per-idea, per-force buoyancy value observations
+  - Movement Events: vertical shifts between stratified layers with velocity
+  - Lift Plans: strategies to raise ideas (emphasize, repeat, connect, simplify)
+  - Sink Plans: strategies to lower ideas (defer, archive, suppress, compress)
+  - Regime Classification: sinking through stable stratified
 
 Architecture:
-    AgentCognitiveBuoyancy (singleton)
-    ├── BuoyancyReading   (one observed buoyancy value for one idea)
-    ├── MovementEvent      (an observed vertical shift of an idea)
-    ├── BuoyancySnapshot   (aggregate buoyancy and regime)
-    ├── LiftPlan           (a strategy to raise an idea)
-    ├── SinkPlan           (a strategy to lower an idea)
-    ├── BuoyancyProfile    (per-agent aggregate tendencies)
-    └── BuoyancyStats      (engine-wide aggregate statistics)
+  AgentCognitiveBuoyancy (singleton)
+  ├── BuoyancyReading, MovementEvent, BuoyancySnapshot
+  ├── LiftPlan, SinkPlan, BuoyancyProfile
+  └── BuoyancyStats
 """
 
 import threading
