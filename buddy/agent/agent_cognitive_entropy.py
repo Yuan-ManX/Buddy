@@ -1,52 +1,20 @@
-"""
-Agent Cognitive Entropy Engine — information-theoretic measurement of agent
-reasoning state.
+"""Agent Cognitive Entropy Engine — information-theoretic measurement of reasoning state.
 
-Information theory gives us a principled vocabulary for reasoning about
-cognition itself. An agent's internal state can be viewed as a collection
-of probability distributions: a belief network over hypotheses, a reasoning
-trace over next-step candidates, a decision distribution over actions, an
-attention distribution over inputs, and a knowledge distribution over
-retrieved facts. Each of these distributions carries an entropy, and that
-entropy is a precise, quantitative signal about the agent's cognitive
-posture.
-
-Entropy, in this framing, is the measure of disorder or uncertainty in a
-distribution. High entropy means the agent is spreading its mass evenly —
-it is uncertain, exploring, hedging, unwilling to commit. Low entropy
-means the agent has concentrated its mass — it is certain, exploiting,
-decisive, committed to a single hypothesis. Neither extreme is healthy in
-general. A reasoning state that is too disordered (chaotic) produces
-erratic, inconsistent, low-confidence behavior: the agent cannot settle on
-anything. A reasoning state that is too ordered (rigid) produces brittle,
-overconfident, stereotyped behavior: the agent cannot reconsider anything.
-The healthy middle — a balanced regime — is where the agent is confident
-enough to act but uncertain enough to revise.
-
-This engine instruments that picture. It samples distributions from the
-agent's cognitive subsystems, computes Shannon entropy and a normalized
-entropy in [0, 1], tracks the flux (rate and direction of entropy change)
-over time, and classifies the agent's overall regime from RIGID through
-BALANCED to CHAOTIC. It applies the maximum entropy principle for
-inference under ignorance (when the agent has no reason to prefer one
-outcome, it should not pretend to), the principle of indifference, minimum
-entropy inference for forced commitment, and cross-entropy minimization
-for blending priors with evidence. It also traces payload compression as
-an information-theoretic operation, since compression and entropy are
-duals: the entropy of a source bounds how tightly it can be compressed.
+Views an agent's internal state as a collection of probability distributions
+(beliefs, reasoning traces, decisions, attention, knowledge) and computes
+Shannon entropy for each. High entropy means uncertainty and exploration; low
+entropy means certainty and commitment. The engine tracks entropy flux over
+time, classifies the regime from RIGID through BALANCED to CHAOTIC, and applies
+maximum entropy principles for inference under ignorance.
 
 Architecture:
-    AgentCognitiveEntropy (thread-safe singleton)
-    ├── DistributionSample   (one sampled distribution + its entropies)
-    ├── EntropyFluxRecord    (a delta between two consecutive samples)
-    ├── InferenceResult      (a prior -> posterior inference under a principle)
-    ├── CompressionTrace     (a simulated compression + its information loss)
-    ├── EntropyProfile       (per-agent aggregate regime and distributions)
-    └── EntropyStats         (engine-wide aggregate statistics)
-
-The engine is intentionally dependency-free so it can run in any Buddy
-runtime without extra packages. All state mutations are guarded by a
-reentrant lock so the engine is safe to call from multiple threads.
+  AgentCognitiveEntropy (thread-safe singleton)
+  ├── DistributionSample   (one sampled distribution + its entropies)
+  ├── EntropyFluxRecord    (a delta between two consecutive samples)
+  ├── InferenceResult      (a prior -> posterior inference under a principle)
+  ├── CompressionTrace     (a simulated compression + its information loss)
+  ├── EntropyProfile       (per-agent aggregate regime and distributions)
+  └── EntropyStats         (engine-wide aggregate statistics)
 """
 
 from __future__ import annotations
