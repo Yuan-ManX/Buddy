@@ -202,6 +202,23 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'cognitiveTension', label: 'Tension', icon: '⚡' },
   { id: 'cognitiveDepth', label: 'Depth', icon: '🌊' },
   { id: 'cognitiveCoherence', label: 'Coherence', icon: '🔗' },
+  { id: 'cognitiveRhythm', label: 'Rhythm', icon: '🎵' },
+  { id: 'cognitiveDiffusion', label: 'Diffusion', icon: '🌊' },
+  { id: 'cognitiveSymbology', label: 'Symbology', icon: '🔣' },
+  { id: 'cognitiveCatalyst', label: 'Catalyst', icon: '⚡' },
+  { id: 'cognitiveRefraction', label: 'Refraction', icon: '🔎' },
+  { id: 'cognitiveOsmosis', label: 'Osmosis', icon: '🧬' },
+  { id: 'cognitiveBuoyancy', label: 'Buoyancy', icon: '🎈' },
+  { id: 'cognitiveImmunity', label: 'Immunity', icon: '🛡️' },
+  { id: 'cognitiveViscosity', label: 'Viscosity', icon: '🌊' },
+  { id: 'cognitivePolarization', label: 'Polarization', icon: '🧭' },
+  { id: 'cognitiveInertia', label: 'Inertia', icon: '⚖️' },
+  { id: 'cognitiveTurbulence', label: 'Turbulence', icon: '🌪️' },
+  { id: 'cognitiveCadence', label: 'Cadence', icon: '🎵' },
+  { id: 'cognitiveDrift', label: 'Drift', icon: '🌊' },
+  { id: 'cognitiveResilience', label: 'Resilience', icon: '🛡️' },
+  { id: 'cognitiveLattice', label: 'Lattice', icon: '💎' },
+  { id: 'cognitiveSingularity', label: 'Singularity', icon: '✨' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
