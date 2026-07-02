@@ -1,63 +1,21 @@
-"""
-Agent Cognitive Coherence Engine — measuring and managing the system-level
-relational integrity of an agent's cognitive network.
+"""Agent Cognitive Coherence Engine — relational integrity of an agent's cognitive network.
 
-Coherence is the degree to which the parts of an agent's cognitive state
-hang together. A belief, a reasoning trace, a goal, and an action do not
-exist in isolation; they stand in relations to one another. One belief may
-explain another, a goal may enable an action, a reasoning step may support
-a conclusion, or two beliefs may contradict. Coherence is the system-level
-property that captures whether these relations mutually support one another
-or pull apart. It is distinct from belief_state, which tracks individual
-beliefs and their probabilities: coherence tracks the relational integrity
-of the entire cognitive network — whether the parts form a coherent whole
-or a fragmented collection.
-
-This engine draws on explanatory coherence theory, in particular Thagard's
-ECHO model, where coherence is treated as a constraint satisfaction
-problem. The cognitive network is modeled as a graph of nodes (beliefs,
-reasoning traces, goals, actions) connected by relations that either
-cohere (support, explain, enable) or inhibit (contradict, conflict). The
-guiding principle is that a coherent system is one where the parts hang
-together: positive links pull connected nodes toward mutual activation
-while negative links push them apart, and the system is coherent to the
-extent that positive links dominate. Coherence is not a single scalar but
-a family of facets: explanatory coherence (beliefs explain each other),
-logical coherence (no contradictions), teleological coherence (actions
-serve goals), narrative coherence (the story makes sense), conceptual
-coherence (concepts align), and epistemic coherence (knowledge sources
-agree). A snapshot reduces these facets to a single total_coherence score
-for tracking, while the facet breakdown is retained for diagnosis.
-
-Operationally, the engine registers CoherenceNodes (beliefs, reasoning
-traces, goals, actions, ...) and links them with CoherenceRelations of a
-given RelationType and strength. A CoherenceSnapshot aggregates an agent's
-nodes and relations into a total_coherence score in [0, 1] — the
-support-weighted balance of cohering versus inhibiting relations — and
-classifies the agent's CoherenceRegime from FRAGMENTED (parts don't
-connect) through LOOSE, PARTIAL, and COHERENT to INTEGRATED and UNIFIED
-(single coherent whole). When coherence is low, a RepairAttempt applies a
-RepairStrategy such as resolving a contradiction, adding a bridging
-belief, reweighting a relation, removing a problematic node, splitting
-into separate contexts, or reframing the relation. A TrajectoryRecord
-captures whether coherence is stabilizing, stable, destabilizing,
-fluctuating, collapsing, or consolidating. A CoherenceProfile holds
-per-agent aggregates and CoherenceStats summarizes engine-wide activity.
-All state mutations are guarded by a reentrant lock so the engine is safe
-to call from multiple threads, including from within its own methods.
+Models coherence as a constraint satisfaction graph where beliefs, reasoning
+traces, goals, and actions are nodes connected by typed, weighted relations
+that either cohere (support, explain, enable) or inhibit (contradict, conflict).
+A snapshot reduces the graph to a total_coherence score and a regime from
+FRAGMENTED through COHERENT to UNIFIED. When coherence is low, repair
+strategies resolve contradictions, add bridging beliefs, or reframe relations.
 
 Architecture:
-    AgentCognitiveCoherence (singleton)
-    ├── CoherenceNode      (a belief, reasoning trace, goal, or action)
-    ├── CoherenceRelation  (a typed, weighted edge between two nodes)
-    ├── CoherenceSnapshot  (aggregate coherence state at a point in time)
-    ├── RepairAttempt      (one application of a repair strategy)
-    ├── TrajectoryRecord   (a coherence change between two points)
-    ├── CoherenceProfile   (per-agent aggregate coherence picture)
-    └── CoherenceStats     (engine-wide aggregate statistics)
-
-The engine is intentionally dependency-free so it can run in any Buddy
-runtime without extra packages.
+  AgentCognitiveCoherence (singleton)
+  ├── CoherenceNode      (a belief, reasoning trace, goal, or action)
+  ├── CoherenceRelation  (a typed, weighted edge between two nodes)
+  ├── CoherenceSnapshot  (aggregate coherence state at a point in time)
+  ├── RepairAttempt      (one application of a repair strategy)
+  ├── TrajectoryRecord   (a coherence change between two points)
+  ├── CoherenceProfile   (per-agent aggregate coherence picture)
+  └── CoherenceStats     (engine-wide aggregate statistics)
 """
 
 from __future__ import annotations
