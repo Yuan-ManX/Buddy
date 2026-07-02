@@ -1,44 +1,23 @@
 from __future__ import annotations
 
-# Agent Cognitive Phase Transition — detection, prediction, and management of
-# phase transitions in understanding, moments where knowledge reorganizes into
-# qualitatively new states.
-#
-# In complex systems, a phase transition is a reorganization from one stable
-# configuration into another, often passing through a critical regime where
-# fluctuations grow and the system becomes exquisitely sensitive to small
-# perturbations. Cognition exhibits analogous dynamics: a learner (or agent)
-# may sit in a stable but limited understanding, enter a fluctuating regime
-# where contradictions and evidence destabilize that understanding, reach a
-# critical point where small catalysts produce large reorganizations, and
-# finally settle into a qualitatively new stable state. This module captures
-# that process operationally.
-#
-# The engine models each ongoing learning episode as a TransitionContext tied
-# to an agent and a domain. Order parameters (coherence, integration,
-# complexity, certainty, fluency, diversity) are measured repeatedly over
-# time; their variance and autocorrelation are used to detect critical
-# points where the system is approaching a transition. Transition catalysts
-# (insights, contradictions, analogies, evidence, reflection, external
-# input) are the perturbations that can trigger a transition. When a
-# catalyst fires at a critical point, a PhaseTransitionEvent is created and
-# moves through a lifecycle (DETECTED -> PREDICTED -> TRIGGERED ->
-# FACILITATED -> STABILIZED or ABORTED), recording the from/to phase, the
-# interventions applied, and the pre/post state snapshots.
-#
-# Capabilities: context registration, parameter measurement, critical-point
-# detection via variance analysis, catalyst registration, transition
-# triggering, intervention facilitation, phase stabilization, and aggregate
-# statistics.
-#
-# Architecture:
-#     AgentCognitivePhaseTransition (singleton)
-#     ├── TransitionContext (a learning episode for one agent in a domain)
-#     │   ├── OrderParameter (a measured value of one cognitive parameter)
-#     │   ├── CriticalPoint (a detected critical regime in parameter space)
-#     │   ├── TransitionCatalyst (a perturbation that can trigger a transition)
-#     │   └── PhaseTransitionEvent (a transition moving through its lifecycle)
-#     └── TransitionStats (aggregate engine statistics)
+"""Agent Cognitive Phase Transition Engine — detection and management of phase transitions in understanding.
+
+Models moments where knowledge reorganizes into qualitatively new states. Order
+parameters (coherence, integration, complexity, certainty, fluency, diversity)
+are measured repeatedly; their variance and autocorrelation detect critical
+points where small catalysts (insights, contradictions, analogies) trigger
+large reorganizations. Transition events move through a lifecycle from DETECTED
+through TRIGGERED to STABILIZED or ABORTED.
+
+Architecture:
+  AgentCognitivePhaseTransition (singleton)
+  ├── TransitionContext  (a learning episode for one agent in a domain)
+  ├── OrderParameter     (a measured value of one cognitive parameter)
+  ├── CriticalPoint      (a detected critical regime in parameter space)
+  ├── TransitionCatalyst (a perturbation that can trigger a transition)
+  ├── PhaseTransitionEvent (a transition moving through its lifecycle)
+  └── TransitionStats    (aggregate engine statistics)
+"""
 
 import threading
 import time
