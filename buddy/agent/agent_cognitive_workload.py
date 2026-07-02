@@ -1,52 +1,54 @@
-# Agent Cognitive Workload — measurement and management of an agent's
-# cognitive effort budget across the three load types of Cognitive Load
-# Theory: intrinsic, extraneous, and germane.
-#
-# Cognitive effort is finite. Any agent that reasons, holds context, and
-# pursues goals draws on a bounded pool of working-memory resources, and
-# when the demand on that pool exceeds its capacity the agent's
-# performance degrades: reasoning shallows, context is dropped, and
-# errors compound. Cognitive Load Theory separates that demand into three
-# components. Intrinsic load is the difficulty inherent in the material
-# itself, driven by element complexity (how many distinct elements a task
-# contains) and element interactivity (how tightly those elements must be
-# processed together). Extraneous load is the overhead imposed by how
-# the task is presented — redundant context, confusing structure,
-# distracting side-channels — and is the most reducible form of load.
-# Germane load is the productive effort devoted to building and
-# automating schemas; it is the load the agent wants to keep. Total load
-# is their sum, compared against a capacity envelope to classify the
-# agent as underloaded, optimal, loaded, overloaded, or saturated.
-#
-# This engine models that process operationally. Each LoadMeasurement
-# records one observed load value of one type for an agent, annotated
-# with the source task and the element complexity and interactivity that
-# drove it. A WorkloadSnapshot aggregates the most recent measurements
-# into the agent's current intrinsic, extraneous, and germane loads,
-# derives the total load, and classifies the workload state against the
-# capacity envelope. When two tasks run concurrently they may compete for
-# the same cognitive channel (language, memory, vision, spatial,
-# reasoning, ...); an InterferenceAssessment estimates that dual-task
-# interference from keyword and channel overlap. When the agent is
-# overloaded, an AllocationDecision redistributes cognitive resources via
-# strategies such as shedding, deferring, delegating, chunking,
-# sequencing, or offloading work, each freeing a characteristic amount of
-# capacity. A RecoveryPlan prescribes how an overloaded agent recovers —
-# pausing, breathing, consolidating, simplifying, or archiving. A
-# WorkloadProfile holds each agent's capacity envelope and adaptation
-# parameters, and WorkloadStats summarizes engine activity. All state
-# mutations are guarded by a reentrant lock so the engine is safe to call
-# from multiple threads, including from within its own methods.
-#
-# Architecture:
-#     AgentCognitiveWorkload (singleton)
-#     ├── LoadMeasurement        (one observed load value of one type)
-#     ├── WorkloadSnapshot       (aggregate state of an agent's workload)
-#     ├── InterferenceAssessment (dual-task interference estimate)
-#     ├── AllocationDecision     (a resource redistribution choice)
-#     ├── RecoveryPlan           (a plan to recover from overload)
-#     ├── WorkloadProfile        (per-agent capacity and adaptation)
-#     └── WorkloadStats          (aggregate engine statistics)
+"""Agent Cognitive Workload — measurement and management of an agent's
+
+cognitive effort budget across the three load types of Cognitive Load
+Theory: intrinsic, extraneous, and germane.
+
+Cognitive effort is finite. Any agent that reasons, holds context, and
+pursues goals draws on a bounded pool of working-memory resources, and
+when the demand on that pool exceeds its capacity the agent's
+performance degrades: reasoning shallows, context is dropped, and
+errors compound. Cognitive Load Theory separates that demand into three
+components. Intrinsic load is the difficulty inherent in the material
+itself, driven by element complexity (how many distinct elements a task
+contains) and element interactivity (how tightly those elements must be
+processed together). Extraneous load is the overhead imposed by how
+the task is presented — redundant context, confusing structure,
+distracting side-channels — and is the most reducible form of load.
+Germane load is the productive effort devoted to building and
+automating schemas; it is the load the agent wants to keep. Total load
+is their sum, compared against a capacity envelope to classify the
+agent as underloaded, optimal, loaded, overloaded, or saturated.
+
+This engine models that process operationally. Each LoadMeasurement
+records one observed load value of one type for an agent, annotated
+with the source task and the element complexity and interactivity that
+drove it. A WorkloadSnapshot aggregates the most recent measurements
+into the agent's current intrinsic, extraneous, and germane loads,
+derives the total load, and classifies the workload state against the
+capacity envelope. When two tasks run concurrently they may compete for
+the same cognitive channel (language, memory, vision, spatial,
+reasoning, ...); an InterferenceAssessment estimates that dual-task
+interference from keyword and channel overlap. When the agent is
+overloaded, an AllocationDecision redistributes cognitive resources via
+strategies such as shedding, deferring, delegating, chunking,
+sequencing, or offloading work, each freeing a characteristic amount of
+capacity. A RecoveryPlan prescribes how an overloaded agent recovers —
+pausing, breathing, consolidating, simplifying, or archiving. A
+WorkloadProfile holds each agent's capacity envelope and adaptation
+parameters, and WorkloadStats summarizes engine activity. All state
+mutations are guarded by a reentrant lock so the engine is safe to call
+from multiple threads, including from within its own methods.
+
+Architecture:
+    AgentCognitiveWorkload (singleton)
+    ├── LoadMeasurement        (one observed load value of one type)
+    ├── WorkloadSnapshot       (aggregate state of an agent's workload)
+    ├── InterferenceAssessment (dual-task interference estimate)
+    ├── AllocationDecision     (a resource redistribution choice)
+    ├── RecoveryPlan           (a plan to recover from overload)
+    ├── WorkloadProfile        (per-agent capacity and adaptation)
+    └── WorkloadStats          (aggregate engine statistics)
+"""
 
 from __future__ import annotations
 
