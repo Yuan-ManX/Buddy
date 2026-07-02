@@ -117,10 +117,6 @@ export const QuotaManagerPanel: React.FC = () => {
       return;
     }
     try {
-      const codes = limitForm.retryable_status_codes
-        .split(',')
-        .map(s => parseInt(s.trim(), 10))
-        .filter(n => !isNaN(n));
       await api.quotaManager.registerLimit({
         resource: limitForm.resource.trim(),
         quota_type: limitForm.quota_type,
@@ -128,7 +124,6 @@ export const QuotaManagerPanel: React.FC = () => {
         window_seconds: Number(limitForm.window_seconds),
         description: limitForm.description.trim() || undefined,
       });
-      void codes;
       toast.success('Quota limit registered');
       setLimitForm({ resource: '', quota_type: 'REQUEST_COUNT', max_value: '100', window_seconds: '60', description: '' });
       await loadLimits();
