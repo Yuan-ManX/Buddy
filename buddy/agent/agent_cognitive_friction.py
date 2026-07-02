@@ -1,92 +1,23 @@
 from __future__ import annotations
 
-# Agent Cognitive Friction — measures the resistance an agent encounters
-# when shifting between cognitive states: concepts, mental models, and
-# reasoning postures. Where the momentum engine models the inertia of a
-# reasoning trajectory (how hard it is to STOP moving the way it already
-# moves), the friction engine models the cost of CHANGING direction. The
-# two are complementary but distinct dimensions of cognition. Momentum is
-# about persistence; friction is about transition.
-#
-# The physical analogy is exact in structure. In mechanics, friction is
-# the force that opposes relative motion between two surfaces in contact.
-# It is not itself a direction — it is a resistance that any attempted
-# transition must overcome. Cognitive friction behaves the same way: when
-# an agent tries to move from one concept, belief, context, or viewpoint
-# to another, the attempted transition meets a resistance that depends on
-# the two states in contact and on how the agent is anchored to the
-# current one. A transition between closely related concepts meets little
-# resistance and proceeds easily. A transition that requires releasing a
-# strongly held belief, or that bridges distant abstraction levels, meets
-# heavy resistance and may stall, reverse, or fail to complete.
-#
-# High cognitive friction manifests as rigid thinking: the agent cannot
-# shift out of its current state even when it should. Transitions stall,
-# the agent repeats itself, and evidence that should redirect reasoning
-# fails to land. Low cognitive friction manifests as fluid thinking: the
-# agent moves between concepts, contexts, and viewpoints with little
-# resistance, redirecting as the situation demands. Neither extreme is
-# unconditionally desirable. Friction that is too low produces flighty,
-# incoherent reasoning that never commits to anything long enough to
-# develop a thought; friction that is too high produces stuck, repetitive
-# reasoning that cannot adapt. The healthy middle is enough resistance
-# that transitions are deliberate without being blocked.
-#
-# Cognitive friction is not a single force. It arises from several
-# distinct sources, and a transition's total resistance is the
-# composition of them:
-#
-#   * Concept anchoring    — over-attachment to the current concept. The
-#                            agent has invested attention in a particular
-#                            framing and resists leaving it.
-#   * Belief commitment    — sunk cost in the current belief. Revising a
-#                            belief the agent has acted on costs more
-#                            than revising one it merely holds.
-#   * Context switching    — the cost of swapping the active context.
-#                            Each context carries its own working set,
-#                            and pivoting between them is expensive.
-#   * Abstraction distance — the gap between abstraction levels. Moving
-#                            from a concrete instance to an abstract
-#                            pattern (or back) crosses a gap that scales
-#                            with the distance between the levels.
-#   * Conceptual
-#     incompatibility      — logical incompatibility between the two
-#                            states. When the target state contradicts
-#                            the source, the transition must reconcile
-#                            the contradiction, which is costly.
-#   * Habit                — well-worn pathway resistance. The agent's
-#                            established habits pull it back toward the
-#                            current state and away from the target.
-#
-# This engine instruments that picture operationally. A FrictionMeasurement
-# records one observed resistance value for one transition type from one
-# source. A TransitionEvent records an attempted state-to-state shift,
-# how much friction it met, how long it took, and whether it completed.
-# A FrictionSnapshot aggregates an agent's recent measurements into a
-# total resistance, a dominant source, and a regime classification
-# running from FLUID through SMOOTH, MODERATE, and HIGH to FROZEN. When
-# friction is blocking a transition, a LubricationPlan prescribes a
-# strategy to reduce the resistance — priming the target context,
-# chunking the transition into smaller steps, building a bridge concept,
-# re-framing the transition, deliberately releasing the current anchor,
-# or introducing an external prompt. A RecoveryAssessment tracks whether
-# a stalled transition is flowing, sluggish, stalled, reversing, or
-# recovered. A FrictionProfile holds each agent's aggregate resistance
-# tendencies, and FrictionStats summarizes engine activity.
-#
-# This is original Buddy capability: a self-contained, thread-safe
-# engine with no external runtime dependencies, designed to give agents
-# honest awareness of how hard it is for them to change their minds.
-#
-# Architecture:
-#     AgentCognitiveFriction (singleton)
-#     ├── FrictionMeasurement   (one observed resistance value)
-#     ├── TransitionEvent       (an attempted state-to-state shift)
-#     ├── FrictionSnapshot      (aggregate resistance and regime)
-#     ├── LubricationPlan       (a strategy to reduce resistance)
-#     ├── RecoveryAssessment    (progress of a stalled transition)
-#     ├── FrictionProfile       (per-agent aggregate tendencies)
-#     └── FrictionStats         (engine-wide aggregate statistics)
+"""Agent Cognitive Friction Engine — resistance when shifting cognitive states
+
+Models the cost of changing direction between concepts, beliefs, and contexts,
+driven by anchoring, commitment, context-switching, abstraction distance, and habit.
+
+Core capabilities:
+  - Friction Measurements: per-transition resistance from each source
+  - Transition Events: state-to-state shifts with friction, duration, completion
+  - Lubrication Plans: prime, chunk, bridge, reframe, release, prompt
+  - Recovery Assessments: flowing, sluggish, stalled, reversing, recovered
+  - Regime Classification: fluid through frozen
+
+Architecture:
+  AgentCognitiveFriction (singleton)
+  ├── FrictionMeasurement, TransitionEvent, FrictionSnapshot
+  ├── LubricationPlan, RecoveryAssessment, FrictionProfile
+  └── FrictionStats
+"""
 
 import threading
 import time
