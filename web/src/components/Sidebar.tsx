@@ -219,6 +219,16 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'cognitiveResilience', label: 'Resilience', icon: '🛡️' },
   { id: 'cognitiveLattice', label: 'Lattice', icon: '💎' },
   { id: 'cognitiveSingularity', label: 'Singularity', icon: '✨' },
+  { id: 'cognitivePlasticity', label: 'Plasticity', icon: '🧶' },
+  { id: 'cognitiveElasticity', label: 'Elasticity', icon: '🤸' },
+  { id: 'cognitivePermeability', label: 'Permeability', icon: '🕳️' },
+  { id: 'cognitiveFluidity', label: 'Fluidity', icon: '💧' },
+  { id: 'cognitiveSolidity', label: 'Solidity', icon: '🪨' },
+  { id: 'cognitiveEquilibrium', label: 'Equilibrium', icon: '⚖️' },
+  { id: 'cognitiveCohesion', label: 'Cohesion', icon: '🔗' },
+  { id: 'cognitiveSymmetry', label: 'Symmetry', icon: '🪞' },
+  { id: 'cognitiveTexture', label: 'Texture', icon: '🎨' },
+  { id: 'cognitiveGradient', label: 'Gradient', icon: '📉' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
