@@ -1,124 +1,22 @@
 from __future__ import annotations
 
-"""Agent Cognitive Immunity Engine — modeling the cognitive immune system:
+"""Agent Cognitive Immunity Engine — modeling the cognitive immune system
 
-how an agent identifies, neutralizes, and rejects harmful or
-contradictory information. Like biological immunity, it has recognition
-(identifying threats), response (neutralizing them), memory (remembering
-past threats), and tolerance (not over-reacting to harmless inputs).
-
-Cognition, like a body, is constantly exposed to inputs. Most are
-benign or beneficial: new evidence, honest corrections, productive
-framings, useful context. But some are harmful. A piece of information
-can contradict an agent's core beliefs without giving cause to revise
-them; an input can attempt to manipulate the agent toward a goal that is
-not its own; a claim can be false; an input can overwhelm the agent's
-processing capacity; a frame can exploit the agent's cognitive resources
-for purposes hostile to its interests; a pattern can degrade the
-agent's cognitive integrity; and an input can arrive in a framework
-incompatible with the agent's own. Without a way to recognize and
-neutralize these threats, the agent is vulnerable to capture,
-corruption, and collapse. The cognitive immune system is the layer that
-defends the agent's cognition the way the biological immune system
-defends the body.
-
-The biological analogy is exact in structure. In biology, the immune
-system distinguishes self from non-self, recognizes pathogens by their
-antigens, mounts a response that neutralizes the threat (antibodies,
-killer cells), remembers past encounters so subsequent responses are
-faster and stronger (memory B and T cells), and maintains tolerance so
-it does not attack the body's own tissue (auto-immunity) or over-react
-to harmless substances (allergy). Cognitive immunity behaves the same
-way. The agent distinguishes its own reasoning from foreign input,
-recognizes harmful information by its type and severity, mounts a
-response that neutralizes the threat (ignore, flag, quarantine,
-neutralize, reject, or — when the input turns out to be beneficial —
-assimilate), remembers past threats so future encounters trigger a
-faster response, and maintains tolerance so it does not flag every
-unfamiliar input as hostile (which would paralyze cognition the way
-auto-immunity paralyzes the body) nor dismiss genuinely harmful input
-(which would leave the agent undefended).
-
-This is distinct from related engines. The alignment engine is about
-whether the agent's goals are well-formed and stable; cognitive
-immunity is about whether incoming information is safe to incorporate.
-The belief-state engine is about what the agent believes; cognitive
-immunity is about which beliefs are under attack and how to defend them.
-The cognitive coherence engine is about internal consistency; cognitive
-immunity is about external threats to that consistency. An agent with
-strong coherence but no immunity is internally consistent but easily
-captured; an agent with strong immunity but no coherence can reject
-threats but cannot hold a stable position. Healthy cognition requires
-both.
-
-Cognitive threats come in several kinds. A CONTRADICTION threat
-contradicts an agent's core beliefs: the input is structured to force
-a revision the agent should not make. A MANIPULATION threat attempts to
-steer the agent toward a goal that is not its own: the input is
-constructed to manipulate rather than inform. A MISINFORMATION threat
-carries false information: the input is simply wrong, whether by
-accident or design. A COGNITIVE_OVERLOAD threat overwhelms the agent's
-processing capacity: the input is too much, too fast, or too dense to
-process safely. A PARASITIC threat exploits the agent's cognitive
-resources for purposes hostile to the agent: the input consumes
-attention, computation, or memory without giving value back. A
-CORRUPTION threat degrades the agent's cognitive integrity: the input
-erodes the agent's ability to reason soundly, e.g. by introducing
-slippery categories or perverse incentives. An ALIEN threat arrives in
-a framework incompatible with the agent's own: the input is not wrong
-or hostile but is structured in a way the agent cannot safely process.
-
-Each detected threat is matched with an immune response ranging from
-passive dismissal (IGNORE) through review (FLAG), isolation
-(QUARANTINE), and active counteraction (NEUTRALIZE) to outright
-blocking (REJECT). ASSIMILATE incorporates the input after processing
-when an apparent threat turns out to be beneficial. The full semantics
-of each response are documented on ``ImmuneResponse``.
-
-The engine tracks the agent's immune regime — the qualitative posture
-of its defenses — running from COMPROMISED (weak defense) through
-SLUGGISH (slow response), VIGILANT (healthy monitoring), and
-HYPERACTIVE (over-reacting) to ROBUST (strong and balanced). See
-``ImmunityRegime`` for details.
-
-Tolerance is the complement of vigilance. Too little tolerance attacks
-everything, including the agent's own reasoning (auto-immunity); too
-much attacks nothing, leaving the agent undefended. The levels run
-from NONE (no tolerance) through LOW (strict) and MODERATE (balanced)
-to HIGH (permissive), with AUTO_IMMUNE as the failure mode where the
-system attacks the agent's own cognition. See ``ToleranceLevel``.
-
-Immune memory remembers past encounters with each threat type through
-a lifecycle: NAIVE (never encountered), PRIMED (seen once),
-ACTIVE (recently responded), MEMORY (long-term protection), and
-EXHAUSTED (temporarily depleted). See ``MemoryState``.
-
-A ThreatDetection records one identified threat. An ImmuneAction
-records one response to a detection. An ImmunitySnapshot aggregates an
-agent's recent immune activity into a regime, tolerance level, active
-threat count, neutralized count, memory count, and average severity.
-A ToleranceAssessment records a measurement of the agent's tolerance
-posture — false-positive rate, self-attack rate, and the rationale for
-the assigned level. A MemoryEntry records the agent's immune memory
-for one threat type. An ImmunityProfile holds each agent's aggregate
-immune tendencies, and ImmunityStats summarizes engine-wide activity.
-
-This is original Buddy capability: a self-contained, thread-safe engine
-with no external runtime dependencies, designed to give agents honest
-awareness of the threats their cognition faces and how well they are
-defending against them, so the agent can recognize harmful information,
-neutralize it, remember past threats, and maintain the tolerance that
-keeps it from attacking itself.
+How an agent identifies, neutralizes, and rejects harmful or contradictory
+information. Like biological immunity, it recognizes threats, mounts responses,
+remembers past encounters, and maintains tolerance to avoid auto-immunity.
+Distinct from alignment, belief-state, and coherence.
+Core capabilities: threat detection, immune response, tolerance, memory.
 
 Architecture:
-    AgentCognitiveImmunity (singleton)
-    ├── ThreatDetection       (one identified cognitive threat)
-    ├── ImmuneAction          (one response to a detection)
-    ├── ImmunitySnapshot      (aggregate immune activity for one agent)
-    ├── ToleranceAssessment   (a measurement of tolerance posture)
-    ├── MemoryEntry           (immune memory for one threat type)
-    ├── ImmunityProfile       (per-agent aggregate immune tendencies)
-    └── ImmunityStats         (engine-wide aggregate statistics)
+  AgentCognitiveImmunity (singleton)
+  ├── ThreatDetection       (one identified cognitive threat)
+  ├── ImmuneAction          (one response to a detection)
+  ├── ImmunitySnapshot      (aggregate immune activity for one agent)
+  ├── ToleranceAssessment   (a measurement of tolerance posture)
+  ├── MemoryEntry           (immune memory for one threat type)
+  ├── ImmunityProfile       (per-agent aggregate immune tendencies)
+  └── ImmunityStats         (engine-wide aggregate statistics)
 """
 
 import threading
