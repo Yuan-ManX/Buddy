@@ -229,6 +229,16 @@ const GLOBAL_TABS: { id: TabView; label: string; icon: string }[] = [
   { id: 'cognitiveSymmetry', label: 'Symmetry', icon: '🪞' },
   { id: 'cognitiveTexture', label: 'Texture', icon: '🎨' },
   { id: 'cognitiveGradient', label: 'Gradient', icon: '📉' },
+  { id: 'cognitiveConfluence', label: 'Confluence', icon: '🌊' },
+  { id: 'cognitiveLuminescence', label: 'Luminescence', icon: '💡' },
+  { id: 'cognitiveMagnetism', label: 'Magnetism', icon: '🧲' },
+  { id: 'cognitiveOrigami', label: 'Origami', icon: '📄' },
+  { id: 'cognitiveSpectrum', label: 'Spectrum', icon: '🌈' },
+  { id: 'cognitivePrism', label: 'Prism', icon: '🔮' },
+  { id: 'cognitiveEcho', label: 'Echo', icon: '📢' },
+  { id: 'cognitiveTide', label: 'Tide', icon: '🌊' },
+  { id: 'cognitiveCascade', label: 'Cascade', icon: '💧' },
+  { id: 'cognitiveStratum', label: 'Stratum', icon: '🪨' },
 ];
 
 const AGENT_TABS: { id: TabView; label: string; icon: string }[] = [
