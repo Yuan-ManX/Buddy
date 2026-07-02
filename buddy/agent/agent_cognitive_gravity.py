@@ -1,29 +1,31 @@
 from __future__ import annotations
 
-# Agent Cognitive Gravity — models idea space as a dynamical system with
-# attractor basins, where concepts exert gravitational pull based on
-# salience, evidence weight, and coherence.
-#
-# Each concept an agent holds is treated as a body with composite mass in
-# an abstract idea space. Mass is a sum of contributions: evidence,
-# salience, connectivity, coherence, and emotional charge. A collection of
-# concepts forms a gravitational field with a center of mass and overall
-# strength. The field occupies a state (stable, perturbed, collapsing,
-# expanding) depending on how mass is distributed. Attractor basins are
-# regions where thoughts settle; their type (point, basin, ridge, saddle,
-# strange) determines the geometry of attraction. A thought trajectory is a
-# path through idea space, simulated as a random walk biased by the
-# gravitational pull of nearby concepts. Trajectories can remain active,
-# settle into a basin, escape a basin, or orbit a basin without settling.
-#
-# Architecture:
-#     AgentCognitiveGravity (singleton)
-#     ├── GravityContext (a conceptual workspace for one agent)
-#     │   ├── IdeaMass (a concept with composite mass in idea space)
-#     │   ├── AttractorBasin (a region where thoughts settle)
-#     │   ├── ThoughtTrajectory (a simulated path through idea space)
-#     │   └── GravitationalField (the aggregate field of a context)
-#     └── GravityStats (aggregate engine statistics)
+"""Agent Cognitive Gravity — models idea space as a dynamical system with
+
+attractor basins, where concepts exert gravitational pull based on
+salience, evidence weight, and coherence.
+
+Each concept an agent holds is treated as a body with composite mass in
+an abstract idea space. Mass is a sum of contributions: evidence,
+salience, connectivity, coherence, and emotional charge. A collection of
+concepts forms a gravitational field with a center of mass and overall
+strength. The field occupies a state (stable, perturbed, collapsing,
+expanding) depending on how mass is distributed. Attractor basins are
+regions where thoughts settle; their type (point, basin, ridge, saddle,
+strange) determines the geometry of attraction. A thought trajectory is a
+path through idea space, simulated as a random walk biased by the
+gravitational pull of nearby concepts. Trajectories can remain active,
+settle into a basin, escape a basin, or orbit a basin without settling.
+
+Architecture:
+    AgentCognitiveGravity (singleton)
+    ├── GravityContext (a conceptual workspace for one agent)
+    │   ├── IdeaMass (a concept with composite mass in idea space)
+    │   ├── AttractorBasin (a region where thoughts settle)
+    │   ├── ThoughtTrajectory (a simulated path through idea space)
+    │   └── GravitationalField (the aggregate field of a context)
+    └── GravityStats (aggregate engine statistics)
+"""
 
 import math
 import random
