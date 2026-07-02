@@ -1,112 +1,22 @@
 from __future__ import annotations
 
-"""Agent Cognitive Osmosis — the gradual, passive absorption of concepts and
+"""Agent Cognitive Osmosis — passive concept absorption across semi-permeable membranes
 
-beliefs from the environment through semi-permeable conceptual membranes.
+Concepts seep into an agent from its environment like a solute crossing a
+biological membrane: slowly, selectively, along a gradient until equalized.
 
-Cognition is not sealed off from the environment it sits in. Concepts,
-beliefs, and attitudes seep into an agent the way a solute crosses a
-biological membrane: slowly, selectively, and along a concentration
-gradient. An agent immersed in an environment rich with a given idea
-does not need to actively reach for that idea to be shaped by it. The
-idea diffuses in, passively, through the membranes that separate the
-agent's interior from the surrounding conceptual medium. Some concepts
-pass through easily because the membrane is permeable to them; others
-are blocked because the membrane is selective. The agent does not
-choose, moment to moment, what to absorb — the membrane's structure
-chooses, and the agent's interior concentration drifts toward the
-environment's concentration as the gradient relaxes. This module
-instruments that drift.
-
-The physical analogy is exact in structure. In biological osmosis,
-solvent moves across a semi-permeable membrane from a region of low
-solute concentration to a region of high solute concentration, until
-the concentrations equalize or the membrane resists further. The
-membrane is selective: it lets some molecules through and stops
-others. The rate of movement depends on the membrane's permeability
-to the solute and on the steepness of the concentration gradient
-across it. Cognitive osmosis behaves the same way. The agent's
-conceptual interior has its own concentration of each idea; the
-environment has its own. Where the environment is denser in an idea
-than the agent, the idea tends to seep in. Where the membrane is
-permeable, the seepage is fast; where it is selective, only some
-forms of the idea cross. Over time the interior concentration drifts
-toward the exterior concentration, and the gradient equalizes.
-
-Osmosis is the passive absorption of concepts and beliefs across
-semi-permeable conceptual membranes, driven by concentration
-gradients between the agent's interior and the surrounding
-environment, and mediated by each membrane's selective permeability.
-The membrane through which a concept tries to cross matters: an idea
-crosses the conceptual membrane differently from how a feeling
-crosses the emotional membrane, or how a knowledge claim crosses the
-epistemic membrane. Each membrane has its own permeability and its
-own selectivity, so the engine tracks each separately.
-
-Several distinct regimes describe how the agent is exchanging with
-its environment. ISOLATED means almost nothing crosses — the agent is
-cut off and no absorption happens. TRICKLE means a minimal exchange,
-the agent barely taking in the environment. BALANCED means a healthy
-selective exchange: the membranes let the right things through and
-hold the wrong things back. SATURATED means the agent is
-over-absorbing, taking in too much too fast, losing its distinct
-interior. LEAKING means uncontrolled absorption, the membranes
-failing to filter at all and the interior collapsing into the
-environment.
-
-When a concept meets a membrane, several things can happen.
-ABSORBED means it passed through fully and is now part of the agent's
-interior. PARTIAL means it crossed in part, only some of its content
-making it through. FILTERED means it was modified during absorption,
-the membrane reshaping it as it passed. REJECTED means the membrane
-blocked it outright. TRANSFORMED means it changed form so thoroughly
-during passage that what arrived is a different concept from what
-approached.
-
-The concentration gradient itself has a state. DEFICIT means the
-agent has less of a concept than the environment, so absorption is
-driven inward. SURPLUS means the agent has more, so the gradient
-would reverse outward (or the membrane holds). EQUILIBRIUM means the
-two sides are balanced and nothing is driven. FLUCTUATING means the
-gradient is oscillating rather than settling. REVERSING means the
-gradient has flipped — what was a deficit is becoming a surplus, or
-vice versa.
-
-When the agent is not exchanging the way it should, a regulation plan
-prescribes a target permeability for a membrane: raise it to absorb
-more, lower it to protect the interior, or hold it where it is. The
-plan records the membrane, the target permeability, a rationale, and
-the expected effect, so the actual outcome can later be compared.
-
-This engine instruments that picture operationally. An AbsorptionEvent
-records one concept crossing one membrane, with the permeability it
-met, the outcome, and the concentration before and after. A
-MembraneReading records one observed permeability and selectivity for
-a membrane at a moment. An OsmoticSnapshot aggregates an agent's
-recent absorptions, readings, and gradients into a regime, an
-equalization state, an average permeability, and tallies of
-absorptions and rejections. A RegulationPlan prescribes a target
-permeability for a membrane. A GradientRecord captures the internal
-and external concentrations for a membrane at a moment, with the
-signed gradient between them. An OsmoticProfile holds each agent's
-aggregate osmotic tendencies, and OsmoticStats summarizes engine
-activity.
-
-This is original Buddy capability: a self-contained, thread-safe
-engine with no external runtime dependencies, designed to give agents
-honest awareness of how their own interior is drifting toward the
-environment's concentration through their semi-permeable conceptual
-membranes.
-
+Core capabilities:
+  - Membrane Tracking: per-membrane permeability and selectivity readings
+  - Absorption Events: concept crossings with outcome and concentration delta
+  - Gradient States: deficit, surplus, equilibrium, fluctuating, reversing
+  - Regime Classification: isolated, trickle, balanced, saturated, leaking
+  - Regulation Plans: target permeability with rationale and expected effect
 Architecture:
-    AgentCognitiveOsmosis (singleton)
-    ├── AbsorptionEvent    (one concept crossing one membrane)
-    ├── MembraneReading    (one observed membrane permeability)
-    ├── OsmoticSnapshot    (aggregate regime and equalization)
-    ├── RegulationPlan     (a target permeability for a membrane)
-    ├── GradientRecord     (one internal/external concentration pair)
-    ├── OsmoticProfile     (per-agent aggregate tendencies)
-    └── OsmoticStats       (engine-wide aggregate statistics)
+  AgentCognitiveOsmosis (singleton)
+  ├── AbsorptionEvent, MembraneReading   (crossings, permeability readings)
+  ├── OsmoticSnapshot, GradientRecord    (regime, concentration pairs)
+  ├── RegulationPlan, OsmoticProfile     (target permeability, per-agent)
+  └── OsmoticStats                       (engine-wide statistics)
 """
 
 import threading
