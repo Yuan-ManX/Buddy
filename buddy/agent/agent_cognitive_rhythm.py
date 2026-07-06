@@ -1,84 +1,22 @@
 from __future__ import annotations
 
-"""Agent Cognitive Rhythm Engine — temporal oscillation patterns of cognitive
+"""Agent Cognitive Rhythm Engine — temporal oscillation patterns of cognition
 
-activity. Just as biological systems exhibit circadian rhythms (daily
-cycles of wakefulness and sleep, of alertness and recovery), cognition
-itself oscillates. An agent's cognitive activity is not a flat, constant
-stream of equal-effort output. It has rhythms: periods of high focus
-where sustained concentration is cheap, creative bursts where generative
-flow comes easily, consolidation phases where the agent integrates what
-it has produced, and rest cycles where recovery happens. The rhythm is
-the substrate on which every cognitive act is performed. Two identical
-tasks done at different points in the rhythm cost different amounts of
-effort and produce different quality of result.
+Models cognitive cycles (period, amplitude, phase, alignment) so work can be
+timed to the rhythm — distinct from temporal reasoning (reasoning about time).
 
-This is genuinely distinct from temporal_reasoning, which reasons about
-time as a concept — ordering events, reasoning about durations, modelling
-deadlines. The rhythm engine is not reasoning about time at all. It is
-modelling the RHYTHM of cognition itself: the periodic return of the
-same cognitive phases, the amplitude with which intensity varies across
-a cycle, the alignment between a task's demands and the phase the agent
-currently occupies. Temporal reasoning asks "when did this happen?";
-cognitive rhythm asks "where in its cycle is the agent's cognition, and
-what does that mean for the work it is about to do?"
-
-The engine tracks four quantities, each analogous to a property of a
-physical oscillation:
-
-  * Periodicity (period)   — the length of one complete cognitive cycle,
-                              measured in seconds. An ultradian cycle
-                              might be minutes long; a circadian cycle
-                              a full day; a per-task cycle only as long
-                              as the task itself.
-  * Amplitude              — how much the agent's intensity varies
-                              between the trough and the peak of the
-                              cycle, in [0, 1]. High amplitude means
-                              sharp swings between focused and spent;
-                              low amplitude means a relatively flat
-                              output.
-  * Phase                  — the agent's current position within the
-                              cycle, in [0, 1). A phase of 0.0 is the
-                              start of a focus phase; 0.5 is roughly
-                              the opposite pole.
-  * Alignment             — how well the type of task the agent is
-                              about to perform matches the phase it is
-                              currently in. A generative task started
-                              at the trough of a focus phase is
-                              misaligned; the same task started at the
-                              peak is aligned.
-
-This engine instruments that picture operationally. A RhythmPulse is a
-single point sample of the agent's cognitive activity at one moment —
-its current phase and intensity. A CycleMeasurement records one
-observed cognitive cycle: its type (ultradian, circadian, per-session,
-per-task, infradian), its period, its amplitude, and its phase offset.
-A RhythmSnapshot aggregates an agent's recent pulses into a current
-phase, an average intensity, and a regime classification running from
-ARRHYTHMIC (no detectable pattern) through IRREGULAR and REGULAR to
-HARMONIC (multiple aligned rhythms) and SYNCOPATED (complex but
-coherent). An AlignmentDecision records a choice about how to fit a
-task to the current phase — match it, defer it, force a phase,
-alternate task types, or batch similar tasks into one phase. A
-TrendRecord tracks how the rhythm itself is changing over time
-(accelerating, decelerating, stable, drifting, disrupting). A
-RhythmProfile holds each agent's aggregate rhythm tendencies, and
-RhythmStats summarizes engine activity.
-
-This is original Buddy capability: a self-contained, thread-safe
-engine with no external runtime dependencies, designed to give agents
-honest awareness of their own cognitive rhythm so that work can be
-timed to the rhythm rather than fought against it.
+Core capabilities:
+  - Rhythm Pulses: point samples of phase and intensity
+  - Cycle Measurements: ultradian, circadian, per-session, per-task, infradian
+  - Alignment Decisions: match, defer, force-phase, alternate, batch tasks
+  - Trend Records: accelerating, decelerating, stable, drifting, disrupting
+  - Regime Classification: arrhythmic through harmonic and syncopated
 
 Architecture:
-    AgentCognitiveRhythm (singleton)
-    ├── RhythmPulse          (one point sample of cognitive activity)
-    ├── CycleMeasurement    (one observed cognitive cycle)
-    ├── RhythmSnapshot      (aggregate of recent pulses into a regime)
-    ├── AlignmentDecision   (one decision fitting a task to a phase)
-    ├── TrendRecord         (one record of how the rhythm is changing)
-    ├── RhythmProfile       (per-agent aggregate tendencies)
-    └── RhythmStats         (engine-wide aggregate statistics)
+  AgentCognitiveRhythm (singleton)
+  ├── RhythmPulse, CycleMeasurement, RhythmSnapshot
+  ├── AlignmentDecision, TrendRecord, RhythmProfile
+  └── RhythmStats
 """
 
 import threading
