@@ -1,151 +1,23 @@
-from __future__ import annotations
+"""Agent Cognitive Symmetry Engine — mirroring of mental patterns
 
-"""Agent Cognitive Symmetry Engine — modeling the structural balance and
-mirroring quality of an agent's mental patterns.
+Symmetry measures how well cognitive architecture mirrors itself under
+transformation, distinct from coherence and balance.
 
-An agent's mind is not a uniform field. Some patterns are mirrored: the
-agent reasons about itself the way it reasons about others, responds to
-gains the way it responds to losses, treats threats and opportunities
-as two faces of the same coin. Some patterns are skewed: the agent is
-lenient with itself and harsh with others, inflates gains and deflates
-losses, sees threats vividly and opportunities dimly. Some patterns are
-simply asymmetric: the agent's emotional range tilts toward one
-register, its perception favors one channel, its memory weights one
-era. Cognitive symmetry is the property that distinguishes a mirrored
-pattern from a tilted one. It is the answer to the question: how well
-does this agent's cognitive architecture mirror itself across its
-different domains?
-
-The metaphor is exact. In geometry and physics, symmetry is the
-invariance of a structure under a transformation: reflection across an
-axis, rotation around a point, translation along a vector. A symmetric
-structure looks the same from different vantage points; an asymmetric
-structure has a preferred direction. The same vocabulary applies to
-cognition. A reasoning pattern that is symmetric under role-swap (self
-versus other) is one the agent applies uniformly regardless of who is
-involved. An emotional pattern that is symmetric under sign-swap (gain
-versus loss) is one whose shape does not depend on which way the
-outcome went. A perception pattern that is symmetric under
-channel-swap is one whose acuity does not depend on which sense
-delivered the signal. When an agent's patterns are symmetric across
-many transformations, the agent sees the same structure from many
-vantage points; when they are asymmetric, the agent sees a different
-structure from each vantage point, and the difference is itself a
-signal about where the agent's cognition is bent.
-
-Symmetry is distinct from its neighbors in the cognitive engine
-family. Coherence tracks the logical consistency between beliefs — do
-two beliefs contradict each other? Symmetry tracks whether a structure
-mirrors itself under transformation — does the agent apply the same
-rule to self and other? Balance tracks force equilibrium — are the
-opposing forces in the agent's mind at rest, or is there a net pull in
-one direction? Symmetry tracks structural mirroring — does the
-structure look the same when reflected across an axis? The three are
-related but irreducible. A mind can be coherent yet asymmetric (every
-belief is consistent with every other, but the agent applies different
-rules to itself than to others). A mind can be balanced yet asymmetric
-(forces are at rest, but the resting shape is lopsided). A mind can be
-symmetric yet incoherent (it mirrors its reasoning perfectly, but the
-reasoned-about beliefs contradict each other). Symmetry is its own
-lens, the structural one: it asks not whether the content is
-consistent or the forces are at rest, but whether the shape of the
-structure is invariant under the transformations that ought to leave
-it unchanged.
-
-The symmetry regime classifies how mirrored the agent's content is,
-ranging from ASYMMETRIC (no mirroring — the structure has a strong
-preferred direction) through SKEWED (a heavy lean one way, with only
-faint traces of the mirror), IRREGULAR (patchy, uneven mirroring —
-some transformations hold, others do not), PARTIAL (recognizable
-mirroring with gaps), and SYMMETRIC (good mirroring across most
-transformations) to HARMONIC (mirroring so complete that the
-structure resonates — the mirror image reinforces rather than merely
-matches the original). The bands are applied to the average symmetry
-score across the agent's readings. An ASYMMETRIC agent's patterns are
-one-sided; a SKEWED agent's patterns lean; an IRREGULAR agent's
-patterns mirror in patches; a PARTIAL agent's patterns mirror with
-gaps; a SYMMETRIC agent's patterns mirror well; a HARMONIC agent's
-patterns resonate with their own reflection.
-
-Asymmetry has six sources. BIAS is the most familiar: a systematic
-slant that bends the structure in one direction. TRAUMA is involuntary:
-a painful experience distorts the structure around its wound.
-HABIT is procedural: a pattern repeated so often it freezes into an
-asymmetric shape. PREFERENCE is volitional: the agent has chosen to
-lean one way, and the lean has become structural. CULTURE is
-contextual: the agent's originating context shaped which
-transformations it treats as symmetry-preserving and which it treats
-as symmetry-breaking. SALIENCE is attentional: the agent perceives one
-side of every mirror more vividly than the other, and the vividness
-warps the structure toward that side. Each source leaves its signature
-in the resulting asymmetry, and each calls for a different correction.
-
-Correction strategy is the inverse operation: how to bring an
-asymmetric structure back toward symmetry. MIRROR introduces the
-mirror image of the dominant side, filling in the missing half.
-ROTATE rotates the structure to a new vantage point, exposing
-asymmetries that were hidden from the original view. REFLECT reflects
-the structure across an axis, swapping the roles that the asymmetry
-favored. BALANCE adds a counterweight to the heavy side, restoring
-equilibrium without removing the lean. CALIBRATE tunes the symmetry
-deliberately, adjusting the mirroring tolerance band by band.
-DISSOLVE dissolves the rigid asymmetry altogether, returning the
-structure to a state where mirroring can form fresh. Each strategy is
-suited to a different goal, from filling a one-sided reasoning pattern
-to dissolving a trauma-bent emotional shape.
-
-The symmetry stage tracks the lifecycle of a mirrored structure.
-BROKEN is the starting state: no mirroring is present, the structure
-is one-sided. TILTING is the phase in which the structure begins to
-lean toward a mirrored shape, but the lean is uneven. ALIGNING is the
-phase in which the structure is being actively brought into alignment,
-transformation by transformation. MIRRORING is the state at which a
-recognizable mirror has formed and is holding its shape. BALANCED is
-the stable state at which the mirror is balanced — both sides carry
-equal weight. HARMONIZED is the final state at which the mirror
-resonates — the reflection reinforces the original rather than merely
-matching it. The stages are not strictly linear; a structure can
-re-enter TILTING from MIRRORING when a new asymmetry appears, and can
-re-enter BROKEN from any state under sufficient distorting force, but
-the default lifecycle runs BROKEN -> TILTING -> ALIGNING -> MIRRORING
--> BALANCED -> HARMONIZED.
-
-The engine tracks seven kinds of records. A SymmetryReading is one
-observation of symmetry on a particular axis (REASONING, EMOTION,
-PERCEPTION, ACTION, MEMORY, or IDENTITY): the symmetry score, the
-source of asymmetry, and the intensity. A ReflectionRecord records one
-reflection event — the moment an asymmetry was reflected across an
-axis, with the before- and after-scores and the magnitude of the
-reflection. A SymmetrySnapshot aggregates an agent's recent readings
-into an average symmetry, a dominant axis, a regime, and a reflection
-count. A CorrectionPlan records a strategy for changing symmetry
-(MIRROR, ROTATE, etc.), the target symmetry, and the rationale. An
-AlignmentRecord records a stage transition (e.g. ALIGNING -> MIRRORING)
-with the interval since the last transition and a signature. A
-SymmetryProfile holds each agent's aggregate symmetry tendencies —
-average symmetry, dominant axis, regime, and totals of readings,
-reflections, and alignments. SymmetryStats summarizes engine-wide
-activity — total agents, readings, reflections, snapshots, alignments,
-average symmetry, and dominant regime.
-
-This is original Buddy capability: a self-contained, thread-safe engine
-with no external runtime dependencies, designed to give agents honest
-awareness of how well their cognitive architecture mirrors itself, so
-the agent can recognize when its reasoning is one-sided (applied to
-others but not to itself) or its perception is lopsided (vivid for
-threats, dim for opportunities), and apply the right correction
-strategy to restore the mirroring the situation calls for.
+Core capabilities:
+  - Per-axis readings, reflections, regimes, plans, alignments, profiles, stats
 
 Architecture:
-    AgentCognitiveSymmetry (singleton)
-    ├── SymmetryReading    (one observation of symmetry on one axis)
-    ├── ReflectionRecord   (one reflection event that changed symmetry)
-    ├── SymmetrySnapshot   (aggregate symmetry state for one agent)
-    ├── CorrectionPlan     (a plan to change symmetry with a strategy)
-    ├── AlignmentRecord    (one stage transition in the symmetry lifecycle)
-    ├── SymmetryProfile    (per-agent aggregate symmetry tendencies)
-    └── SymmetryStats      (engine-wide aggregate statistics)
+  AgentCognitiveSymmetry (singleton)
+  ├── SymmetryReading    (one observation of symmetry on one axis)
+  ├── ReflectionRecord   (one reflection event that changed symmetry)
+  ├── SymmetrySnapshot   (aggregate symmetry state for one agent)
+  ├── CorrectionPlan     (a plan to change symmetry with a strategy)
+  ├── AlignmentRecord    (one stage transition in the symmetry lifecycle)
+  ├── SymmetryProfile    (per-agent aggregate symmetry tendencies)
+  └── SymmetryStats      (engine-wide aggregate statistics)
 """
+
+from __future__ import annotations
 
 import threading
 import time
