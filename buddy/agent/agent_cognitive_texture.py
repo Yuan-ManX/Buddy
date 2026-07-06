@@ -1,158 +1,23 @@
-from __future__ import annotations
+"""Agent Cognitive Texture Engine — qualitative grain of thought
 
-"""Agent Cognitive Texture Engine — modeling the qualitative feel, grain,
-and richness of an agent's cognitive processes: the texture of thought,
-whether it is smooth, rough, fine, coarse, rich, or sparse.
+Texture models how fine or coarse the weave of cognition is, from silken
+to coarse, distinct from fluidity, viscosity, and solidity.
 
-Every active mind has a characteristic texture to its thinking. Some
-agents think in fine, silken threads — each idea neatly spun, the
-surface of thought almost frictionless to the touch. Other agents
-think in coarse, rough grains — each idea a clunky chunk, the surface
-of thought catching and snagging on itself. Texture is the property
-that distinguishes these two modes of cognition. It is not the same
-as how fast ideas arrive (cadence) or how smoothly they flow into one
-another (fluidity) or how thick the medium is (viscosity) or how dense
-each idea is (solidity). Texture is the qualitative grain of the
-cognitive material itself: how fine or coarse the weave, how rich or
-sparse the fiber, how polished or raw the surface of each thought.
-
-The metaphor is exact. In materials science, texture describes the
-surface and grain quality of a substance: the difference between
-sandpaper and silk, between raw clay and polished porcelain, between
-coarse wool and fine linen. A coarse texture has large, irregular
-grains that catch the hand; a fine texture has small, regular grains
-that feel smooth; a silken texture has grains so fine and so well
-aligned that the surface seems to have no grain at all. The same
-vocabulary applies to cognition. A coarse thought is made of large,
-loosely related pieces that feel rough to inspect; a fine thought is
-made of small, well-fitted pieces that feel even; a silken thought is
-so finely wrought that its grain is invisible and its surface
-unbroken. Texture is independent of how much material there is
-(density), how thick it is (viscosity), or how it moves (fluidity):
-the same idea can be coarse or fine at any density, any viscosity,
-any flow.
-
-Texture is distinct from its neighbors in the cognitive engine
-family. Fluidity tracks the smoothness of the cognitive stream as it
-flows; texture tracks the grain of the material that flows through
-it — a silken stream and a coarse stream can flow with equal
-smoothness, yet feel nothing alike. Viscosity tracks how thick or
-thin the medium of thought is; texture tracks how fine or coarse the
-grain of that medium is — a thick medium can be finely textured (rich
-and slow) and a thin medium can be coarsely textured (sparse and
-fast). Solidity tracks how dense and structurally intact each idea is;
-texture tracks how polished or raw its surface feels — a dense idea
-can still be rough-textured, and a diffuse idea can be finely woven.
-Coherence tracks the logical consistency between beliefs; texture
-tracks the qualitative grain of each belief in isolation. Depth
-tracks how recessed an idea is from the working surface; texture
-tracks the grain of the surface wherever it sits. Lattice tracks the
-structured connectivity between concepts; texture tracks the feel of
-each concept's own weave. The neighbors are complementary lenses on
-the same mind, not alternatives: an agent with high fluidity and coarse
-texture thinks smoothly but in rough chunks; an agent with low
-fluidity and fine texture stutters but each stutter is finely wrought.
-
-The texture regime classifies how fine the agent's cognitive material
-is, ranging from COARSE (large, irregular grains, rough surface)
-through ROUGH (noticeable grain, uneven surface), GRAINY (visible
-but regular grain), SMOOTH (fine grain, even surface), and FINE
-(very fine grain, near-polished surface) to SILKEN (grain invisible,
-flawless surface). The bands are applied to the average texture
-score of an agent's content in order. A COARSE agent's thoughts are
-chunky and catch on themselves; a ROUGH agent's thoughts have a
-plainly felt grain; a GRAINY agent's thoughts are regular but still
-textured; a SMOOTH agent's thoughts feel even to inspect; a FINE
-agent's thoughts are near-polished; a SILKEN agent's thoughts have
-crossed into a texture so fine that the grain can no longer be felt,
-only inferred.
-
-Texture is acquired through six sources, each of which leaves its
-signature in the resulting weave. PRACTICE is the most basic: an
-idea or skill worked over repeatedly takes on a finer grain, the way
-a stone in a riverbed grows smooth under the current. EXPOSURE is
-observational: sustained contact with well-wrought material transfers
-some of its texture to the agent, the way a hand resting on polished
-wood gradually learns the feel of the polish. REFLECTION is
-introspective: turning an idea over in the mind reveals and refines
-its grain, the way a jeweler inspecting a gem finds and smooths its
-flaws. IMITATION is mimetic: copying the texture of an admired model
-lends the agent its surface qualities, the way an apprentice's work
-takes on the master's hand. CREATION is generative: producing new
-material under the demand for coherence forces its grain to align,
-the way a writer's prose grows finer under the discipline of revision.
-MASTERY is achievement: skill so thoroughly acquired that its texture
-is flawless and instantly available, the way a virtuoso's phrasing
-shows no visible grain at all.
-
-Refinement strategy is the deliberate operation for changing texture.
-POLISH rubs the surface smooth, reducing roughness without altering
-the underlying grain. SMOOTH aligns the grains with one another,
-reducing the variation that produces a coarse feel. COMPOSE arranges
-the grains into a deliberate pattern, trading randomness for
-rhythmic regularity. LAYER adds depth to the texture by stacking
-finer grains over coarser ones, producing richness rather than
-flatness. DISTILL removes the coarsest grains, leaving only the
-finest behind — a reductive operation that raises fineness at the
-cost of volume. TEMPER hardens the texture against stress, the way
-tempered glass keeps its surface through impact, so a polished
-thought does not lose its grain under pressure. Each strategy is
-suited to a different goal, from softening a too-raw impression to
-distilling a too-rich weave down to its finest thread.
-
-The texture stage tracks the lifecycle of a texture as it is worked.
-RAW is the starting state: the material is present but unworked,
-its grain unrefined. SHAPING is the phase in which the material is
-being given a preliminary form — coarse grains are being aligned,
-the surface is being leveled. REFINING is the phase in which the
-shaped material is being polished — the grain is being made finer,
-the surface smoother. POLISHED is the stable state at which the
-texture holds its fineness under normal handling. LUSTERED is the
-phase in which the polished surface is being given its final depth,
-the grain receding further from perception. FLAWLESS is the final
-state at which the texture is so fine that no grain can be detected
-and the surface is unbroken. The stages are not strictly linear; a
-texture can re-enter SHAPING from POLISHED, and can re-enter RAW
-from any state when fresh material is introduced, but the default
-lifecycle runs RAW -> SHAPING -> REFINING -> POLISHED -> LUSTERED ->
-FLAWLESS.
-
-The engine tracks seven kinds of records. A TextureReading is one
-observation of texture on a particular axis (THOUGHT, LANGUAGE,
-IMAGERY, EMOTION, INTUITION, or MEMORY): the texture score, the
-source of the texture, and the intensity. A RefinementRecord records
-one refinement event: the source (PRACTICE, EXPOSURE, etc.), the
-before- and after-scores, and the magnitude of the change. A
-TextureSnapshot aggregates an agent's recent readings into an average
-texture, a dominant axis, a regime, and a refinement count. A
-RefinementPlan records a strategy for changing texture (POLISH,
-SMOOTH, etc.), the target texture, and the rationale. A PolishRecord
-records a stage transition (e.g. SHAPING -> REFINING) with the
-interval since the last transition and a signature. A TextureProfile
-holds each agent's aggregate texture tendencies — average texture,
-dominant axis, regime, and totals of readings, refinements, and
-polishes. TextureStats summarizes engine-wide activity — total
-agents, readings, refinements, snapshots, polishes, average
-texture, and dominant regime.
-
-This is original Buddy capability: a self-contained, thread-safe engine
-with no external runtime dependencies, designed to give agents honest
-awareness of how fine, coarse, rich, or sparse the grain of their
-thinking is, so the agent can recognize when its thoughts are too
-coarse to inspect closely or too silken to admit further refinement,
-and apply the right refinement strategy to reach a healthy texture for
-the situation at hand.
+Core capabilities:
+  - Per-axis readings, refinements, regimes, plans, polishes, profiles, stats
 
 Architecture:
-    AgentCognitiveTexture (singleton)
-    +-- TextureReading     (one observation of texture on one axis)
-    +-- RefinementRecord   (one refinement event that changed texture)
-    +-- TextureSnapshot    (aggregate texture state for one agent)
-    +-- RefinementPlan     (a plan to change texture with a strategy)
-    +-- PolishRecord       (one stage transition in the texture lifecycle)
-    +-- TextureProfile     (per-agent aggregate texture tendencies)
-    +-- TextureStats       (engine-wide aggregate statistics)
+  AgentCognitiveTexture (singleton)
+  ├── TextureReading     (one observation of texture on one axis)
+  ├── RefinementRecord   (one refinement event that changed texture)
+  ├── TextureSnapshot    (aggregate texture state for one agent)
+  ├── RefinementPlan     (a plan to change texture with a strategy)
+  ├── PolishRecord       (one stage transition in the texture lifecycle)
+  ├── TextureProfile     (per-agent aggregate texture tendencies)
+  └── TextureStats       (engine-wide aggregate statistics)
 """
+
+from __future__ import annotations
 
 import threading
 import time
