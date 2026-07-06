@@ -1,82 +1,23 @@
 from __future__ import annotations
 
-# Agent Cognitive Tension Engine — dialectical and paradoxical tension
-# between competing hypotheses, ideas, and frameworks.
-#
-# Cognition is not a march toward a single settled view. An agent that
-# holds only one hypothesis at a time is brittle: it cannot represent the
-# live possibility that its current best guess is wrong, and it cannot do
-# the creative work of letting two incompatible frameworks rub against each
-# other until something new emerges. Healthy cognition keeps contradictory
-# material in play simultaneously. This module instruments that capacity.
-#
-# Tension, in this framing, is the cognitive resource that exists between
-# two poles that cannot both be fully accepted and cannot both be fully
-# rejected. A thesis stands against an antithesis; a self-contradictory
-# proposition refuses to dissolve under inspection; two viable but mutually
-# exclusive options refuse to collapse into a single choice. The engine
-# does not treat tension as a defect to be eliminated. It treats tension as
-# a creative resource: the friction between two poles is precisely where
-# synthesis becomes possible. Forcing premature resolution destroys that
-# resource; the art is knowing when to hold the tension, when to resolve
-# it, and when to let one side dissolve on its own.
-#
-# The engine is grounded in two classical pictures of contradiction. The
-# Hegelian dialectic describes tension as the relationship between a thesis
-# and its antithesis, out of which a synthesis emerges that preserves what
-# was true in both while transcending their opposition — Aufhebung, the
-# cancellation that also preserves. The Hegelian move is not compromise
-# (splitting the difference) but sublation: the synthesis is a new
-# standpoint from which the original opposition no longer looks
-# fundamental. Janusian thinking, named for the two-faced Roman god, is the
-# cognitive capacity to hold two contradictory ideas in mind simultaneously
-# without forcing a resolution — the posture that, in its strongest form,
-# lets the contradiction itself become generative. Creative cognition
-# across domains, from scientific discovery to poetic composition,
-# repeatedly passes through such held contradictions on the way to insight.
-#
-# A tension pair is the engine's central object: two poles, a kind
-# (dialectic, paradoxical, competing, conflicting, ambivalent,
-# complementary), an intensity in [0, 1], a state (latent, acknowledged,
-# held, resolving, resolved, dissolved), and a polarity (positive,
-# negative, neutral, mixed) describing whether the tension is productive
-# or destructive. The engine manages the lifecycle of each pair. A pair
-# that is merely recognized begins in the ACKNOWLEDGED state. When the
-# agent deliberately holds the tension to let synthesis gestate, the pair
-# moves to HELD and a holding strategy is recorded (observe, rotate
-# attention, deepen each pole, seek unifying context, articulate, enact).
-# When the agent moves to resolve the tension, a resolution attempt is
-# recorded with a mode (synthesis, selection, compromise, transcendence,
-# dissolution, defer) and, on success, the pair reaches RESOLVED with an
-# optional synthesis statement. When one pole collapses outright — the
-# agent abandons it, or evidence removes it — the pair is DISSOLVED rather
-# than resolved, since no synthesis occurred.
-#
-# Tension is not always beneficial. A productive (POSITIVE) tension
-# energizes inquiry and pulls the agent toward a richer view; a destructive
-# (NEGATIVE) tension paralyzes the agent, locking it in indecision or
-# oscillation; a MIXED tension has aspects of both; a NEUTRAL tension
-# neither moves the agent forward nor holds it back. The polarity is
-# classified from the kind and intensity: a high-intensity dialectic is
-# generative (the clash of thesis and antithesis is doing real work), a
-# high-intensity conflict is destructive (the poles genuinely contradict
-# and the friction yields nothing), ambivalence is intrinsically mixed,
-# and complementary tension is intrinsically positive (the poles enrich
-# each other rather than oppose).
-#
-# Architecture:
-#     AgentCognitiveTension (thread-safe singleton)
-#     ├── TensionPole          (one side of a potential or actual pair)
-#     ├── TensionPair          (two poles held in tension, with state)
-#     ├── TensionSnapshot      (a point-in-time aggregate for one agent)
-#     ├── ResolutionAttempt    (one attempt to resolve a pair)
-#     ├── HoldingDecision      (one decision to hold a pair rather than resolve)
-#     ├── TensionProfile       (per-agent aggregate posture)
-#     └── TensionStats         (engine-wide aggregate statistics)
-#
-# The engine is intentionally dependency-free so it can run in any Buddy
-# runtime without extra packages. All state mutations are guarded by a
-# reentrant lock so the engine is safe to call from multiple threads.
+"""Agent Cognitive Tension Engine — dialectical and paradoxical tension between ideas
+
+Models the creative resource between poles that cannot both be fully accepted or
+rejected, grounded in Hegelian dialectic and Janusian held contradiction.
+
+Core capabilities:
+  - Tension Pairs: two poles with kind, intensity, state, and polarity
+  - Resolution Attempts: synthesis, selection, compromise, transcendence, dissolve
+  - Holding Decisions: strategies to hold tension for gestation (observe, deepen)
+  - Polarity Classification: positive, negative, mixed, neutral productivity
+  - Lifecycle Management: latent through resolved or dissolved
+
+Architecture:
+  AgentCognitiveTension (singleton)
+  ├── TensionPole, TensionPair, TensionSnapshot
+  ├── ResolutionAttempt, HoldingDecision, TensionProfile
+  └── TensionStats
+"""
 
 import threading
 import time
