@@ -95,8 +95,22 @@ class ExpertiseBasedStrategy:
         if not agent_ids:
             return None
         domain = (context or {}).get("domain", "general")
-        # Pick agent with highest expertise in the domain
-        return max(agent_ids, key=lambda aid: self.get_expertise(aid, domain))
+        # Pick agent with highest expertise in the domain, augmented by the
+        # cognitive bridge's confidence score when available. The cognitive
+        # bonus is a 0..0.3 additive weight so it can break ties but cannot
+        # overpower a strong expertise differential.
+        cognitive_bonus: dict[str, float] = {}
+        try:
+            from agent.shared import cognitive_bridge
+            for aid in agent_ids:
+                advice = cognitive_bridge.consult_for_delegation(aid, domain)
+                cognitive_bonus[aid] = advice.confidence * 0.3
+        except Exception:
+            pass
+        return max(
+            agent_ids,
+            key=lambda aid: self.get_expertise(aid, domain) + cognitive_bonus.get(aid, 0.0),
+        )
 
     def get_all_expertise(self, agent_id: str) -> dict[str, float]:
         return dict(self._expertise.get(agent_id, {}))
