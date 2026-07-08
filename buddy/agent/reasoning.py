@@ -120,14 +120,33 @@ If issues found, provide a corrected response. Otherwise, confirm the answer."""
         tool_schemas: list[dict] | None = None,
         tool_executor: Any = None,
         model: str = "gpt-4o-mini",
+        agent_id: str | None = None,
     ) -> ReasoningTrace:
         """Execute a complete reasoning cycle."""
         start = time.time()
         trace = ReasoningTrace()
         total_tokens = 0
 
+        # When an agent_id is supplied, prepend the agent's cognitive profile
+        # to the system prompt so the reasoning chain can perceive the agent's
+        # current regime across all themed cognitive engines.
+        cognitive_prefix = ""
+        if agent_id:
+            try:
+                from agent.shared import cognitive_bridge
+                profile = cognitive_bridge.get_agent_cognitive_profile(agent_id)
+                if profile.get("engines"):
+                    cognitive_prefix = (
+                        f"\n\n[Cognitive Profile for {agent_id}]\n"
+                        f"dominant_engine: {profile.get('dominant_engine')}\n"
+                        f"average_score: {profile.get('average_score', 0.0):.3f}\n"
+                        f"engine_count: {profile.get('engine_count', 0)}\n"
+                    )
+            except Exception:
+                pass
+
         messages: list[dict] = [
-            {"role": "system", "content": self._build_reasoning_prompt(system_prompt)},
+            {"role": "system", "content": self._build_reasoning_prompt(system_prompt + cognitive_prefix)},
             {"role": "user", "content": user_message},
         ]
 
